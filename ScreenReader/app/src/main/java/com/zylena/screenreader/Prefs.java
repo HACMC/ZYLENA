@@ -94,6 +94,15 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** The floating button's size: 0 small, 1 medium, 2 large, 3 extra large. */
+    static int buttonSize(Context c) {
+        return sp(c).getInt("btn_size", 1);
+    }
+
+    static void setButtonSize(Context c, int v) {
+        sp(c).edit().putInt("btn_size", v).apply();
+    }
+
     /** Leave out "2h ago", "10:42 PM", "Yesterday" and similar. */
     static boolean skipTimestamps(Context c) {
         return sp(c).getBoolean("skip_times", true);

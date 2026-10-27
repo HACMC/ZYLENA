@@ -1752,6 +1752,13 @@ public class ReaderService extends AccessibilityService {
             if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
         });
         bar.addView(trBtn[0]);
+        android.widget.Button[] sizeBtn = new android.widget.Button[1];
+        sizeBtn[0] = chip(sizeLabel(), () -> {
+            Prefs.setButtonSize(this, (Prefs.buttonSize(this) + 1) % SIZES.length);
+            sizeBtn[0].setText(sizeLabel());
+            resizeButton();
+        });
+        bar.addView(sizeBtn[0]);
         bar.addView(chip("Picture text", this::readPictureText));
         bar.addView(chip("Save audio", this::saveAudio));
         bar.addView(chip("\u2699 Settings", () -> {
@@ -1850,6 +1857,50 @@ public class ReaderService extends AccessibilityService {
         highlight(currentLine);
     }
 
+    private static final int[] SIZES = {40, 52, 64, 76}; // dp
+    private static final String[] SIZE_NAMES = {"Small", "Medium", "Large", "Extra large"};
+
+    private String sizeLabel() {
+        return "\u25CF Button: " + SIZE_NAMES[Math.max(0, Math.min(SIZES.length - 1, Prefs.buttonSize(this)))];
+    }
+
+    private int buttonPx() {
+        int i = Math.max(0, Math.min(SIZES.length - 1, Prefs.buttonSize(this)));
+        return Theme.dp(this, SIZES[i]);
+    }
+
+    /** New size from the panel: grows around its middle, still inside the screen. */
+    private void resizeButton() {
+        if (button == null || buttonLp == null) return;
+        int size = buttonPx(), old = buttonLp.width;
+        buttonLp.x -= (size - old) / 2;
+        buttonLp.y -= (size - old) / 2;
+        buttonLp.width = buttonLp.height = size;
+        button.setPadding(size / 4, size / 4, size / 4, size / 4);
+        keepButtonOnScreen();
+        Prefs.setButtonPos(this, buttonLp.x, buttonLp.y);
+    }
+
+    /** The button stays fully on screen, clear of the status and navigation bars. */
+    private void keepButtonOnScreen() {
+        if (button == null || buttonLp == null) return;
+        Rect u = usableScreen();
+        int size = buttonLp.width;
+        buttonLp.x = Math.max(u.left, Math.min(buttonLp.x, u.right - size));
+        buttonLp.y = Math.max(u.top, Math.min(buttonLp.y, u.bottom - size));
+        try {
+            wm.updateViewLayout(button, buttonLp);
+        } catch (Exception ignored) {
+        }
+    }
+
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration c) {
+        super.onConfigurationChanged(c);
+        // Turned sideways and back: a spot near the old edge may now be off the screen.
+        main.postDelayed(this::keepButtonOnScreen, 300);
+    }
+
     private String translateLabel() {
         return Prefs.translate(this) ? "🌐 Translate: on" : "🌐 Translate: off";
     }
@@ -1903,7 +1954,7 @@ public class ReaderService extends AccessibilityService {
     @SuppressLint("ClickableViewAccessibility")
     private void showButton() {
         if (button != null) return;
-        int size = (int) (52 * getResources().getDisplayMetrics().density);
+        int size = buttonPx();
         button = new ImageView(this);
         int pad = size / 4;
         button.setPadding(pad, pad, pad, pad);
@@ -1923,8 +1974,11 @@ public class ReaderService extends AccessibilityService {
                 PixelFormat.TRANSLUCENT);
         buttonLp.gravity = Gravity.TOP | Gravity.START;
         int x = Prefs.buttonX(this), y = Prefs.buttonY(this);
-        buttonLp.x = x >= 0 ? Math.min(x, dm.widthPixels - size) : dm.widthPixels - size - size / 4;
-        buttonLp.y = y >= 0 ? Math.min(y, dm.heightPixels - size) : dm.heightPixels / 2;
+        buttonLp.x = x >= 0 ? x : dm.widthPixels - size - size / 4;
+        buttonLp.y = y >= 0 ? y : dm.heightPixels / 2;
+        Rect u = usableScreen();
+        buttonLp.x = Math.max(u.left, Math.min(buttonLp.x, u.right - size));
+        buttonLp.y = Math.max(u.top, Math.min(buttonLp.y, u.bottom - size));
 
         button.setOnTouchListener(new View.OnTouchListener() {
             float downX, downY;
@@ -1959,8 +2013,9 @@ public class ReaderService extends AccessibilityService {
                             showDismissTarget();
                         }
                         if (dragging) {
-                            buttonLp.x = startX + (int) dx;
-                            buttonLp.y = startY + (int) dy;
+                            Rect u = usableScreen();
+                            buttonLp.x = Math.max(u.left, Math.min(startX + (int) dx, u.right - buttonLp.width));
+                            buttonLp.y = Math.max(u.top, Math.min(startY + (int) dy, u.bottom - buttonLp.height));
                             try {
                                 wm.updateViewLayout(button, buttonLp);
                             } catch (Exception ignored) {
