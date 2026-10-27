@@ -544,6 +544,37 @@ public class ReaderService extends AccessibilityService {
         this.remark.run();
     };
 
+    private int settleGen, settleTicks, settleSame, settleY;
+
+    /**
+     * After a swipe: reads the page afresh and moves the outline every 150 ms until it has stayed in the
+     * same place for 600 ms (the page has stopped), for up to 4.5 s.
+     */
+    private void settleOutline() {
+        final int gen = ++settleGen;
+        settleTicks = 0;
+        settleSame = 0;
+        settleY = Integer.MIN_VALUE;
+        main.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                if (gen != settleGen || markFirst < 0 || Speaker.get(ReaderService.this).isPaused()) return;
+                if (Speaker.get(ReaderService.this).isSpeaking()) {
+                    if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
+                    markOnScreen(markFirst, markLast);
+                    int y = markLp != null ? markLp.y : Integer.MIN_VALUE;
+                    settleSame = y == settleY ? settleSame + 1 : 0;
+                    settleY = y;
+                }
+                if (++settleTicks >= 30 || (settleSame >= 4 && settleTicks >= 8)) {
+                    Logs.t(ReaderService.this, "outline settled after " + settleTicks + " looks");
+                    return;
+                }
+                main.postDelayed(this, 150);
+            }
+        }, 60);
+    }
+
     private final Runnable remark = () -> {
         remarkPending = false;
         if (markFirst >= 0 && Speaker.get(this).isSpeaking()) markOnScreen(markFirst, markLast);
@@ -1283,8 +1314,8 @@ public class ReaderService extends AccessibilityService {
         for (int at : new int[]{1300, 1900, 2600}) main.postDelayed(remarkFresh, at);
         swipe(sh, m, () -> {
             // The outline catches up as soon as the page stops (the app may send no more scroll events).
-            // Again a little later: "done" can come before the page has come to rest.
-            for (int at : new int[]{60, 350, 700, 1100}) main.postDelayed(remarkFresh, at);
+            // "done" can come well before the page has come to rest, so keep looking until it has.
+            settleOutline();
             main.postDelayed(() -> showStep(g, first, last, along, early, steps + 1, nextFixes, seenY, then), 200);
         });
     }

@@ -204,7 +204,7 @@ def main(path):
     print('ZYLENA log (scan and scroll lines):')
     for t, m in zyl:
         if m.startswith(('whole page', 'showing the whole', 'next page', 'button', 'outline offset', 'speak ', 'finished',
-                         'TEST screen', 'TEST page area', 'TEST place', 'TEST reading line')) or (m.startswith('TEST paragraph') and fails_near(t)):
+                         'TEST screen', 'TEST page area', 'TEST place', 'TEST reading line')) or (m.startswith(('TEST paragraph', 'TEST mark', 'TEST outline')) and fails_near(t)):
             print(f'  {t:.1f} {m}')
     return 1 if fails or not reads else 0
 
