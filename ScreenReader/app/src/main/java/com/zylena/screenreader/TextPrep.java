@@ -133,6 +133,16 @@ final class TextPrep {
     /** "-syon" is said "-shon" (liksyon = lik-SHON); the Tagalog voice says "lik-si-yon". */
     private static final Pattern SYON = Pattern.compile("(?<=\\p{L})([sS])([yY])([oO][nN])(?=g?\\b|es\\b)");
 
+    private static final Pattern NAME = Pattern.compile("\\b[Zz][Yy][Ll][Ee][Nn][Aa]\\b");
+
+    /**
+     * ZYLENA is said like "Selena" with a Z (zuh-LEE-nuh), not "Zy-lena" or spelled out. Spelled for each
+     * voice so it comes out that way: English "Zeleena", Tagalog "Zelina".
+     */
+    static String sayName(String s, String lang) {
+        return NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena");
+    }
+
     static String sayTagalog(String s) {
         for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
         java.util.regex.Matcher m = SYON.matcher(s);

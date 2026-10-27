@@ -140,7 +140,9 @@ final class Speaker {
             tts.setSpeechRate(Prefs.rate(ctx));
             tts.setPitch(Prefs.pitch(ctx));
             tts.setVoice(v);
-            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, gen + ":0:last");
+            String l = v.getLocale().getLanguage();
+            tts.speak(TextPrep.sayName(text, l.equals("fil") || l.equals("tl") ? TextPrep.FIL : TextPrep.EN),
+                    TextToSpeech.QUEUE_FLUSH, null, gen + ":0:last");
         });
     }
 
@@ -356,7 +358,7 @@ final class Speaker {
         }
         tts.setSpeechRate(rateFor(s.lang));
         // Voice and language switch between runs, so each run is queued as its own utterance.
-        tts.speak(s.text, TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
+        tts.speak(TextPrep.sayName(s.text, s.lang), TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
     }
 
     private static final long PARAGRAPH_PAUSE_MS = 320, HEADING_PAUSE_MS = 650;
@@ -485,7 +487,7 @@ final class Speaker {
                 applyVoice(s.lang);
                 tts.setSpeechRate(rateFor(s.lang));
                 String id = "save:" + i + (i == runs.size() - 1 ? ":last" : "");
-                tts.synthesizeToFile(s.text, null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
+                tts.synthesizeToFile(TextPrep.sayName(s.text, s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
             }
             Logs.d(ctx, "saving " + runs.size() + " pieces to audio");
         });
