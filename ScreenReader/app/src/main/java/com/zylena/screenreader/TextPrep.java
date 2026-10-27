@@ -24,17 +24,24 @@ final class TextPrep {
         final int line, lastLine;
         /** A short title line (no closing punctuation): the reader pauses a little longer around it. */
         final boolean heading;
+        /** Already translated (Translate on): read as it is, never translated back. */
+        final boolean translated;
 
         Seg(String text, String lang, int line, int lastLine) {
             this(text, lang, line, lastLine, false);
         }
 
         Seg(String text, String lang, int line, int lastLine, boolean heading) {
+            this(text, lang, line, lastLine, heading, false);
+        }
+
+        Seg(String text, String lang, int line, int lastLine, boolean heading, boolean translated) {
             this.text = text;
             this.lang = lang;
             this.line = line;
             this.lastLine = lastLine;
             this.heading = heading;
+            this.translated = translated;
         }
     }
 
@@ -429,17 +436,19 @@ final class TextPrep {
         StringBuilder sb = new StringBuilder();
         String lang = null;
         int first = 0, last = 0;
-        boolean head = true;
+        boolean head = true, done = false;
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
             boolean newLang = !anyLang && lang != null && !lang.equals(s.lang);
             boolean newLine = perLine && lang != null && s.line != last;
-            if (lang != null && (newLang || newLine || sb.length() + s.text.length() > max)) {
-                out.add(new Seg(sb.toString(), lang, first, last, head));
+            boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
+            if (lang != null && (newLang || newLine || newKind || sb.length() + s.text.length() > max)) {
+                out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 sb.setLength(0);
                 lang = null;
                 head = true;
             }
+            done = s.translated;
             head &= s.heading;
             if (sb.length() == 0) first = s.line;
             last = s.lastLine;
@@ -447,7 +456,7 @@ final class TextPrep {
             if (sb.length() > 0) sb.append(' ');
             sb.append(endWithStop(s.text));
         }
-        if (lang != null && sb.length() > 0) out.add(new Seg(sb.toString(), lang, first, last, head));
+        if (lang != null && sb.length() > 0) out.add(new Seg(sb.toString(), lang, first, last, head, done));
         return out;
     }
 

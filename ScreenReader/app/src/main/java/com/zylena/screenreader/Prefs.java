@@ -57,6 +57,15 @@ final class Prefs {
         sp(c).edit().putString("tts_pkg", v).apply();
     }
 
+    /** Read each paragraph translated: English in Tagalog, Tagalog in English. */
+    static boolean translate(Context c) {
+        return sp(c).getBoolean("translate", false);
+    }
+
+    static void setTranslate(Context c, boolean v) {
+        sp(c).edit().putBoolean("translate", v).apply();
+    }
+
     static boolean floatingButton(Context c) {
         return sp(c).getBoolean("floating", true);
     }

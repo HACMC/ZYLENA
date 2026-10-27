@@ -297,29 +297,65 @@ final class Speaker {
             simulate(runs, gen, 0);
             return;
         }
+        // Translate: only the screen's own text, not ZYLENA's messages and samples.
+        boolean translate = tracking && Prefs.translate(ctx);
         ensureTts(() -> {
             if (gen != generation) return;
             tts.setSpeechRate(Prefs.rate(ctx));
             tts.setPitch(Prefs.pitch(ctx));
             tts.stop();
-            for (int i = 0; i < runs.size(); i++) {
-                TextPrep.Seg s = runs.get(i);
-                applyVoice(s.lang);
-                Voice used = chosenVoice(s.lang);
-                if (i == 0 || !runs.get(i - 1).lang.equals(s.lang)) {
-                    Logs.d(ctx, "voice for " + s.lang + ": " + (used == null ? "(default locale)" : used.getName()));
-                }
-                boolean last = i == runs.size() - 1;
-                if (i > 0 && runs.get(i - 1).lastLine != s.line) {
-                    // A person takes a breath between paragraphs, and a longer one around a heading.
-                    boolean head = s.heading || runs.get(i - 1).heading;
-                    tts.playSilentUtterance(head ? HEADING_PAUSE_MS : PARAGRAPH_PAUSE_MS, TextToSpeech.QUEUE_ADD, gen + ":-1");
-                }
-                tts.setSpeechRate(rateFor(s.lang));
-                // Voice and language switch between runs, so each run is queued as its own utterance.
-                tts.speak(s.text, TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
+            if (translate) {
+                translateNext(runs, gen, 0);
+                return;
             }
+            for (int i = 0; i < runs.size(); i++) queue(runs, gen, i);
         });
+    }
+
+    /**
+     * Translates run i, queues it, then goes on with the next one. The voice reads run i while run i+1 is
+     * being translated, so only the very first one is waited for. A run that can't be translated is read
+     * as it is.
+     */
+    private void translateNext(List<TextPrep.Seg> runs, int gen, int i) {
+        if (gen != generation || i >= runs.size()) return;
+        TextPrep.Seg s = runs.get(i);
+        if (s.translated) {
+            queue(runs, gen, i);
+            translateNext(runs, gen, i + 1);
+            return;
+        }
+        Translate.text(ctx, s.text, s.lang, out -> main.post(() -> {
+            if (gen != generation) return;
+            if (out != null && !out.trim().isEmpty()) {
+                String to = Translate.other(s.lang);
+                String said = to.equals(TextPrep.FIL) ? TextPrep.sayTagalog(out) : out;
+                runs.set(i, new TextPrep.Seg(said, to, s.line, s.lastLine, s.heading, true));
+            } else if (i == 0) {
+                toast("Couldn't translate. Reading as it is. The translation pack needs internet the first time.");
+            }
+            queue(runs, gen, i);
+            translateNext(runs, gen, i + 1);
+        }));
+    }
+
+    /** Puts run i in the voice's queue, with a breath before it when a new paragraph starts. */
+    private void queue(List<TextPrep.Seg> runs, int gen, int i) {
+        TextPrep.Seg s = runs.get(i);
+        applyVoice(s.lang);
+        Voice used = chosenVoice(s.lang);
+        if (i == 0 || !runs.get(i - 1).lang.equals(s.lang)) {
+            Logs.d(ctx, "voice for " + s.lang + ": " + (used == null ? "(default locale)" : used.getName()));
+        }
+        boolean last = i == runs.size() - 1;
+        if (i > 0 && runs.get(i - 1).lastLine != s.line) {
+            // A person takes a breath between paragraphs, and a longer one around a heading.
+            boolean head = s.heading || runs.get(i - 1).heading;
+            tts.playSilentUtterance(head ? HEADING_PAUSE_MS : PARAGRAPH_PAUSE_MS, TextToSpeech.QUEUE_ADD, gen + ":-1");
+        }
+        tts.setSpeechRate(rateFor(s.lang));
+        // Voice and language switch between runs, so each run is queued as its own utterance.
+        tts.speak(s.text, TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
     }
 
     private static final long PARAGRAPH_PAUSE_MS = 320, HEADING_PAUSE_MS = 650;

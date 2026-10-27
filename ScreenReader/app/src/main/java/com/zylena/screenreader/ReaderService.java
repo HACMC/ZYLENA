@@ -1702,6 +1702,15 @@ public class ReaderService extends AccessibilityService {
         bar.addView(pauseBtn[0]);
         bar.addView(chip("Skip \u23ED", () -> sp.skip(1)));
         bar.addView(chip("\u25A0 Stop", sp::stop));
+        // Translate: English is read in Tagalog and Tagalog in English. On or off, it starts again at this paragraph.
+        android.widget.Button[] trBtn = new android.widget.Button[1];
+        trBtn[0] = chip(translateLabel(), () -> {
+            Prefs.setTranslate(this, !Prefs.translate(this));
+            Logs.d(this, "translate " + (Prefs.translate(this) ? "on" : "off"));
+            trBtn[0].setText(translateLabel());
+            if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
+        });
+        bar.addView(trBtn[0]);
         bar.addView(chip("Picture text", this::readPictureText));
         bar.addView(chip("Save audio", this::saveAudio));
         bar.addView(chip("\u2699 Settings", () -> {
@@ -1798,6 +1807,10 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         highlight(currentLine);
+    }
+
+    private String translateLabel() {
+        return Prefs.translate(this) ? "🌐 Translate: on" : "🌐 Translate: off";
     }
 
     /** A button sized to its label, for the sideways-scrolling row. */

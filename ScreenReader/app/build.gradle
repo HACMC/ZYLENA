@@ -15,6 +15,11 @@ android {
         def build = (System.getenv("ZYLENA_VERSION") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
         versionCode build
         versionName "1." + build
+        // Phones only: the text-recognition and translation engines are copied once per chip type, and the
+        // two emulator types (x86) doubled the APK. The virtual-phone test builds its own with ZYLENA_ABIS=x86_64.
+        ndk {
+            abiFilters.addAll((System.getenv("ZYLENA_ABIS") ?: "arm64-v8a,armeabi-v7a").split(",") as List)
+        }
     }
 
     // Fixed key, so each new CI build installs over the old one and keeps settings. The key is not in
@@ -44,9 +49,18 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+
+    // Compress the engines inside the APK: stored as they are, they made it twice as big to download.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
     // On-device text recognition for "Picture text" (bundled model, works offline).
     implementation 'com.google.mlkit:text-recognition:16.0.1'
+    // On-device English <-> Tagalog translation for "Translate" (the language pack downloads once).
+    implementation 'com.google.mlkit:translate:17.0.3'
 }
