@@ -94,6 +94,7 @@ public class ReaderService extends AccessibilityService {
         });
         Logs.toLogcat = Prefs.testMode(this);
         Logs.d(this, "service connected");
+        Prefs.setServiceWasOn(this, true);
         applyPrefs();
     }
 
@@ -2176,18 +2177,6 @@ public class ReaderService extends AccessibilityService {
         removeButton();
         android.widget.Toast.makeText(this, "Button hidden. Open ZYLENA to bring it back, or use the Read screen tile in Quick Settings.",
                 android.widget.Toast.LENGTH_LONG).show();
-    }
-
-    /**
-     * The ZYLENA app was swiped away from recent apps: stop reading and put the floating button away. The
-     * service itself stays on (an app can't turn it back on), so opening ZYLENA again brings the button back.
-     */
-    void closeWithApp() {
-        Logs.d(this, "app closed from recent apps: button put away");
-        if (scanning) cancelScan();
-        Speaker.get(this).stop();
-        hidePanel();
-        removeButton();
     }
 
     private void toggle() {

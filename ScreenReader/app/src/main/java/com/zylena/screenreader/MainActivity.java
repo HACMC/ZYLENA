@@ -74,10 +74,11 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Watches for the app being swiped away from recent apps, which closes the reader too.
-        try {
-            startService(new android.content.Intent(this, TaskWatch.class));
-        } catch (Exception ignored) {
+        // ZYLENA was on and now isn't: most likely the phone stopped it to save battery (Xiaomi, Samsung, ...).
+        if (!serviceOn() && Prefs.serviceWasOn(this)) {
+            Prefs.setServiceWasOn(this, false);
+            Logs.d(this, "service found off: showing how to keep it on");
+            showKeepOnGuide(true);
         }
         // Opening ZYLENA always brings the floating button back, however it was put away.
         Prefs.setFloatingButton(this, true);
@@ -253,7 +254,7 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"1", "Turn on ZYLENA in Accessibility", "Tap \"Turn on in Accessibility\" above for the steps, one by one."},
                 {"2", "Open any app and tap the gold button", "Tap again to stop. Drag it anywhere; drop it on the \u2715 to hide it. Opening ZYLENA always brings it back. Words inside pictures are read too, in their place."},
-                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio and Settings. Swiping ZYLENA away from recent apps puts the button away until you open ZYLENA again."}};
+                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio and Settings. To put the button away, drag it onto the \u2715 at the bottom; opening ZYLENA brings it back."}};
         for (String[] st : steps) Ui.add(how, stepRow(st[0], st[1], st[2]));
         col.addView(how);
         return col;
@@ -279,6 +280,42 @@ public class MainActivity extends Activity {
                 .setTitle("Turn on ZYLENA")
                 .setView(sv)
                 .setPositiveButton("Open Accessibility", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                .setNeutralButton("Open App info", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:" + getPackageName()))))
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    /**
+     * Phones like Xiaomi close apps in the background to save battery, and that turns ZYLENA off with its
+     * floating button. These settings stop that.
+     */
+    private void showKeepOnGuide(boolean stopped) {
+        String[][] steps = {
+                {"1", "Battery: No restrictions", "Tap \"Battery\" below and allow it. Or in App info tap Battery saver (Xiaomi) or Battery (Samsung) and choose No restrictions / Unrestricted."},
+                {"2", "Autostart on (Xiaomi, Oppo, Vivo)", "Tap \"Open App info\" below and turn on Autostart."},
+                {"3", "Lock it in recent apps (Xiaomi)", "Open recent apps, press and hold ZYLENA (or pull it down) and tap the lock. Then clearing recent apps leaves it alone."},
+                {"4", "Then turn it on again if needed", "If the top card says OFF, tap it and turn ZYLENA on in Accessibility."}};
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int p = Theme.dp(this, 14);
+        list.setPadding(p, p, p, p);
+        if (stopped) list.addView(Theme.body(this, "ZYLENA was turned off, so the floating button went away. If you didn't turn it off, your phone did, "
+                + "to save battery. These settings keep it on:", Theme.MUTED, 14));
+        for (String[] st : steps) list.addView(stepRow(st[0], st[1], st[2]));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(list);
+        new AlertDialog.Builder(this)
+                .setTitle("Keep ZYLENA on")
+                .setView(sv)
+                .setPositiveButton("Battery", (d, w) -> {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                Uri.parse("package:" + getPackageName())));
+                    } catch (Exception e) {
+                        startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+                    }
+                })
                 .setNeutralButton("Open App info", (d, w) -> startActivity(new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.parse("package:" + getPackageName()))))
                 .setNegativeButton("Close", null)
@@ -455,6 +492,8 @@ public class MainActivity extends Activity {
         accessRow = Ui.nav(this, R.drawable.ic_access, "Accessibility setting", "",
                 this::showAccessGuide);
         Ui.add(app, accessRow.view);
+        Ui.add(app, Ui.nav(this, R.drawable.ic_bell, "Keep ZYLENA on", "Stop the phone from closing it (Xiaomi, Samsung, Oppo\u2026)",
+                () -> showKeepOnGuide(false)).view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_tune, "Restore default settings", "Every setting back to how it came",
                 this::restoreDefaults).view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_list, "Logs", "See and share what happened",

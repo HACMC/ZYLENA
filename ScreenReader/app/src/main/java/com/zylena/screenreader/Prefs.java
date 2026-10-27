@@ -94,6 +94,15 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** ZYLENA's service was running; if it is off when the app opens, the phone stopped it. */
+    static boolean serviceWasOn(Context c) {
+        return sp(c).getBoolean("service_was_on", false);
+    }
+
+    static void setServiceWasOn(Context c, boolean v) {
+        sp(c).edit().putBoolean("service_was_on", v).apply();
+    }
+
     /** Use the better online voice and translation when the internet works. */
     static boolean useInternet(Context c) {
         return sp(c).getBoolean("use_internet", true);
