@@ -1042,44 +1042,48 @@ public class ReaderService extends AccessibilityService {
         updateButtonIcon();
     }
 
-    /** Back to the top of the page with the app's own "scroll up" (quick, no swiping). */
+    /**
+     * Back to the top of the page with the app's own "scroll up", in quick succession: a new one before
+     * the last has finished sliding makes most apps jump instead, so the top comes almost at once.
+     */
     private void toTop(int gen, int n, Runnable then) {
         if (gen != scanGen) return;
         if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
         AccessibilityNodeInfo root = getRootInActiveWindow();
         AccessibilityNodeInfo list = root == null ? null : pageList(root);
-        if (list == null || !canScroll(list, false) || n >= 80 || !scrollUp(list)) {
+        if (list == null || !canScroll(list, false) || n >= 200 || !scrollUp(list)) {
             if (n == 0) {
-                swipeToTop(gen, 0, null, then); // no quick "scroll up" here: swipe back by finger
+                swipeToTop(gen, 0, null, then); // no quick "scroll up" here: flick back by finger
                 return;
             }
-            if (n < 80) knownY = 0;
+            if (n < 200) knownY = 0;
+            Logs.d(this, "whole page: back at the top after " + n + " scroll-ups");
             main.postDelayed(() -> {
                 if (gen == scanGen) then.run();
-            }, 400);
+            }, 250);
             return;
         }
-        main.postDelayed(() -> toTop(gen, n + 1, then), 220);
+        main.postDelayed(() -> toTop(gen, n + 1, then), 40);
     }
 
-    /** Swipes the page down a screen at a time until it stops moving: the top. */
+    /** Flicks the page down until it stops moving: the top. (Overshooting doesn't matter there.) */
     private void swipeToTop(int gen, int n, Shot prev, Runnable then) {
         if (gen != scanGen) return;
         Shot sh = shoot();
-        boolean top = sh == null || n >= 60 || (sh.atTop && n > 0);
+        boolean top = sh == null || n >= 40 || (sh.atTop && n > 0);
         if (!top && prev != null) {
             Integer moved = movedBy(prev, sh);
             top = moved != null && Math.abs(moved) < Theme.dp(this, 4);
         }
         if (top) {
             if (n > 0) Logs.d(this, "whole page: back at the top after " + n + " swipes");
-            if (n < 60) knownY = 0;
+            if (n < 40) knownY = 0;
             main.postDelayed(() -> {
                 if (gen == scanGen) then.run();
-            }, n == 0 ? 0 : 300);
+            }, n == 0 ? 0 : 150);
             return;
         }
-        swipe(sh, -(int) (sh.view.height() * 0.8f), () -> main.postDelayed(() -> swipeToTop(gen, n + 1, sh, then), 250));
+        flick(sh, () -> main.postDelayed(() -> swipeToTop(gen, n + 1, sh, then), 350));
     }
 
     private void scanStep(int gen, Shot prev) {
@@ -1113,8 +1117,8 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         // Overlapping steps, so each move can be measured from text seen before and after it.
-        int step = (int) (sh.view.height() * 0.62f);
-        swipe(sh, step, () -> main.postDelayed(() -> scanStep(gen, sh), 200));
+        int step = (int) (sh.view.height() * 0.7f);
+        quickSwipe(sh, step, () -> main.postDelayed(() -> scanStep(gen, sh), 120));
     }
 
     private void endScan(int gen) {
@@ -1401,6 +1405,43 @@ public class ReaderService extends AccessibilityService {
         hold.lineTo(x, endY + 1);
         lastSwipe = System.currentTimeMillis();
         boolean ok = gestureChain(drag, new android.graphics.Path[]{slow, hold}, new long[]{350, 200}, 0, done);
+        if (!ok) done.run();
+    }
+
+    /**
+     * The scan's swipe: no need to land on an exact spot (each move is measured), only to stop dead.
+     * One quick drag, then the finger rests a moment before lifting, so the page doesn't fling on.
+     */
+    private void quickSwipe(Shot sh, int move, Runnable done) {
+        Rect area = sh.view;
+        int m = Math.max(-(int) (area.height() * 0.8f), Math.min((int) (area.height() * 0.8f), move));
+        lastScrollAsked = m;
+        float x = sh.list.left + Theme.dp(this, 10);
+        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.1f;
+        int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
+        float endY = startY - m - Integer.signum(m) * slop;
+        android.graphics.Path drag = new android.graphics.Path();
+        drag.moveTo(x, startY);
+        drag.lineTo(x, endY);
+        android.graphics.Path hold = new android.graphics.Path();
+        hold.moveTo(x, endY);
+        hold.lineTo(x, endY + 1);
+        lastSwipe = System.currentTimeMillis();
+        boolean ok = gestureChain(new android.accessibilityservice.GestureDescription.StrokeDescription(drag, 0, 220, true),
+                new android.graphics.Path[]{hold}, new long[]{150}, 0, done);
+        if (!ok) done.run();
+    }
+
+    /** A fast flick towards the top: the page flies up by several screens. */
+    private void flick(Shot sh, Runnable done) {
+        Rect area = sh.view;
+        float x = sh.list.left + Theme.dp(this, 10);
+        android.graphics.Path p = new android.graphics.Path();
+        p.moveTo(x, area.top + area.height() * 0.15f);
+        p.lineTo(x, area.top + area.height() * 0.85f);
+        lastSwipe = System.currentTimeMillis();
+        boolean ok = gestureChain(new android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 90, false),
+                new android.graphics.Path[0], new long[0], 0, done);
         if (!ok) done.run();
     }
 
