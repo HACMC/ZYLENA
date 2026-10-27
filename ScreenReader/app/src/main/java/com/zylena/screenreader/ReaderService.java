@@ -65,6 +65,11 @@ public class ReaderService extends AccessibilityService {
     protected void onServiceConnected() {
         instance = this;
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
+        if (look == null) {
+            android.os.HandlerThread t = new android.os.HandlerThread("zylena-look");
+            t.start();
+            look = new android.os.Handler(t.getLooper());
+        }
         if (verses == null) verses = new VerseStore(this);
         Bible.source = verses;
         if (Prefs.readVerses(this)) verses.warmUp();
@@ -453,10 +458,15 @@ public class ReaderService extends AccessibilityService {
 
     /** Where the paragraph being read is right now (empty if it has scrolled away). */
     private Rect liveBounds() {
+        return liveBounds(markNodes, markWant);
+    }
+
+    /** Asks the app where these nodes are now. Can take long while the app is busy: see follow. */
+    private Rect liveBounds(List<AccessibilityNodeInfo> nodes, java.util.Set<String> want) {
         Rect all = new Rect(), one = new Rect();
-        for (AccessibilityNodeInfo n : markNodes) {
+        for (AccessibilityNodeInfo n : nodes) {
             // Lists reuse rows for other text when scrolling; only count the node while it still shows ours.
-            if (!n.refresh() || !n.isVisibleToUser() || !markWant.contains(ScreenText.ownText(n))) continue;
+            if (!n.refresh() || !n.isVisibleToUser() || !want.contains(ScreenText.ownText(n))) continue;
             n.getBoundsInScreen(one);
             // The same text on a neighbouring page (to the side) or far below the screen is not this one.
             DisplayMetrics dm = getResources().getDisplayMetrics();
@@ -470,6 +480,8 @@ public class ReaderService extends AccessibilityService {
     private boolean tracking;
     private int idleFrames;
     private long lastFollow;
+    private boolean looking; // a look is under way on the look thread
+    private android.os.Handler look; // a thread of its own for asking the app where the text is
     private final android.view.Choreographer.FrameCallback follow = new android.view.Choreographer.FrameCallback() {
         @Override
         public void doFrame(long t) {
@@ -482,10 +494,31 @@ public class ReaderService extends AccessibilityService {
             }
             // About every 50 ms (each look asks the app): close enough to stay on the moving text, and it leaves
             // time for everything else, which on a slow phone was held up by a look every frame.
-            if (t - lastFollow >= 45_000_000L) {
+            if (t - lastFollow >= 45_000_000L && !looking) {
                 lastFollow = t;
-                Rect r = liveBounds();
-                if (!r.equals(lastMark)) placeMark(r);
+                if (look == null) {
+                    Rect r = liveBounds();
+                    if (!r.equals(lastMark)) placeMark(r);
+                } else {
+                    // Asked on the side: while the app is busy moving the page an answer can take seconds,
+                    // and waiting here froze the outline and everything else until it came.
+                    final List<AccessibilityNodeInfo> nodes = markNodes;
+                    final java.util.Set<String> want = markWant;
+                    looking = true;
+                    look.post(() -> {
+                        Rect r;
+                        try {
+                            r = liveBounds(nodes, want);
+                        } catch (RuntimeException e) {
+                            r = null; // the nodes were let go meanwhile
+                        }
+                        final Rect found = r;
+                        main.post(() -> {
+                            looking = false;
+                            if (found != null && tracking && nodes == markNodes && !found.equals(lastMark)) placeMark(found);
+                        });
+                    });
+                }
             }
             android.view.Choreographer.getInstance().postFrameCallback(this);
         }
@@ -560,9 +593,10 @@ public class ReaderService extends AccessibilityService {
             public void run() {
                 if (gen != settleGen || markFirst < 0 || Speaker.get(ReaderService.this).isPaused()) return;
                 if (Speaker.get(ReaderService.this).isSpeaking()) {
-                    if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
-                    markOnScreen(markFirst, markLast);
-                    int y = markLp != null ? markLp.y : Integer.MIN_VALUE;
+                    // The follow asks the app on its own thread; keep it going and watch where the outline is.
+                    if (markNodes.isEmpty()) markOnScreen(markFirst, markLast);
+                    else startTracking();
+                    int y = lastMark.isEmpty() ? Integer.MIN_VALUE : lastMark.top;
                     settleSame = y == settleY ? settleSame + 1 : 0;
                     settleY = y;
                 }
