@@ -50,12 +50,12 @@ jobs:
           path: ScreenReader/ZYLENA-Screen-Reader-1.*.apk
       # The released APK is for phones (ARM) only; the virtual phone is x86_64 and gets a build of its own.
       - name: Build the APK for the virtual phone
-        if: ${{ !contains(github.event.head_commit.message, '[no phone test]') }}
+        if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[no phone test]') }}
         env:
           ZYLENA_ABIS: x86_64
         run: gradle assembleDebug && cp app/build/outputs/apk/debug/app-debug.apk ZYLENA-virtual-phone.apk
       - uses: actions/upload-artifact@v4
-        if: ${{ !contains(github.event.head_commit.message, '[no phone test]') }}
+        if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[no phone test]') }}
         with:
           name: ZYLENA-virtual-phone-apk
           path: ScreenReader/ZYLENA-virtual-phone.apk
@@ -66,9 +66,10 @@ jobs:
   # A virtual phone reads a practice lesson built like Sabbath School; the check fails if the
   # paragraph being read is ever cut off or the outline is not on it. Only a passing build is released.
   # Small changes that don't touch reading or scrolling skip it: put [no phone test] in the commit message.
+  # A run started by hand (Actions > Run workflow) skips it too, for a quick release.
   phone-test:
     needs: build
-    if: ${{ !contains(github.event.head_commit.message, '[no phone test]') }}
+    if: ${{ github.event_name == 'push' && !contains(github.event.head_commit.message, '[no phone test]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 50
     steps:
