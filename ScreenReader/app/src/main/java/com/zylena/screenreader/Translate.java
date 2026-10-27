@@ -12,8 +12,9 @@ import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
 
 /**
- * English to Tagalog and back with Google's on-device translator. The language pack downloads once
- * (about 30 MB); after that it works offline and nothing leaves the phone.
+ * English to Tagalog and back. With internet: Google Translate online, which translates better. Without
+ * it, or when the online one doesn't answer: Google's on-device translator, whose language pack
+ * downloads once (about 30 MB) and then works offline.
  */
 final class Translate {
     interface Done {
@@ -32,7 +33,85 @@ final class Translate {
         return TextPrep.FIL.equals(lang) ? TextPrep.EN : TextPrep.FIL;
     }
 
+    private static int onlineFails;
+    private static long onlineOffUntil;
+    private static final java.util.concurrent.ExecutorService net = java.util.concurrent.Executors.newSingleThreadExecutor();
+
     static void text(Context c, String text, String fromLang, Done out) {
+        if (!online(c)) {
+            offline(c, text, fromLang, out);
+            return;
+        }
+        Handler main = new Handler(Looper.getMainLooper());
+        net.execute(() -> {
+            String said = null;
+            try {
+                said = google(text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
+            } catch (Exception e) {
+                Logs.d(c, "translate online failed: " + e);
+            }
+            final String got = said;
+            main.post(() -> {
+                if (got != null && !got.isEmpty()) {
+                    onlineFails = 0;
+                    out.done(got);
+                    return;
+                }
+                // Not answering: offline for a while, rather than waiting on every paragraph.
+                if (++onlineFails >= 2) {
+                    onlineOffUntil = System.currentTimeMillis() + 10 * 60_000L;
+                    onlineFails = 0;
+                    Logs.d(c, "translate: online not answering, offline for 10 minutes");
+                }
+                offline(c, text, fromLang, out);
+            });
+        });
+    }
+
+    /** Internet that really works now (not just Wi-Fi without a connection). */
+    private static boolean online(Context c) {
+        if (System.currentTimeMillis() < onlineOffUntil) return false;
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
+            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+            return nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Google Translate online (the free web one). Runs off the main thread. */
+    private static String google(String text, String from, String to) throws Exception {
+        java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
+                "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=" + from + "&tl=" + to).openConnection();
+        h.setConnectTimeout(4000);
+        h.setReadTimeout(6000);
+        h.setRequestMethod("POST");
+        h.setDoOutput(true);
+        h.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        try {
+            byte[] body = ("q=" + java.net.URLEncoder.encode(text, "UTF-8")).getBytes("UTF-8");
+            h.getOutputStream().write(body);
+            if (h.getResponseCode() != 200) throw new java.io.IOException("HTTP " + h.getResponseCode());
+            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream in = h.getInputStream()) {
+                byte[] buf = new byte[8192];
+                for (int n; (n = in.read(buf)) > 0; ) b.write(buf, 0, n);
+            }
+            // [[["translated part","original part",...], ...], ...]
+            org.json.JSONArray parts = new org.json.JSONArray(b.toString("UTF-8")).getJSONArray(0);
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < parts.length(); i++) {
+                org.json.JSONArray p = parts.optJSONArray(i);
+                if (p != null && !p.isNull(0)) sb.append(p.getString(0));
+            }
+            return sb.toString().trim();
+        } finally {
+            h.disconnect();
+        }
+    }
+
+    private static void offline(Context c, String text, String fromLang, Done out) {
         boolean fil = TextPrep.FIL.equals(fromLang);
         Translator t = translator(fil);
         Handler main = new Handler(Looper.getMainLooper());

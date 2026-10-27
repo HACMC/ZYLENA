@@ -252,7 +252,7 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"1", "Turn on ZYLENA in Accessibility", "Tap \"Turn on in Accessibility\" above for the steps, one by one."},
                 {"2", "Open any app and tap the gold button", "Tap again to stop. Drag it anywhere; drop it on the \u2715 to hide it. Opening ZYLENA always brings it back. Words inside pictures are read too, in their place."},
-                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English), Button size (tap to change), Picture text, Save audio, and Turn off. Swiping ZYLENA away from recent apps puts the button away until you open ZYLENA again."}};
+                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio, and Turn off. Swiping ZYLENA away from recent apps puts the button away until you open ZYLENA again."}};
         for (String[] st : steps) Ui.add(how, stepRow(st[0], st[1], st[2]));
         col.addView(how);
         return col;

@@ -7,7 +7,7 @@ A free Android app that reads the screen aloud in Tagalog or English, made for S
 - Tap the gold floating button to read; tap again to stop. Hold it for more: Back, Pause, Skip, Picture text, Save audio, speed.
 - Whole-page reading: it goes through the page from the top, keeps the paragraph being read on screen with a gold outline, and turns to the next day.
 - Reads words inside pictures too, without file names, times or sizes.
-- Works offline and uses your phone's own voices. The Bible texts are public domain.
+- Works offline and uses your phone's own voices. Translate uses Google Translate online when there is internet (the text is sent to Google), and the on-device translator without it. The Bible texts are public domain.
 
 ## Install
 
