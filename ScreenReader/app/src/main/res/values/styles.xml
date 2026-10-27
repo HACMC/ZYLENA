@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark ZYLENA theme: matches the Task Organizer (near-black, wine, champagne gold). -->
+    <style name="Zylena" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/z_bg</item>
+        <item name="android:statusBarColor">@color/z_bg</item>
+        <item name="android:navigationBarColor">@color/z_bg</item>
+        <item name="android:colorAccent">@color/z_gold</item>
+        <item name="android:colorPrimary">@color/z_surface</item>
+        <item name="android:colorPrimaryDark">@color/z_bg</item>
+        <item name="android:colorControlNormal">@color/z_faint</item>
+        <item name="android:colorControlActivated">@color/z_gold</item>
+        <item name="android:colorControlHighlight">#33F0D690</item>
+        <item name="android:textColorPrimary">@color/z_ink</item>
+        <item name="android:textColorSecondary">@color/z_muted</item>
+        <item name="android:alertDialogTheme">@style/Zylena.Dialog</item>
+    </style>
+
+    <style name="Zylena.Dialog" parent="@android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:colorAccent">@color/z_gold</item>
+        <item name="android:textColorPrimary">@color/z_ink</item>
+        <item name="android:textColorSecondary">@color/z_muted</item>
+    </style>
+</resources>

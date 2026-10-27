@@ -1,0 +1,127 @@
+name: Build Screen Reader APK
+on:
+  push:
+    paths:
+      - 'ScreenReader/**'
+      - '.github/workflows/screenreader.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ScreenReader
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      # Builds from the old repo went up to 1.64, so numbers here start at 1.101 and Android sees an update.
+      - name: Version number
+        run: echo "ZYLENA_VERSION=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_ENV"
+      # The signing key lives in a secret, never in this public repository.
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ZYLENA_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > app/zylena-standard.keystore
+            echo "HAS_KEY=1" >> "$GITHUB_ENV"
+          else
+            echo "::warning::No ZYLENA_KEYSTORE_B64 secret: this build uses a debug key and won't be released."
+          fi
+      - name: Build debug APK
+        run: gradle assembleDebug
+      - name: Forget the signing key
+        if: always()
+        run: rm -f app/zylena-standard.keystore
+      # The version is in the file name, so a phone never opens an older download with the same name.
+      - name: Name the APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk "ZYLENA-Screen-Reader-1.${ZYLENA_VERSION}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZYLENA-Screen-Reader-apk
+          path: ScreenReader/ZYLENA-Screen-Reader-1.*.apk
+    outputs:
+      version: ${{ env.ZYLENA_VERSION }}
+      signed: ${{ env.HAS_KEY }}
+
+  # A virtual phone reads a practice lesson built like Sabbath School; the check fails if the
+  # paragraph being read is ever cut off or the outline is not on it. Only a passing build is released.
+  # Small changes that don't touch reading or scrolling skip it: put [no phone test] in the commit message.
+  phone-test:
+    needs: build
+    if: ${{ !contains(github.event.head_commit.message, '[no phone test]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+      - name: Build the practice lesson app
+        working-directory: ScreenReader/testing/mockapp
+        run: gradle assembleDebug
+      - uses: actions/download-artifact@v4
+        with:
+          name: ZYLENA-Screen-Reader-apk
+          path: zylena-apk
+      - name: Make room for the virtual phone
+        run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/android/sdk/ndk && df -h /
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Read the practice lesson on a virtual phone
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 2
+          disk-size: 3000M
+          emulator-boot-timeout: 420
+          disable-animations: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash ScreenReader/testing/run-phone-test.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phone-test
+          path: phone-test-out
+
+  release:
+    needs: [build, phone-test]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.build.outputs.signed == '1' && (needs.phone-test.result == 'success' || needs.phone-test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ZYLENA-Screen-Reader-apk
+          path: apk
+      - name: Remove older APKs from the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for a in $(gh release view screen-reader-latest --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' 2>/dev/null); do
+            gh release delete-asset screen-reader-latest "$a" --repo "$GITHUB_REPOSITORY" -y || true
+          done
+      - name: Publish as a release (direct APK download)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: screen-reader-latest
+          name: ZYLENA Screen Reader 1.${{ needs.build.outputs.version }}
+          body: "Version 1.${{ needs.build.outputs.version }}. Download the APK below and install it. In ZYLENA, Controls > App shows the installed version."
+          files: apk/ZYLENA-Screen-Reader-1.*.apk

@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.zylena.screenreader'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.zylena.screenreader"
+        minSdk 26
+        targetSdk 34
+        // Every CI build gets a higher number, so Android installs it as an update.
+        // (ZYLENA_VERSION is the run number plus 100: builds from the old repo went up to 1.64.)
+        def build = (System.getenv("ZYLENA_VERSION") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+        versionCode build
+        versionName "1." + build
+    }
+
+    // Fixed key, so each new CI build installs over the old one and keeps settings. The key is not in
+    // the repository: CI writes it from the ZYLENA_KEYSTORE_B64 secret. Without it (a fork, a local
+    // build) the APK gets the usual debug key and can't update an installed ZYLENA.
+    def keystore = file('zylena-standard.keystore')
+    signingConfigs {
+        zylena {
+            storeFile keystore
+            storePassword System.getenv("ZYLENA_KEY_PASSWORD") ?: 'android'
+            keyAlias 'zylena'
+            keyPassword System.getenv("ZYLENA_KEY_PASSWORD") ?: 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            if (keystore.exists()) signingConfig signingConfigs.zylena
+        }
+        release {
+            minifyEnabled false
+            if (keystore.exists()) signingConfig signingConfigs.zylena
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // On-device text recognition for "Picture text" (bundled model, works offline).
+    implementation 'com.google.mlkit:text-recognition:16.0.1'
+}

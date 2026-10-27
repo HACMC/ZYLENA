@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">#3B161F</color>
+    <color name="z_bg">#0D0B0C</color>
+    <color name="z_surface">#161113</color>
+    <color name="z_ink">#F2EADB</color>
+    <color name="z_muted">#B9AA9F</color>
+    <color name="z_faint">#7D6F68</color>
+    <color name="z_gold">#D6AD55</color>
+</resources>

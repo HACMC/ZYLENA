@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reader_label">ZYLENA Screen Reader</string>
+    <string name="reader_desc">Reads the text on your screen out loud in English, Tagalog or Taglish, in a female voice, when you tap the floating button or the Read screen tile. It only reads what is on screen to speak it; nothing is saved or sent anywhere, except the text being spoken when you choose the optional online natural voice.</string>
+</resources>

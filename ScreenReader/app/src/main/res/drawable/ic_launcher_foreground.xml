@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The ZYLENA mark over a sound wave, on wine: same brand as the AdBlocker, but clearly the reader. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.03"
+        android:scaleY="0.03"
+        android:translateX="26.8"
+        android:translateY="24">
+        <path
+            android:fillColor="#F0D690"
+            android:pathData="M541,2 L1388,2 L644,1007 L1024,1010 L1024,1167 L331,1167 L1060,157 L424,161 Z" />
+        <path
+            android:fillColor="#F0D690"
+            android:pathData="M654,212 L850,211 L905,280 L804,411 Z" />
+        <path
+            android:fillColor="#F0D690"
+            android:pathData="M1609,6 L1815,6 L1233,770 L1229,1012 L1391,1010 L1283,1167 L1076,1167 L1070,775 L973,642 L1071,511 L1153,605 Z" />
+    </group>
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M30,76 V80 M36,73 V83 M42,69 V87 M48,72 V84 M54,66 V90 M60,72 V84 M66,69 V87 M72,73 V83 M78,76 V80"
+        android:strokeColor="#D6AD55"
+        android:strokeLineCap="round"
+        android:strokeWidth="3.2" />
+</vector>

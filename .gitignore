@@ -1,0 +1,9 @@
+# The signing key is never committed; CI gets it from the ZYLENA_KEYSTORE_B64 secret.
+*.keystore
+*.jks
+build/
+.gradle/
+local.properties
+__pycache__/
+*.pyc
+phone-test-out/
