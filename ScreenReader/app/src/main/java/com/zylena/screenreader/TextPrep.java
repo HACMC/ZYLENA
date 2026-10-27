@@ -291,10 +291,14 @@ final class TextPrep {
         return 0;
     }
 
+    /** Why the last long paragraph was taken for Tagalog, for the log; cleared by the reader. */
+    static volatile String lastWhy = "";
+
     /** "fil" when the sentence is clearly Tagalog or Taglish, otherwise "en". */
     static String detect(String sentence) {
         String[] words = sentence.toLowerCase(Locale.ROOT).split("[^\\p{L}'\\-]+");
         int total = 0, tagalog = 0, english = 0;
+        StringBuilder why = new StringBuilder();
         for (String raw : words) {
             String w = raw.replaceAll("^[-']+|[-']+$", "");
             if (w.isEmpty()) continue;
@@ -304,14 +308,20 @@ final class TextPrep {
                 // "pag-aaral", "Mag-ingat": judge by the parts
                 for (String part : w.split("-")) if (vote(part) > 0) v = 1;
             }
-            if (v > 0) tagalog++;
-            else if (v < 0) english++;
+            if (v > 0) {
+                tagalog++;
+                if (why.length() < 120) why.append(why.length() == 0 ? "" : ", ").append(w);
+            } else if (v < 0) english++;
         }
         if (total == 0) return EN;
-        if (tagalog * 10 >= total * 3) return FIL;
-        // Two Tagalog words make Taglish ("Ready na akong basahin"), but not in a long English paragraph that
-        // happens to hold words both languages have ("they may have", "Ina", "Sana"): English words outvote them.
-        return tagalog >= 2 && tagalog * 2 > english ? FIL : EN;
+        String lang;
+        if (tagalog * 10 >= total * 3) lang = FIL;
+        // Two Tagalog words make Taglish ("Ready na akong basahin"), but not in an English paragraph that
+        // happens to hold words both languages have ("they may have", "Ina", "Sana"): with several English
+        // words it takes the 30% above.
+        else lang = tagalog >= 2 && english < 6 && tagalog * 2 > english ? FIL : EN;
+        if (lang.equals(FIL) && total >= 15) lastWhy = tagalog + " Tagalog, " + english + " English of " + total + " words (" + why + ")";
+        return lang;
     }
 
     /** Cleaned, sentence-split, language-tagged pieces; neighbours in the same language stay separate. */

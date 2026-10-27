@@ -178,6 +178,14 @@ public class ReaderService extends AccessibilityService {
         }
     }
 
+    /** The screen's lines as language-tagged pieces; notes in the log why a long paragraph got the Tagalog voice. */
+    private List<TextPrep.Seg> prep(List<String> ls) {
+        TextPrep.lastWhy = "";
+        List<TextPrep.Seg> out = TextPrep.prepare(ls, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
+        if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
+        return out;
+    }
+
     void readScreenSoon(long delayMs) {
         main.postDelayed(this::readScreen, delayMs);
     }
@@ -194,7 +202,7 @@ public class ReaderService extends AccessibilityService {
         root.recycle();
         rects = ScreenText.lastRects;
         fromPicture = false;
-        segs = TextPrep.prepare(lines, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
+        segs = prep(lines);
         currentLine = -1;
         turnedFor = markedFirst = -1; // line numbers start over with every new read of the screen
         scanned = false;
@@ -289,7 +297,7 @@ public class ReaderService extends AccessibilityService {
             lines = merged;
             rects = mergedRects;
             fromPicture = true; // outline from the saved positions, which cover the picture's words too
-            segs = TextPrep.prepare(lines, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
+            segs = prep(lines);
             Logs.d(this, "pictures: added " + found.size() + " blocks of words in their place");
             go.run();
         });
@@ -320,7 +328,7 @@ public class ReaderService extends AccessibilityService {
             lines = found;
             rects = where;
             fromPicture = true;
-            segs = TextPrep.prepare(lines, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
+            segs = prep(lines);
             Logs.d(this, "picture text: " + lines.size() + " blocks");
             speakFrom(0);
         }), 300);
@@ -1200,7 +1208,7 @@ public class ReaderService extends AccessibilityService {
         rects = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) rects.add(new Rect());
         fromPicture = false;
-        segs = TextPrep.prepare(lines, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
+        segs = prep(lines);
         scanned = true;
         currentLine = -1;
         if (segs.isEmpty()) {

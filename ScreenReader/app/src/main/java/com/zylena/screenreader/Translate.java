@@ -45,20 +45,28 @@ final class Translate {
         Handler main = new Handler(Looper.getMainLooper());
         net.execute(() -> {
             String said = null;
+            boolean limited = false;
             try {
                 said = google(c, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
             } catch (Exception e) {
                 Logs.d(c, "translate online failed: " + e);
+                limited = String.valueOf(e.getMessage()).contains("HTTP 429");
             }
             final String got = said;
+            final boolean busy = limited;
             main.post(() -> {
                 if (got != null && !got.isEmpty()) {
                     onlineFails = 0;
                     out.done(got);
                     return;
                 }
-                // Not answering: offline for a while, rather than waiting on every paragraph.
-                if (++onlineFails >= 2) {
+                // Google says too many requests: respect it and leave it alone for an hour.
+                if (busy) {
+                    onlineOffUntil = System.currentTimeMillis() + 60 * 60_000L;
+                    onlineFails = 0;
+                    Logs.d(c, "translate: Google asks to slow down, offline for an hour");
+                } else if (++onlineFails >= 2) {
+                    // Not answering: offline for a while, rather than waiting on every paragraph.
                     onlineOffUntil = System.currentTimeMillis() + 10 * 60_000L;
                     onlineFails = 0;
                     Logs.d(c, "translate: online not answering, offline for 10 minutes");
