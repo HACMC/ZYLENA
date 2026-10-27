@@ -201,10 +201,14 @@ def main(path):
     def fails_near(t):
         return any(ft - 6 <= t <= ft + 1 for ft in fail_times)
 
+    def close_to_fail(t):
+        return any(ft - 15 <= t <= ft + 2 for ft in fail_times)
+
     print('ZYLENA log (scan and scroll lines):')
     for t, m in zyl:
         if m.startswith(('whole page', 'showing the whole', 'next page', 'button', 'outline offset', 'speak ', 'finished',
-                         'TEST screen', 'TEST page area', 'TEST place', 'TEST reading line')) or (m.startswith(('TEST paragraph', 'TEST mark', 'TEST outline')) and fails_near(t)):
+                         'TEST screen', 'TEST page area', 'TEST place', 'TEST reading line')) or (m.startswith(('TEST paragraph', 'TEST mark', 'TEST outline')) and fails_near(t)) \
+                or close_to_fail(t):  # everything just before a failure, to see what moved the page
             print(f'  {t:.1f} {m}')
     return 1 if fails or not reads else 0
 
