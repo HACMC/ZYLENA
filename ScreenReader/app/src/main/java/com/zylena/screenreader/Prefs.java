@@ -94,6 +94,41 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** Use the better online voice and translation when the internet works. */
+    static boolean useInternet(Context c) {
+        return sp(c).getBoolean("use_internet", true);
+    }
+
+    static void setUseInternet(Context c, boolean v) {
+        sp(c).edit().putBoolean("use_internet", v).apply();
+    }
+
+    /** Data used this month under key ("data_tr", "data_voice"); starts again each month. */
+    static long data(Context c, String key) {
+        String month = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(new java.util.Date());
+        return month.equals(sp(c).getString("data_month", "")) ? sp(c).getLong(key, 0) : 0;
+    }
+
+    static synchronized void addData(Context c, String key, long bytes) {
+        String month = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(new java.util.Date());
+        SharedPreferences.Editor e = sp(c).edit();
+        if (!month.equals(sp(c).getString("data_month", ""))) {
+            e.putString("data_month", month).putLong("data_tr", 0).putLong("data_voice", 0);
+            e.putLong(key, bytes);
+        } else {
+            e.putLong(key, sp(c).getLong(key, 0) + bytes);
+        }
+        e.apply();
+    }
+
+    /** Every setting back to how it came, except this month's data count. */
+    static void restoreDefaults(Context c) {
+        SharedPreferences p = sp(c);
+        String month = p.getString("data_month", "");
+        long tr = p.getLong("data_tr", 0), voice = p.getLong("data_voice", 0);
+        p.edit().clear().putString("data_month", month).putLong("data_tr", tr).putLong("data_voice", voice).commit();
+    }
+
     /** The floating button's size: 0 small, 1 medium, 2 large, 3 extra large. */
     static int buttonSize(Context c) {
         return sp(c).getInt("btn_size", 1);

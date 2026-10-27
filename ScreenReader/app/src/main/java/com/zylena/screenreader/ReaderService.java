@@ -170,8 +170,12 @@ public class ReaderService extends AccessibilityService {
 
     /** Call after a setting changes. */
     void applyPrefs() {
-        if (Prefs.floatingButton(this)) showButton();
-        else removeButton();
+        if (Prefs.floatingButton(this)) {
+            showButton();
+            if (buttonLp != null && buttonLp.width != buttonPx()) resizeButton(); // e.g. after Restore defaults
+        } else {
+            removeButton();
+        }
     }
 
     void readScreenSoon(long delayMs) {
@@ -1766,7 +1770,6 @@ public class ReaderService extends AccessibilityService {
             startActivity(new android.content.Intent(this, MainActivity.class)
                     .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
         }));
-        bar.addView(chip("\u23FB Turn off", this::turnOff));
         android.widget.HorizontalScrollView strip = new android.widget.HorizontalScrollView(this);
         strip.setHorizontalScrollBarEnabled(false);
         strip.addView(bar);
@@ -2153,18 +2156,6 @@ public class ReaderService extends AccessibilityService {
         removeButton();
         android.widget.Toast.makeText(this, "Button hidden. Open ZYLENA to bring it back, or use the Read screen tile in Quick Settings.",
                 android.widget.Toast.LENGTH_LONG).show();
-    }
-
-    /** Closes the reader completely: stops reading and turns the accessibility service off. */
-    private void turnOff() {
-        Logs.d(this, "turned off from the panel");
-        if (scanning) cancelScan();
-        Speaker.get(this).stop();
-        hidePanel();
-        removeButton();
-        android.widget.Toast.makeText(this, "ZYLENA is off. To use it again, open ZYLENA and turn it on.",
-                android.widget.Toast.LENGTH_LONG).show();
-        disableSelf();
     }
 
     /**

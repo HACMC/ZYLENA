@@ -344,6 +344,7 @@ final class Speaker {
         TextPrep.Seg s = runs.get(i);
         applyVoice(s.lang);
         Voice used = chosenVoice(s.lang);
+        if (used != null && used.isNetworkConnectionRequired()) Net.spokeOnline(ctx, s.text.length());
         if (i == 0 || !runs.get(i - 1).lang.equals(s.lang)) {
             Logs.d(ctx, "voice for " + s.lang + ": " + (used == null ? "(default locale)" : used.getName()));
         }
@@ -389,10 +390,26 @@ final class Speaker {
     private Voice chosenVoice(String lang) {
         String name = Prefs.voice(ctx, lang);
         List<Voice> all = voicesFor(lang);
+        Voice pick = all.isEmpty() ? null : all.get(0);
         if (!name.isEmpty()) {
-            for (Voice v : all) if (v.getName().equals(name)) return v;
+            for (Voice v : all) if (v.getName().equals(name)) pick = v;
         }
-        return all.isEmpty() ? null : all.get(0);
+        return twin(pick, all);
+    }
+
+    /**
+     * Google's voices come in pairs: "...-network" (online, sounds better) and "...-local" (on the phone).
+     * With internet and "Use internet" on: the online one; otherwise the one on the phone.
+     */
+    private Voice twin(Voice v, List<Voice> all) {
+        if (v == null) return null;
+        String n = v.getName();
+        boolean on = Net.online(ctx);
+        String want = on && n.endsWith("-local") ? n.substring(0, n.length() - 6) + "-network"
+                : !on && n.endsWith("-network") ? n.substring(0, n.length() - 8) + "-local" : null;
+        if (want == null) return v;
+        for (Voice o : all) if (o.getName().equals(want)) return o;
+        return v;
     }
 
     /** Installed voices for "en" or "fil", most likely female and best quality first. */

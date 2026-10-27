@@ -38,7 +38,7 @@ final class Translate {
     private static final java.util.concurrent.ExecutorService net = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     static void text(Context c, String text, String fromLang, Done out) {
-        if (!online(c)) {
+        if (System.currentTimeMillis() < onlineOffUntil || !Net.online(c)) {
             offline(c, text, fromLang, out);
             return;
         }
@@ -46,7 +46,7 @@ final class Translate {
         net.execute(() -> {
             String said = null;
             try {
-                said = google(text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
+                said = google(c, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
             } catch (Exception e) {
                 Logs.d(c, "translate online failed: " + e);
             }
@@ -68,20 +68,8 @@ final class Translate {
         });
     }
 
-    /** Internet that really works now (not just Wi-Fi without a connection). */
-    private static boolean online(Context c) {
-        if (System.currentTimeMillis() < onlineOffUntil) return false;
-        try {
-            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) c.getSystemService(Context.CONNECTIVITY_SERVICE);
-            android.net.NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
-            return nc != null && nc.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED);
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     /** Google Translate online (the free web one). Runs off the main thread. */
-    private static String google(String text, String from, String to) throws Exception {
+    private static String google(Context c, String text, String from, String to) throws Exception {
         java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
                 "https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=" + from + "&tl=" + to).openConnection();
         h.setConnectTimeout(4000);
@@ -98,6 +86,7 @@ final class Translate {
                 byte[] buf = new byte[8192];
                 for (int n; (n = in.read(buf)) > 0; ) b.write(buf, 0, n);
             }
+            Net.translated(c, body.length + b.size() + 900); // plus the request's and answer's headers
             // [[["translated part","original part",...], ...], ...]
             org.json.JSONArray parts = new org.json.JSONArray(b.toString("UTF-8")).getJSONArray(0);
             StringBuilder sb = new StringBuilder();

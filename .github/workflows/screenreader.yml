@@ -81,6 +81,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: 8.7
+      # Translate online uses Google's free web translator; this shows whether it answers (it never fails the build).
+      - name: Check that Translate online answers
+        continue-on-error: true
+        run: |
+          curl -sS -m 20 'https://translate.googleapis.com/translate_a/single?client=gtx&dt=t&sl=en&tl=tl' \
+            --data-urlencode 'q=The Lord is my shepherd; I shall not want.' | head -c 300; echo
       - name: Build the practice lesson app
         working-directory: ScreenReader/testing/mockapp
         run: gradle assembleDebug

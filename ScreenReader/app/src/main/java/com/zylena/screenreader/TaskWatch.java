@@ -13,6 +13,12 @@ public class TaskWatch extends Service {
 
     @Override
     public void onTaskRemoved(Intent rootIntent) {
+        // Android also calls this when the tile's invisible helper screen closes; only the ZYLENA app itself counts.
+        android.content.ComponentName root = rootIntent == null ? null : rootIntent.getComponent();
+        if (root != null && !root.getClassName().equals(MainActivity.class.getName())) {
+            Logs.d(this, "task closed: " + root.getShortClassName() + ", button stays");
+            return;
+        }
         ReaderService r = ReaderService.instance;
         if (r != null) r.closeWithApp();
         stopSelf();

@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
+    private Ui.Row netRow, dataRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -252,7 +253,7 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"1", "Turn on ZYLENA in Accessibility", "Tap \"Turn on in Accessibility\" above for the steps, one by one."},
                 {"2", "Open any app and tap the gold button", "Tap again to stop. Drag it anywhere; drop it on the \u2715 to hide it. Opening ZYLENA always brings it back. Words inside pictures are read too, in their place."},
-                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio, and Turn off. Swiping ZYLENA away from recent apps puts the button away until you open ZYLENA again."}};
+                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio and Settings. Swiping ZYLENA away from recent apps puts the button away until you open ZYLENA again."}};
         for (String[] st : steps) Ui.add(how, stepRow(st[0], st[1], st[2]));
         col.addView(how);
         return col;
@@ -388,6 +389,19 @@ public class MainActivity extends Activity {
         warn.setPadding(Theme.dp(this, 6), Theme.dp(this, 8), Theme.dp(this, 6), 0);
         col.addView(warn);
 
+        col.addView(Ui.section(this, "Internet"));
+        LinearLayout n = Ui.group(this);
+        netRow = Ui.toggle(this, R.drawable.ic_download, "Use internet when connected",
+                "Better online voice and Translate online. Off, or no internet: everything stays on the phone.",
+                on -> {
+                    Prefs.setUseInternet(this, on);
+                    refresh();
+                });
+        Ui.add(n, netRow.view);
+        dataRow = new Ui.Row(this, R.drawable.ic_info, "Data used", "");
+        Ui.add(n, dataRow.view);
+        col.addView(n);
+
         col.addView(Ui.section(this, "Sound"));
         LinearLayout s = Ui.group(this);
         Ui.add(s, Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f\u00D7",
@@ -441,6 +455,8 @@ public class MainActivity extends Activity {
         accessRow = Ui.nav(this, R.drawable.ic_access, "Accessibility setting", "",
                 this::showAccessGuide);
         Ui.add(app, accessRow.view);
+        Ui.add(app, Ui.nav(this, R.drawable.ic_tune, "Restore default settings", "Every setting back to how it came",
+                this::restoreDefaults).view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_list, "Logs", "See and share what happened",
                 () -> startActivity(new Intent(this, LogActivity.class))).view);
         String ver = "";
@@ -480,6 +496,9 @@ public class MainActivity extends Activity {
         accessRow.setValue(on ? "On" : "Off");
 
         set(floatRow, Prefs.floatingButton(this));
+        set(netRow, Prefs.useInternet(this));
+        dataRow.setSub(Net.usedThisMonth(this) + ". The online voice uses about 11 MB an hour of listening; "
+                + "translation adds less than 1 MB an hour.");
         set(autoRow, Prefs.autoRead(this));
         set(resumeRow, Prefs.resume(this));
         set(pageRow, Prefs.wholePage(this));
@@ -504,6 +523,23 @@ public class MainActivity extends Activity {
         boolean noFil = Speaker.get(this).voicesFor(TextPrep.FIL).isEmpty();
         warn.setText(noFil ? "No Tagalog voice is installed yet. Tap Download better voices and add Filipino." : "");
         warn.setVisibility(noFil ? View.VISIBLE : View.GONE);
+    }
+
+    private void restoreDefaults() {
+        new AlertDialog.Builder(this)
+                .setTitle("Restore default settings?")
+                .setMessage("Voices, speed, what to leave out, your word lists, button size and place: all back to how they came.")
+                .setPositiveButton("Restore", (d, w) -> {
+                    Speaker.get(this).stop();
+                    Prefs.restoreDefaults(this);
+                    Prefs.applyLists(this);
+                    Logs.d(this, "settings restored to defaults");
+                    applyService();
+                    android.widget.Toast.makeText(this, "Settings restored", android.widget.Toast.LENGTH_SHORT).show();
+                    recreate(); // sliders and switches show the defaults
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     private void pickRefMode() {
