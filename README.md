@@ -21,3 +21,8 @@ virtual phone (`ScreenReader/testing/`), and publishes the APK when every check 
 `[no phone test]` in a commit message to skip the virtual phone for small changes.
 
 Release APKs are signed with a key kept in the `ZYLENA_KEYSTORE_B64` secret, never in this repository.
+
+## License and brand
+
+The code is MIT licensed (`LICENSE`). The **ZYLENA name, logo, app icon and gold theme are not**:
+they belong to ZYLENA and may not be used for other apps without permission. See [TRADEMARKS.md](TRADEMARKS.md).

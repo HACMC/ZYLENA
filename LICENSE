@@ -19,3 +19,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+This license covers the source code only. The ZYLENA name, logo, app icon and brand look are not
+licensed under it; see TRADEMARKS.md. The bundled Cormorant and Manrope fonts are licensed under
+the SIL Open Font License 1.1; see ScreenReader/app/src/main/assets/fonts/OFL.txt.
