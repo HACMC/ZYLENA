@@ -1099,8 +1099,20 @@ public class ReaderService extends AccessibilityService {
     }
 
     private void scanStep(int gen, Shot prev) {
+        scanStep(gen, prev, null, 0);
+    }
+
+    /**
+     * One scan step. The page is measured once two looks in a row agree: at the page's end it stretches and
+     * springs back after the swipe, and a look during that made the page seem hundreds of pixels longer.
+     */
+    private void scanStep(int gen, Shot prev, Shot before, int looks) {
         if (gen != scanGen) return;
         Shot sh = shoot();
+        if (prev != null && sh != null && looks < 6 && (before == null || !sh.lines.equals(before.lines) || !sh.rects.equals(before.rects))) {
+            main.postDelayed(() -> scanStep(gen, prev, sh, looks + 1), 90);
+            return;
+        }
         if (sh == null) {
             AccessibilityNodeInfo r = getRootInActiveWindow();
             if (r != null && String.valueOf(r.getPackageName()).equals(pkg) && !scanOrder.isEmpty()) {
