@@ -1877,8 +1877,7 @@ public class ReaderService extends AccessibilityService {
         buttonLp.y -= (size - old) / 2;
         buttonLp.width = buttonLp.height = size;
         button.setPadding(size / 4, size / 4, size / 4, size / 4);
-        keepButtonOnScreen();
-        Prefs.setButtonPos(this, buttonLp.x, buttonLp.y);
+        snapToSide(false);
     }
 
     /** The button stays fully on screen, clear of the status and navigation bars. */
@@ -1894,11 +1893,47 @@ public class ReaderService extends AccessibilityService {
         }
     }
 
+    private android.animation.ValueAnimator snap;
+
+    /** Slides the button to the nearer side of the screen, keeping its height, and remembers the spot. */
+    private void snapToSide(boolean animate) {
+        if (button == null || buttonLp == null) return;
+        if (snap != null) snap.cancel();
+        Rect u = usableScreen();
+        int size = buttonLp.width;
+        int to = buttonLp.x + size / 2 < u.centerX() ? u.left : u.right - size;
+        buttonLp.y = Math.max(u.top, Math.min(buttonLp.y, u.bottom - size));
+        if (!animate || to == buttonLp.x) {
+            buttonLp.x = to;
+            keepButtonOnScreen();
+            Prefs.setButtonPos(this, buttonLp.x, buttonLp.y);
+            return;
+        }
+        snap = android.animation.ValueAnimator.ofInt(buttonLp.x, to);
+        snap.setDuration(220);
+        snap.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        snap.addUpdateListener(a -> {
+            if (button == null) return;
+            buttonLp.x = (int) a.getAnimatedValue();
+            try {
+                wm.updateViewLayout(button, buttonLp);
+            } catch (Exception ignored) {
+            }
+        });
+        snap.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator a) {
+                if (buttonLp != null) Prefs.setButtonPos(ReaderService.this, buttonLp.x, buttonLp.y);
+            }
+        });
+        snap.start();
+    }
+
     @Override
     public void onConfigurationChanged(android.content.res.Configuration c) {
         super.onConfigurationChanged(c);
         // Turned sideways and back: a spot near the old edge may now be off the screen.
-        main.postDelayed(this::keepButtonOnScreen, 300);
+        main.postDelayed(() -> snapToSide(false), 300);
     }
 
     private String translateLabel() {
@@ -1977,7 +2012,7 @@ public class ReaderService extends AccessibilityService {
         buttonLp.x = x >= 0 ? x : dm.widthPixels - size - size / 4;
         buttonLp.y = y >= 0 ? y : dm.heightPixels / 2;
         Rect u = usableScreen();
-        buttonLp.x = Math.max(u.left, Math.min(buttonLp.x, u.right - size));
+        buttonLp.x = buttonLp.x + size / 2 < u.centerX() ? u.left : u.right - size; // on a side
         buttonLp.y = Math.max(u.top, Math.min(buttonLp.y, u.bottom - size));
 
         button.setOnTouchListener(new View.OnTouchListener() {
@@ -1999,6 +2034,7 @@ public class ReaderService extends AccessibilityService {
                         button.animate().alpha(1f).setDuration(120).start();
                         downX = ev.getRawX();
                         downY = ev.getRawY();
+                        if (snap != null) snap.cancel();
                         startX = buttonLp.x;
                         startY = buttonLp.y;
                         dragging = false;
@@ -2029,7 +2065,7 @@ public class ReaderService extends AccessibilityService {
                         boolean drop = dragging && overDismiss(ev);
                         removeDismissTarget();
                         if (drop) hideButtonForGood();
-                        else if (dragging) Prefs.setButtonPos(ReaderService.this, buttonLp.x, buttonLp.y);
+                        else if (dragging) snapToSide(true);
                         else if (!longPressed && ev.getAction() == MotionEvent.ACTION_UP) toggle();
                         fadeSoon();
                         return true;
