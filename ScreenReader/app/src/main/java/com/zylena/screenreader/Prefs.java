@@ -94,6 +94,15 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** After 3 seconds untouched the floating button tucks half into the screen's edge. */
+    static boolean tuck(Context c) {
+        return sp(c).getBoolean("tuck", true);
+    }
+
+    static void setTuck(Context c, boolean v) {
+        sp(c).edit().putBoolean("tuck", v).apply();
+    }
+
     /** The floating button's four shortcuts (ids from Shortcuts.ALL), comma separated. */
     static String shortcuts(Context c) {
         return sp(c).getString("shortcuts", "scan,translate,locate,settings");

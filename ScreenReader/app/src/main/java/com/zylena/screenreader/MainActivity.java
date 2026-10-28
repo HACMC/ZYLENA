@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row netRow, dataRow, aliveRow, locateRow, fanRow;
+    private Ui.Row netRow, dataRow, aliveRow, locateRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -379,6 +379,12 @@ public class MainActivity extends Activity {
             applyService();
         });
         Ui.add(g, floatRow.view);
+        tuckRow = Ui.toggle(this, R.drawable.ic_touch, "Tuck into the edge",
+                "After 3 seconds untouched the button hides halfway at the edge. Tap it to bring it out.", on -> {
+                    Prefs.setTuck(this, on);
+                    applyService();
+                });
+        Ui.add(g, tuckRow.view);
         autoRow = Ui.toggle(this, R.drawable.ic_play, "Read each new screen", "Starts by itself when you open an app",
                 on -> Prefs.setAutoRead(this, on));
         Ui.add(g, autoRow.view);
@@ -568,6 +574,7 @@ public class MainActivity extends Activity {
         set(netRow, Prefs.useInternet(this));
         set(aliveRow, Prefs.keepAlive(this));
         set(locateRow, Prefs.autoLocate(this));
+        set(tuckRow, Prefs.tuck(this));
         StringBuilder fanNames = new StringBuilder();
         for (String[] sc : Shortcuts.chosen(this)) fanNames.append(fanNames.length() == 0 ? "" : ", ").append(sc[2]);
         fanRow.setSub("Hold the button: " + fanNames + " and All controls");

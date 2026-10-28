@@ -222,6 +222,7 @@ public class ReaderService extends AccessibilityService {
         applyKeepAlive();
         if (Prefs.floatingButton(this)) {
             showButton();
+            if (tucked && !Prefs.tuck(this)) untuck();
             if (buttonLp != null && buttonLp.width != buttonPx()) resizeButton(); // e.g. after Restore defaults
         } else {
             removeButton();
@@ -2266,6 +2267,8 @@ public class ReaderService extends AccessibilityService {
     /** Slides the button to the nearer side of the screen, keeping its height, and remembers the spot. */
     private void snapToSide(boolean animate) {
         if (button == null || buttonLp == null) return;
+        if (tuckAnim != null) tuckAnim.cancel();
+        tucked = false;
         if (snap != null) snap.cancel();
         Rect u = usableScreen();
         int size = buttonLp.width;
@@ -2414,6 +2417,10 @@ public class ReaderService extends AccessibilityService {
                 switch (ev.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                         main.removeCallbacks(fade);
+                        main.removeCallbacks(tuck);
+                        // Tucked into the edge: this touch brings it out; a plain tap does nothing more.
+                        wokeUp = tucked;
+                        if (tucked) untuck();
                         button.animate().alpha(1f).setDuration(120).start();
                         downX = ev.getRawX();
                         downY = ev.getRawY();
@@ -2449,7 +2456,7 @@ public class ReaderService extends AccessibilityService {
                         removeDismissTarget();
                         if (drop) hideButtonForGood();
                         else if (dragging) snapToSide(true);
-                        else if (!longPressed && ev.getAction() == MotionEvent.ACTION_UP) toggle();
+                        else if (!longPressed && ev.getAction() == MotionEvent.ACTION_UP && !wokeUp) toggle();
                         fadeSoon();
                         return true;
                     default:
@@ -2482,6 +2489,53 @@ public class ReaderService extends AccessibilityService {
     private void fadeSoon() {
         main.removeCallbacks(fade);
         main.postDelayed(fade, 2500);
+        main.removeCallbacks(tuck);
+        main.postDelayed(tuck, 3000);
+    }
+
+    private boolean tucked, wokeUp;
+    private android.animation.ValueAnimator tuckAnim;
+
+    /** Like a phone's quick ball: untouched for 3 seconds, the button slides half into the screen's edge. */
+    private final Runnable tuck = () -> {
+        // (Not in the emulator test: it taps the button where it first appeared.)
+        if (button == null || buttonLp == null || tucked || !Prefs.tuck(this) || Prefs.testMode(this)
+                || panel != null || fan != null || dismiss != null) return;
+        Rect u = usableScreen();
+        int size = buttonLp.width;
+        boolean right = buttonLp.x + size / 2 > u.centerX();
+        tucked = true;
+        slideButton(right ? u.right - size / 2 : u.left - size / 2);
+    };
+
+    /** Out of the edge again, fully on screen. */
+    private void untuck() {
+        if (button == null || buttonLp == null) return;
+        if (tuckAnim != null) tuckAnim.cancel();
+        Rect u = usableScreen();
+        int size = buttonLp.width;
+        boolean right = buttonLp.x + size / 2 > u.centerX();
+        tucked = false;
+        buttonLp.x = right ? u.right - size : u.left;
+        try {
+            wm.updateViewLayout(button, buttonLp);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void slideButton(int to) {
+        if (tuckAnim != null) tuckAnim.cancel();
+        tuckAnim = android.animation.ValueAnimator.ofInt(buttonLp.x, to);
+        tuckAnim.setDuration(250);
+        tuckAnim.addUpdateListener(a -> {
+            if (button == null || buttonLp == null) return;
+            buttonLp.x = (int) a.getAnimatedValue();
+            try {
+                wm.updateViewLayout(button, buttonLp);
+            } catch (Exception ignored) {
+            }
+        });
+        tuckAnim.start();
     }
 
     private View dismiss;
@@ -2765,6 +2819,8 @@ public class ReaderService extends AccessibilityService {
         if (Speaker.get(this).isSpeaking()) {
             main.removeCallbacks(fade);
             button.animate().alpha(1f).setDuration(150).start();
+            main.removeCallbacks(tuck);
+            main.postDelayed(tuck, 3000);
         } else {
             fadeSoon();
         }
