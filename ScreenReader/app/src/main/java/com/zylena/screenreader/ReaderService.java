@@ -581,6 +581,7 @@ public class ReaderService extends AccessibilityService {
                 new android.accessibilityservice.GestureDescription.StrokeDescription(move, 0, ms, true);
         lastSwipe = System.currentTimeMillis();
         turnedFor = paragraph;
+        letTouchesThrough();
         boolean ok = dispatchGesture(new android.accessibilityservice.GestureDescription.Builder().addStroke(drag).build(),
                 new GestureResultCallback() {
                     @Override
@@ -1791,6 +1792,7 @@ public class ReaderService extends AccessibilityService {
     /** Plays a stroke, then each next part as its continuation; done once the last part has lifted. */
     private boolean gestureChain(android.accessibilityservice.GestureDescription.StrokeDescription stroke,
                                  android.graphics.Path[] next, long[] ms, int i, Runnable done) {
+        if (i == 0) letTouchesThrough();
         return dispatchGesture(new android.accessibilityservice.GestureDescription.Builder().addStroke(stroke).build(),
                 new GestureResultCallback() {
                     @Override
@@ -2493,7 +2495,42 @@ public class ReaderService extends AccessibilityService {
         main.postDelayed(tuck, 3000);
     }
 
-    private boolean tucked, wokeUp;
+    private boolean tucked, wokeUp, passing;
+
+    /**
+     * ZYLENA scrolls the page with a finger swipe down the left margin. With the floating button on the left
+     * edge (tucked there, say) that swipe landed on the button instead, and the page never moved. While
+     * ZYLENA's own swipe runs, touches go through the button to the page.
+     */
+    private void letTouchesThrough() {
+        // Right away when on the main thread, so the window changes before the swipe's first touch.
+        onMain(() -> {
+            main.removeCallbacks(touchesBack);
+            main.postDelayed(touchesBack, 1800);
+            if (passing || button == null || buttonLp == null) return;
+            passing = true;
+            buttonLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+            try {
+                wm.updateViewLayout(button, buttonLp);
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    private void onMain(Runnable r) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) r.run();
+        else main.post(r);
+    }
+
+    private final Runnable touchesBack = () -> {
+        passing = false;
+        if (button == null || buttonLp == null) return;
+        buttonLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+        try {
+            wm.updateViewLayout(button, buttonLp);
+        } catch (Exception ignored) {
+        }
+    };
     private android.animation.ValueAnimator tuckAnim;
 
     /** Like a phone's quick ball: untouched for 3 seconds, the button slides half into the screen's edge. */
