@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row netRow, dataRow;
+    private Ui.Row netRow, dataRow, aliveRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -254,7 +254,7 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"1", "Turn on ZYLENA in Accessibility", "Tap \"Turn on in Accessibility\" above for the steps, one by one."},
                 {"2", "Open any app and tap the gold button", "Tap again to stop. Drag it anywhere; drop it on the \u2715 to hide it. Opening ZYLENA always brings it back. Words inside pictures are read too, in their place."},
-                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Picture text, Save audio and Settings. To put the button away, drag it onto the \u2715 at the bottom; opening ZYLENA brings it back."}};
+                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Scan again, Picture text, Save audio and Settings. To put the button away, drag it onto the \u2715 at the bottom; opening ZYLENA brings it back."}};
         for (String[] st : steps) Ui.add(how, stepRow(st[0], st[1], st[2]));
         col.addView(how);
         return col;
@@ -492,6 +492,12 @@ public class MainActivity extends Activity {
         accessRow = Ui.nav(this, R.drawable.ic_access, "Accessibility setting", "",
                 this::showAccessGuide);
         Ui.add(app, accessRow.view);
+        aliveRow = Ui.toggle(this, R.drawable.ic_bell, "Stay-on notification",
+                "A quiet \"ZYLENA is ready\" notification, so the phone doesn't close ZYLENA and its button", on -> {
+                    Prefs.setKeepAlive(this, on);
+                    applyService();
+                });
+        Ui.add(app, aliveRow.view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_bell, "Keep ZYLENA on", "Stop the phone from closing it (Xiaomi, Samsung, Oppo\u2026)",
                 () -> showKeepOnGuide(false)).view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_tune, "Restore default settings", "Every setting back to how it came",
@@ -536,6 +542,7 @@ public class MainActivity extends Activity {
 
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
+        set(aliveRow, Prefs.keepAlive(this));
         dataRow.setSub(Net.usedThisMonth(this) + ". The online voice uses about 11 MB an hour of listening; "
                 + "translation adds less than 1 MB an hour.");
         set(autoRow, Prefs.autoRead(this));

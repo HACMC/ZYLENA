@@ -95,6 +95,7 @@ public class ReaderService extends AccessibilityService {
         Logs.toLogcat = Prefs.testMode(this);
         Logs.d(this, "service connected");
         Prefs.setServiceWasOn(this, true);
+        applyKeepAlive();
         applyPrefs();
     }
 
@@ -160,6 +161,7 @@ public class ReaderService extends AccessibilityService {
     public boolean onUnbind(android.content.Intent intent) {
         instance = null;
         Logs.d(this, "service unbound");
+        hideBanner();
         hidePanel();
         removeButton();
         unmarkOnScreen();
@@ -169,8 +171,47 @@ public class ReaderService extends AccessibilityService {
         return super.onUnbind(intent);
     }
 
+    private boolean keptAlive;
+
+    /**
+     * With "Stay-on notification": a quiet notification marks ZYLENA as in use, so phones that close
+     * background apps (Xiaomi, Samsung, ...) are much less likely to stop it and take the button away.
+     */
+    void applyKeepAlive() {
+        boolean want = Prefs.keepAlive(this);
+        if (want == keptAlive) return;
+        try {
+            if (want) {
+                android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                nm.createNotificationChannel(new android.app.NotificationChannel("ready", "ZYLENA is ready",
+                        android.app.NotificationManager.IMPORTANCE_MIN));
+                android.app.PendingIntent open = android.app.PendingIntent.getActivity(this, 7,
+                        new android.content.Intent(this, MainActivity.class), android.app.PendingIntent.FLAG_IMMUTABLE);
+                android.app.Notification n = new android.app.Notification.Builder(this, "ready")
+                        .setSmallIcon(R.drawable.ic_speaker)
+                        .setContentTitle("ZYLENA is ready")
+                        .setContentText("Tap the gold button to read. This keeps the phone from closing ZYLENA.")
+                        .setContentIntent(open)
+                        .setOngoing(true)
+                        .build();
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    startForeground(41, n, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+                } else {
+                    startForeground(41, n);
+                }
+            } else {
+                stopForeground(STOP_FOREGROUND_REMOVE);
+            }
+            keptAlive = want;
+            Logs.d(this, "stay-on notification " + (want ? "on" : "off"));
+        } catch (Exception e) {
+            Logs.d(this, "stay-on notification not possible: " + e);
+        }
+    }
+
     /** Call after a setting changes. */
     void applyPrefs() {
+        applyKeepAlive();
         if (Prefs.floatingButton(this)) {
             showButton();
             if (buttonLp != null && buttonLp.width != buttonPx()) resizeButton(); // e.g. after Restore defaults
@@ -248,13 +289,15 @@ public class ReaderService extends AccessibilityService {
         if (Prefs.wholePage(this) && readWholePage()) return;
         if (!snapshot() || segs.isEmpty()) {
             // Some apps (EGW Writings) share a page's text only a moment after a reader first asks.
-            if (tries == 0) {
+            if (tries < 3) {
                 Logs.d(this, "no text yet, looking again");
+                if (tries == 0) showBanner("Looking for the page's text\u2026");
                 main.postDelayed(() -> {
-                    if (gen == readGen && !sp.isSpeaking() && !scanning) readScreen(1);
+                    if (gen == readGen && !sp.isSpeaking() && !scanning) readScreen(tries + 1);
                 }, 700);
                 return;
             }
+            hideBanner();
             if (PictureText.supported()) readPictureText();
             else sp.speakText("I can't find any text on this screen. It may be a picture or a video.");
             return;
@@ -1046,7 +1089,7 @@ public class ReaderService extends AccessibilityService {
         scanStuck = 0;
         Logs.d(this, "whole page: scanning before reading");
         updateButtonIcon();
-        android.widget.Toast.makeText(this, "ZYLENA: scanning the page…", android.widget.Toast.LENGTH_SHORT).show();
+        showBanner("Scanning the page\u2026 please wait");
         toTop(gen, 0, () -> scanStep(gen, null));
         return true;
     }
@@ -1067,6 +1110,7 @@ public class ReaderService extends AccessibilityService {
         showGen++;
         if (scanning) Logs.d(this, "whole page: scan stopped");
         scanning = false;
+        hideBanner();
         updateButtonIcon();
     }
 
@@ -1099,7 +1143,9 @@ public class ReaderService extends AccessibilityService {
                 return;
             }
             Logs.d(this, "whole page: back at the top after " + n + " scroll-ups");
-            main.postDelayed(() -> checkTop(gen, 0, then), 250);
+            // The app's scroll-up stops at the text's top; a header above it that folds away (EGW Writings'
+            // book title) only opens again when the finger pulls the page down, so flick once more.
+            main.postDelayed(() -> swipeToTop(gen, 0, 0, null, () -> checkTop(gen, 0, then)), 250);
             return;
         }
         main.postDelayed(() -> toTop(gen, n + 1, 0, then), 40);
@@ -1185,6 +1231,7 @@ public class ReaderService extends AccessibilityService {
         }
         note(sh);
         scanSteps++;
+        showBanner("Scanning the page\u2026 " + scanOrder.size() + " paragraphs so far");
         if (sh.atEnd || scanStuck >= 2 || scanSteps > 80) {
             endScan(gen);
             return;
@@ -1260,6 +1307,7 @@ public class ReaderService extends AccessibilityService {
         if (gen != scanGen) return;
         scanning = false;
         if (scanOrder.isEmpty()) {
+            hideBanner();
             updateButtonIcon();
             return;
         }
@@ -1273,6 +1321,7 @@ public class ReaderService extends AccessibilityService {
         scanned = true;
         currentLine = -1;
         if (segs.isEmpty()) {
+            hideBanner();
             updateButtonIcon();
             finishScannedPage();
             return;
@@ -1285,6 +1334,7 @@ public class ReaderService extends AccessibilityService {
         markedAlong = -1f;
         Runnable read = () -> {
             if (gen != scanGen) return;
+            hideBanner();
             // The first paragraph is already in place, before the voice starts.
             Speaker.get(this).speak(from, true);
         };
@@ -1293,6 +1343,7 @@ public class ReaderService extends AccessibilityService {
             if (gen == scanGen) putInView(first.line, first.lastLine, 0f, true, read);
         };
         // From the top: the app's quick "scroll up" first. From further down: go straight there.
+        showBanner(back && first.line == 0 ? "Scanned. Going back to the top\u2026" : "Going to where you stopped\u2026");
         if (back && first.line == 0) toTop(gen, 0, place);
         else place.run();
     }
@@ -1832,6 +1883,7 @@ public class ReaderService extends AccessibilityService {
             resizeButton();
         });
         bar.addView(sizeBtn[0]);
+        bar.addView(chip("\u21BB Scan again", this::scanAgain));
         bar.addView(chip("Picture text", this::readPictureText));
         bar.addView(chip("Save audio", this::saveAudio));
         bar.addView(chip("\u2699 Settings", () -> {
@@ -2218,6 +2270,58 @@ public class ReaderService extends AccessibilityService {
         dismiss = null;
     }
 
+    /** Forgets this page's scan and reads it again from the top, scanning first. */
+    private void scanAgain() {
+        Logs.d(this, "scan again");
+        hidePanel();
+        Speaker.get(this).stop();
+        spots.clear();
+        scanOrder.clear();
+        scanPkg = "";
+        main.postDelayed(this::readScreen, 300); // the panel goes away first
+    }
+
+    private TextView banner;
+
+    /** A message at the top of the screen that stays until the scan is done, so nothing looks broken meanwhile. */
+    private void showBanner(String text) {
+        if (wm == null) return;
+        if (banner != null) {
+            banner.setText(text);
+            return;
+        }
+        TextView t = new TextView(this);
+        t.setText(text);
+        t.setTextColor(0xFF0D0B0C);
+        t.setTextSize(15);
+        int ph = Theme.dp(this, 16), pv = Theme.dp(this, 10);
+        t.setPadding(ph, pv, ph, pv);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(Theme.dp(this, 99));
+        bg.setColor(0xF2F0D690);
+        t.setBackground(bg);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        lp.y = usableScreen().top + Theme.dp(this, 8);
+        try {
+            wm.addView(t, lp);
+            banner = t;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void hideBanner() {
+        if (banner == null) return;
+        try {
+            wm.removeView(banner);
+        } catch (Exception ignored) {
+        }
+        banner = null;
+    }
+
     /** Puts the floating button away; opening ZYLENA brings it back. */
     private void hideButtonForGood() {
         Logs.d(this, "floating button hidden");
@@ -2251,6 +2355,8 @@ public class ReaderService extends AccessibilityService {
     private void removeButton() {
         removeDismissTarget();
         if (button == null) return;
+        StackTraceElement[] st = new Throwable().getStackTrace();
+        Logs.d(this, "floating button removed (" + (st.length > 1 ? st[1].getMethodName() : "?") + ")");
         try {
             wm.removeView(button);
         } catch (Exception ignored) {

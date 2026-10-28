@@ -94,6 +94,15 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** A quiet "ZYLENA is ready" notification, so phones that close background apps leave ZYLENA running. */
+    static boolean keepAlive(Context c) {
+        return sp(c).getBoolean("keep_alive", true);
+    }
+
+    static void setKeepAlive(Context c, boolean v) {
+        sp(c).edit().putBoolean("keep_alive", v).apply();
+    }
+
     /** ZYLENA's service was running; if it is off when the app opens, the phone stopped it. */
     static boolean serviceWasOn(Context c) {
         return sp(c).getBoolean("service_was_on", false);
