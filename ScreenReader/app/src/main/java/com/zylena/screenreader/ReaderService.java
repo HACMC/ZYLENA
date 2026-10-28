@@ -234,12 +234,27 @@ public class ReaderService extends AccessibilityService {
     }
 
     void readScreen() {
+        readScreen(0);
+    }
+
+    private int readGen;
+
+    private void readScreen(int tries) {
+        int gen = tries == 0 ? ++readGen : readGen;
         pagesTurned = 0;
         lastAutoRead = System.currentTimeMillis();
         Speaker sp = Speaker.get(this);
         cancelScan();
         if (Prefs.wholePage(this) && readWholePage()) return;
         if (!snapshot() || segs.isEmpty()) {
+            // Some apps (EGW Writings) share a page's text only a moment after a reader first asks.
+            if (tries == 0) {
+                Logs.d(this, "no text yet, looking again");
+                main.postDelayed(() -> {
+                    if (gen == readGen && !sp.isSpeaking() && !scanning) readScreen(1);
+                }, 700);
+                return;
+            }
             if (PictureText.supported()) readPictureText();
             else sp.speakText("I can't find any text on this screen. It may be a picture or a video.");
             return;
