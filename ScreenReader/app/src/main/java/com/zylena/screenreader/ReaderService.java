@@ -47,7 +47,7 @@ public class ReaderService extends AccessibilityService {
     // What is currently on screen, as read: raw lines and the speakable pieces made from them.
     private List<String> lines = new ArrayList<>();
     private List<TextPrep.Seg> segs = new ArrayList<>();
-    private String pkg = "";
+    private volatile String pkg = ""; // also set on the look thread
     private List<Rect> rects = new ArrayList<>();
     private boolean fromPicture; // the current lines came from Picture text, not the screen's own text
     private Controls controls;
@@ -239,17 +239,71 @@ public class ReaderService extends AccessibilityService {
         main.postDelayed(this::readScreen, delayMs);
     }
 
-    /** Reads what is on screen now into lines/segs. False when Android gives no window to read. */
-    private boolean snapshot() {
+    /*
+     * Asking the app on screen about its text is a call into that app, and Android makes the caller wait for
+     * the answer: seconds while the app is busy (just after a page was flicked, say). Asked on ZYLENA's main
+     * thread, that wait kept it from answering taps, and Android said "ZYLENA isn't responding". So the
+     * questions go to the look thread, one at a time, and the answer comes back here.
+     */
+    private interface Question<T> {
+        T ask();
+    }
+
+    private <T> void ask(Question<T> q, java.util.function.Consumer<T> then) {
+        if (look == null) {
+            then.accept(q.ask());
+            return;
+        }
+        look.post(() -> {
+            T a = null;
+            try {
+                a = q.ask();
+            } catch (RuntimeException e) {
+                Logs.d(this, "screen question failed: " + e);
+            }
+            final T answer = a;
+            main.post(() -> then.accept(answer));
+        });
+    }
+
+    /** The screen's text as read on the look thread. */
+    private static final class Snap {
+        String pkg;
+        List<String> lines;
+        List<Rect> rects;
+        List<String> skipped;
+    }
+
+    private Snap readSnap() {
         AccessibilityNodeInfo root = getRootInActiveWindow();
-        if (root == null) {
+        if (root == null) return null;
+        Snap sn = new Snap();
+        sn.pkg = String.valueOf(root.getPackageName());
+        sn.lines = ScreenText.read(root, Prefs.wholePage(this), Prefs.skipButtons(this));
+        sn.rects = ScreenText.lastRects;
+        sn.skipped = ScreenText.lastSkipped;
+        root.recycle();
+        return sn;
+    }
+
+    /** Reads what is on screen now into lines/segs, asking on the look thread; then(false): no window to read. */
+    private void snapshot(java.util.function.Consumer<Boolean> then) {
+        ask(this::readSnap, sn -> then.accept(useSnap(sn)));
+    }
+
+    /** The same, waiting here for the answer (only where nothing else is going on). */
+    private boolean snapshot() {
+        return useSnap(readSnap());
+    }
+
+    private boolean useSnap(Snap sn) {
+        if (sn == null) {
             Logs.d(this, "no active window to read");
             return false;
         }
-        pkg = String.valueOf(root.getPackageName());
-        lines = ScreenText.read(root, Prefs.wholePage(this), Prefs.skipButtons(this));
-        root.recycle();
-        rects = ScreenText.lastRects;
+        pkg = sn.pkg;
+        lines = sn.lines;
+        rects = sn.rects;
         fromPicture = false;
         segs = prep(lines);
         currentLine = -1;
@@ -258,8 +312,8 @@ public class ReaderService extends AccessibilityService {
         markedAlong = -1f;
         Logs.d(this, "screen " + pkg + ": " + lines.size() + " lines, " + segs.size() + " pieces, "
                 + TextPrep.lastDropped + " timestamp lines skipped" + (TextPrep.lastVerseMode ? ", verse numbers skipped" : ""));
-        if (Prefs.skipButtons(this) && !ScreenText.lastSkipped.isEmpty()) {
-            Logs.d(this, "  left out as buttons: " + ScreenText.lastSkipped);
+        if (Prefs.skipButtons(this) && !sn.skipped.isEmpty()) {
+            Logs.d(this, "  left out as buttons: " + sn.skipped);
         }
         for (int i = 0; i < Math.min(6, lines.size()); i++) {
             String l = lines.get(i);
@@ -293,8 +347,23 @@ public class ReaderService extends AccessibilityService {
         lastAutoRead = System.currentTimeMillis();
         Speaker sp = Speaker.get(this);
         cancelScan();
-        if (Prefs.wholePage(this) && readWholePage()) return;
-        if (!snapshot() || segs.isEmpty()) {
+        if (Prefs.wholePage(this)) {
+            readWholePage(handled -> {
+                if (!handled && gen == readGen) snapshot(ok -> {
+                    if (gen == readGen) readScreenAsItIs(tries, ok);
+                });
+            });
+        } else {
+            snapshot(ok -> {
+                if (gen == readGen) readScreenAsItIs(tries, ok);
+            });
+        }
+    }
+
+    private void readScreenAsItIs(int tries, boolean ok) {
+        int gen = readGen;
+        Speaker sp = Speaker.get(this);
+        if (!ok || segs.isEmpty()) {
             // Some apps (EGW Writings) share a page's text only a moment after a reader first asks.
             if (tries < 3) {
                 Logs.d(this, "no text yet, looking again");
@@ -325,10 +394,13 @@ public class ReaderService extends AccessibilityService {
     private void withPictureWords(Runnable go) {
         DisplayMetrics real = new DisplayMetrics();
         wm.getDefaultDisplay().getRealMetrics(real);
-        if (!PictureText.hasPictures(getRootInActiveWindow(), real.widthPixels, real.heightPixels)) {
-            go.run();
-            return;
-        }
+        ask(() -> PictureText.hasPictures(getRootInActiveWindow(), real.widthPixels, real.heightPixels), has -> {
+            if (has == null || !has) go.run();
+            else withPictureWords(go, real);
+        });
+    }
+
+    private void withPictureWords(Runnable go, DisplayMetrics real) {
         final int gen = ++pictureGen;
         final List<String> screenLines = lines;
         final List<Rect> screenRects = rects;
@@ -609,8 +681,13 @@ public class ReaderService extends AccessibilityService {
     }
 
     private void releaseMarkNodes() {
-        for (AccessibilityNodeInfo n : markNodes) n.recycle();
+        final List<AccessibilityNodeInfo> old = markNodes;
         markNodes = new ArrayList<>();
+        // Let go of them on the look thread, after any look that may still be using them.
+        if (look != null) look.post(() -> {
+            for (AccessibilityNodeInfo n : old) n.recycle();
+        });
+        else for (AccessibilityNodeInfo n : old) n.recycle();
     }
 
     /** Moves the outline to r, hiding it while the text is off screen. */
@@ -687,16 +764,17 @@ public class ReaderService extends AccessibilityService {
         }, 60);
     }
 
-    private long remarkCost;
+    private volatile long remarkCost; // how long the last look for the paragraph took (on the look thread)
+    private boolean slowNoted;
 
     private final Runnable remark = () -> {
         remarkPending = false;
-        long t0 = android.os.SystemClock.uptimeMillis();
+        if (remarkCost > 400 && !slowNoted) {
+            slowNoted = true;
+            Logs.d(this, "finding the paragraph is slow here (" + remarkCost + " ms): looking less often");
+        }
         if (markFirst >= 0 && Speaker.get(this).isSpeaking()) markOnScreen(markFirst, markLast);
         else unmarkOnScreen();
-        long took = android.os.SystemClock.uptimeMillis() - t0;
-        if (took > 400 && remarkCost <= 400) Logs.d(this, "finding the paragraph is slow here (" + took + " ms): looking less often");
-        remarkCost = took;
     };
 
     /**
@@ -704,6 +782,19 @@ public class ReaderService extends AccessibilityService {
      * where it is now (the page may have scrolled since it was read in), and the outline goes away when
      * that text isn't on screen, e.g. in another app or tab.
      */
+    /** What a look for the paragraph found, on the look thread. */
+    private static final class MarkLook {
+        boolean samePage;
+        Rect r = new Rect();
+        Rect area = new Rect();
+        List<AccessibilityNodeInfo> nodes = new ArrayList<>();
+        java.util.Set<String> want = new java.util.HashSet<>();
+        Boolean shown; // asked the app to bring it into view: did it?
+    }
+
+    private int markGen;
+    private boolean markBusy, markAgain;
+
     private void markOnScreen(int first, int last) {
         markFirst = first;
         markLast = last;
@@ -712,33 +803,75 @@ public class ReaderService extends AccessibilityService {
             unmarkOnScreen();
             return;
         }
-        Rect r = new Rect();
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        boolean samePage = root != null && String.valueOf(root.getPackageName()).equals(pkg);
-        releaseMarkNodes();
-        if (samePage && fromPicture) {
-            // Text found in a screenshot has no live position; use where it was in the picture.
-            for (int i = first; i <= last && i < rects.size(); i++) if (!rects.get(i).isEmpty()) r.union(rects.get(i));
-        } else if (samePage) {
-            java.util.Set<String> want = new java.util.HashSet<>();
-            for (int i = first; i <= last && i < lines.size(); i++) want.add(lines.get(i));
-            markWant = want;
-            markNodes = ScreenText.find(root, want);
-            r = liveBounds();
+        // One look at a time: asked again meanwhile, look once more when this one is back.
+        if (markBusy) {
+            markAgain = true;
+            return;
+        }
+        markBusy = true;
+        final int g = ++markGen;
+        final boolean picture = fromPicture, sc = scanned;
+        final List<String> ls = lines;
+        final List<Rect> rs = rects;
+        final String p = pkg;
+        // Only when a paragraph starts (not on every refresh while it is read): turning again
+        // mid-paragraph pushed a long paragraph off the top.
+        final boolean starts = first != markedFirst || markAlong != markedAlong;
+        markedFirst = first;
+        markedAlong = markAlong;
+        ask(() -> {
+            long t0 = android.os.SystemClock.uptimeMillis();
+            MarkLook m = new MarkLook();
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            m.samePage = root != null && String.valueOf(root.getPackageName()).equals(p);
+            if (m.samePage && picture) {
+                // Text found in a screenshot has no live position; use where it was in the picture.
+                for (int i = first; i <= last && i < rs.size(); i++) if (!rs.get(i).isEmpty()) m.r.union(rs.get(i));
+            } else if (m.samePage) {
+                for (int i = first; i <= last && i < ls.size(); i++) m.want.add(ls.get(i));
+                m.nodes = ScreenText.find(root, m.want);
+                m.r = liveBounds(m.nodes, m.want);
+                if (follow && !sc && !m.r.isEmpty() && starts) keepInView(root, m.r, first);
+                m.area = readArea(root);
+                // (Not for a scanned page: putInView swipes it there, and the app's own scroll on top of that overshot.)
+                if (m.r.isEmpty() && !m.nodes.isEmpty() && !sc) {
+                    // The paragraph is further down the page: scroll it into view, like turning the page.
+                    m.shown = m.nodes.get(0).performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId());
+                }
+            }
+            remarkCost = android.os.SystemClock.uptimeMillis() - t0;
+            return m;
+        }, m -> {
+            markBusy = false;
+            if (m != null && g == markGen) showMark(first, last, m, picture);
+            if (markAgain) {
+                markAgain = false;
+                if (markFirst >= 0 && Speaker.get(this).isSpeaking()) markOnScreen(markFirst, markLast);
+            }
+        });
+    }
+
+    private void showMark(int first, int last, MarkLook m, boolean picture) {
+        if (markFirst != first) { // reading moved on meanwhile
+            if (look != null) look.post(() -> {
+                for (AccessibilityNodeInfo n : m.nodes) n.recycle();
+            });
+            return;
+        }
+        final List<AccessibilityNodeInfo> old = markNodes;
+        markNodes = new ArrayList<>();
+        if (look != null) look.post(() -> {
+            for (AccessibilityNodeInfo n : old) n.recycle();
+        });
+        Rect r = m.r;
+        if (m.samePage && !picture) {
+            markWant = m.want;
+            markNodes = m.nodes;
             Logs.t(this, "paragraph " + first + " at " + r.toShortString());
-            // Only when a paragraph starts (not on every refresh while it is read): turning again
-            // mid-paragraph pushed a long paragraph off the top.
-            if (follow && !scanned && !r.isEmpty() && (first != markedFirst || markAlong != markedAlong)) keepInView(root, r, first);
-            markedFirst = first;
-            markedAlong = markAlong;
-            markArea = readArea(root);
-            // (Not for a scanned page: putInView swipes it there, and the app's own scroll on top of that overshot.)
-            if (r.isEmpty() && !markNodes.isEmpty() && !scanned) {
-                // The paragraph is further down the page: scroll it into view, like turning the page.
-                boolean shown = markNodes.get(0).performAction(
-                        AccessibilityNodeInfo.AccessibilityAction.ACTION_SHOW_ON_SCREEN.getId());
-                Logs.d(this, "bringing the paragraph into view: " + (shown ? "ok" : "not possible"));
-                if (shown) {
+            markArea = m.area;
+            if (m.shown != null) {
+                Logs.d(this, "bringing the paragraph into view: " + (m.shown ? "ok" : "not possible"));
+                if (m.shown) {
                     main.postDelayed(remark, 350);
                     remarkPending = true;
                 }
@@ -746,7 +879,7 @@ public class ReaderService extends AccessibilityService {
             startTracking();
         }
         DisplayMetrics dm = getResources().getDisplayMetrics();
-        Rect clip = fromPicture || markArea.isEmpty() ? new Rect(0, 0, dm.widthPixels, dm.heightPixels) : markArea;
+        Rect clip = picture || markArea.isEmpty() ? new Rect(0, 0, dm.widthPixels, dm.heightPixels) : markArea;
         if (r.isEmpty() || !r.intersect(clip)) {
             unmarkOnScreen();
             return;
@@ -876,9 +1009,9 @@ public class ReaderService extends AccessibilityService {
     private final Map<String, Spot> spots = new HashMap<>();
     private int scanY, scanSteps, scanStuck, knownY;
     private String scanPkg = "";
-    private AccessibilityNodeInfo lastList;
+    private volatile AccessibilityNodeInfo lastList;
     private int pageEndY; // how far the scanned page scrolls
-    private boolean upSeen;
+    private volatile boolean upSeen;
     private long scanTime;
 
     /** The page's main scrolling area, also when it is already at the bottom (then it can't scroll down). */
@@ -1020,6 +1153,11 @@ public class ReaderService extends AccessibilityService {
         out.intersect(0, 0, Math.max(use.right, out.left + 1), Math.max(use.bottom, out.top + 1));
     }
 
+    /** A shot of the page, taken on the look thread; use gets it here. */
+    private void shootThen(java.util.function.Consumer<Shot> use) {
+        ask(this::shoot, use);
+    }
+
     /** A shot of the page being read; null if another app or tab is in front (then nothing is swiped). */
     private Shot shoot() {
         // Read the page as it is now: Android may still hold the text from before the last scroll.
@@ -1063,13 +1201,33 @@ public class ReaderService extends AccessibilityService {
         return r.bottom < sh.view.bottom - sh.edge && r.bottom > sh.view.top;
     }
 
-    /** Starts reading a scrolling page: scan it first, then read. False if this screen doesn't scroll. */
-    private boolean readWholePage() {
-        AccessibilityNodeInfo front = getRootInActiveWindow();
-        if (front == null) return false;
-        if (!pkg.equals(String.valueOf(front.getPackageName()))) lastList = null;
-        pkg = String.valueOf(front.getPackageName());
-        Shot first = shoot();
+    /** The first look at a page, asked on the look thread. */
+    private static final class FirstLook {
+        String pkg;
+        Shot shot;
+        int allChars;
+    }
+
+    /** Starts reading a scrolling page: scan it first, then read. handled(false): this screen doesn't scroll. */
+    private void readWholePage(java.util.function.Consumer<Boolean> handled) {
+        final int asked = readGen; // tapped again meanwhile: this answer is old
+        ask(() -> {
+            AccessibilityNodeInfo front = getRootInActiveWindow();
+            if (front == null) return null;
+            FirstLook f = new FirstLook();
+            f.pkg = String.valueOf(front.getPackageName());
+            if (!pkg.equals(f.pkg)) lastList = null;
+            pkg = f.pkg;
+            f.shot = shoot();
+            if (f.shot != null && !f.shot.lines.isEmpty()) {
+                for (String l : ScreenText.read(front, false, Prefs.skipButtons(this))) f.allChars += l.length();
+            }
+            return f;
+        }, f -> handled.accept(f != null && asked == readGen && startWholePage(f)));
+    }
+
+    private boolean startWholePage(FirstLook f) {
+        Shot first = f.shot;
         if (first == null || first.lines.isEmpty()) {
             Logs.d(this, "whole page: no scrolling page here, reading the screen as it is");
             return false;
@@ -1077,9 +1235,8 @@ public class ReaderService extends AccessibilityService {
         Logs.t(this, "page area " + first.list.toShortString() + ", readable " + first.view.toShortString());
         if (first.noUp && first.atEnd) return false; // all of it is on screen already
         // The page must hold most of the screen's words; otherwise read the screen as it is.
-        int inPage = 0, all = 0;
+        int inPage = 0, all = f.allChars;
         for (String l : first.lines) inPage += l.length();
-        for (String l : ScreenText.read(front, false, Prefs.skipButtons(this))) all += l.length();
         if (inPage * 10 < all * 6) {
             Logs.d(this, "whole page: most of the text is outside the scrolling part, reading the screen as it is");
             return false;
@@ -1138,11 +1295,20 @@ public class ReaderService extends AccessibilityService {
 
     private void toTop(int gen, int n, int refused, Runnable then) {
         if (gen != scanGen) return;
-        if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
-        AccessibilityNodeInfo root = getRootInActiveWindow();
-        AccessibilityNodeInfo list = root == null ? null : pageList(root);
-        boolean more = list != null && canScroll(list, false) && n < 200;
-        if (more && !scrollUp(list)) {
+        // 0: can't scroll up (or no page), 1: scrolled up, 2: the app refused this one
+        ask(() -> {
+            if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            AccessibilityNodeInfo list = root == null ? null : pageList(root);
+            if (list == null || !canScroll(list, false) || n >= 200) return 0;
+            return scrollUp(list) ? 1 : 2;
+        }, r -> toTopNext(gen, n, refused, r == null ? 0 : r, then));
+    }
+
+    private void toTopNext(int gen, int n, int refused, int result, Runnable then) {
+        if (gen != scanGen) return;
+        boolean more = result != 0;
+        if (result == 2) {
             // Busy with the last one: that is not the top. Try again a moment later, a few times.
             if (refused < 4) {
                 main.postDelayed(() -> toTop(gen, n + 1, refused + 1, then), 150);
@@ -1170,7 +1336,11 @@ public class ReaderService extends AccessibilityService {
      */
     private void swipeToTop(int gen, int n, int still, Shot prev, Runnable then) {
         if (gen != scanGen) return;
-        Shot sh = shoot();
+        shootThen(sh -> swipeToTop(gen, n, still, prev, sh, then));
+    }
+
+    private void swipeToTop(int gen, int n, int still, Shot prev, Shot sh, Runnable then) {
+        if (gen != scanGen) return;
         // ("Can't scroll up" isn't trusted here: EGW Writings stops offering it far from the top.)
         boolean top = sh == null || n >= 40;
         int nowStill = still;
@@ -1196,7 +1366,15 @@ public class ReaderService extends AccessibilityService {
      */
     private void checkTop(int gen, int tries, Runnable then) {
         if (gen != scanGen) return;
-        Shot sh = spots.isEmpty() ? null : shoot();
+        if (spots.isEmpty()) {
+            checkTop(gen, tries, null, then);
+            return;
+        }
+        shootThen(sh -> checkTop(gen, tries, sh, then));
+    }
+
+    private void checkTop(int gen, int tries, Shot sh, Runnable then) {
+        if (gen != scanGen) return;
         Integer y = sh == null ? null : pageY(sh);
         if (y != null && y > Theme.dp(this, 24) && tries < 2) {
             Logs.d(this, "whole page: not at the top yet (" + y + " px down), going on up");
@@ -1217,14 +1395,23 @@ public class ReaderService extends AccessibilityService {
      */
     private void scanStep(int gen, Shot prev, Shot before, int looks) {
         if (gen != scanGen) return;
-        Shot sh = shoot();
+        // With no shot: is the same app still in front (then it stopped answering) or another one?
+        ask(() -> {
+            Shot s1 = shoot();
+            if (s1 != null) return new Object[]{s1, false};
+            AccessibilityNodeInfo r = getRootInActiveWindow();
+            return new Object[]{null, r != null && String.valueOf(r.getPackageName()).equals(pkg)};
+        }, a -> scanStep(gen, prev, before, looks, a == null ? null : (Shot) a[0], a != null && (Boolean) a[1]));
+    }
+
+    private void scanStep(int gen, Shot prev, Shot before, int looks, Shot sh, boolean samePage) {
+        if (gen != scanGen) return;
         if (prev != null && sh != null && looks < 6 && (before == null || !sh.lines.equals(before.lines) || !sh.rects.equals(before.rects))) {
             main.postDelayed(() -> scanStep(gen, prev, sh, looks + 1), 90);
             return;
         }
         if (sh == null) {
-            AccessibilityNodeInfo r = getRootInActiveWindow();
-            if (r != null && String.valueOf(r.getPackageName()).equals(pkg) && !scanOrder.isEmpty()) {
+            if (samePage && !scanOrder.isEmpty()) {
                 Logs.d(this, "whole page: the page stopped answering, reading what was found");
                 endScan(gen);
             } else {
@@ -1395,14 +1582,21 @@ public class ReaderService extends AccessibilityService {
 
     private void showStep(int g, int first, int last, float along, boolean early, int steps, int fixes, int lastY, Runnable then) {
         // The first look is at a page at rest; after one of our swipes, wait until the app has caught up.
-        if (steps == 0) place(g, g == showGen ? shoot() : null, first, last, along, early, steps, fixes, lastY, then);
+        if (steps == 0) {
+            if (g != showGen) return;
+            shootThen(sh -> place(g, sh, first, last, along, early, steps, fixes, lastY, then));
+        }
         else settled(g, null, 0, sh -> place(g, sh, first, last, along, early, steps, fixes, lastY, then));
     }
 
     /** A look at the page once two looks in a row agree: the page has stopped and the app has caught up. */
     private void settled(int g, Shot before, int tries, java.util.function.Consumer<Shot> use) {
         if (g != showGen) return;
-        Shot sh = shoot();
+        shootThen(sh -> settled(g, before, tries, sh, use));
+    }
+
+    private void settled(int g, Shot before, int tries, Shot sh, java.util.function.Consumer<Shot> use) {
+        if (g != showGen) return;
         if (sh == null || tries >= 2 || (before != null && sh.lines.equals(before.lines) && sh.rects.equals(before.rects))) {
             use.accept(sh);
             return;
@@ -1717,12 +1911,17 @@ public class ReaderService extends AccessibilityService {
         main.postDelayed(() -> {
             if (Speaker.get(this).isSpeaking()) return;
             hidePanel();
-            if (Prefs.wholePage(this) && readWholePage()) return;
-            if (!snapshot() || segs.isEmpty()) {
-                Logs.d(this, "next page: nothing to read");
-                return;
-            }
-            speakFrom(0);
+            Runnable asItIs = () -> snapshot(ok -> {
+                if (!ok || segs.isEmpty()) {
+                    Logs.d(this, "next page: nothing to read");
+                    return;
+                }
+                speakFrom(0);
+            });
+            if (Prefs.wholePage(this)) readWholePage(handled -> {
+                if (!handled) asItIs.run();
+            });
+            else asItIs.run();
         }, 1200);
         return true;
     }
@@ -1847,12 +2046,26 @@ public class ReaderService extends AccessibilityService {
     // ---------------------------------------------------- tap-a-line panel
 
     /** A sheet listing the screen's text. Tap a line to start reading from there; it follows along. */
+    private boolean panelComing;
+
     private void showPanel() {
-        if (panel != null) return;
+        if (panel != null || panelComing) return;
         Speaker spk = Speaker.get(this);
         if (lines.isEmpty() || (!spk.isSpeaking() && !spk.isPaused())) {
-            if (!snapshot()) return;
+            // Not reading: list what is on screen now (asked on the look thread), then open.
+            panelComing = true;
+            snapshot(ok -> {
+                panelComing = false;
+                if (ok) openPanel();
+            });
+            return;
         }
+        openPanel();
+    }
+
+    private void openPanel() {
+        if (panel != null) return;
+        Speaker spk = Speaker.get(this);
         // Reading pauses while the panel is open: changes then don't restart the voice again and again
         // (restarting it quickly froze the phone's voice and ZYLENA with it). Close carries on, once.
         panelPaused = spk.isSpeaking();
