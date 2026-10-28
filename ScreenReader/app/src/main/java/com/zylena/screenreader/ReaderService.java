@@ -108,9 +108,15 @@ public class ReaderService extends AccessibilityService {
             if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED || type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
                     || type == AccessibilityEvent.TYPE_WINDOWS_CHANGED || type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
                 // At most every 120 ms, also while the page keeps moving (waiting for it to stop looked stuck).
-                if (!remarkPending) {
+                // A change in some other app (the status bar, say) says nothing about this page.
+                boolean other = type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED && e.getPackageName() != null
+                        && !e.getPackageName().toString().equals(pkg);
+                if (!remarkPending && !other) {
                     remarkPending = true;
-                    main.postDelayed(remark, type == AccessibilityEvent.TYPE_VIEW_SCROLLED ? 40 : 120);
+                    // On a big, busy screen finding the paragraph takes long, and doing it all the time kept the
+                    // phone from answering taps ("isn't responding"): wait longer the longer the last look took.
+                    long base = type == AccessibilityEvent.TYPE_VIEW_SCROLLED ? 40 : 120;
+                    main.postDelayed(remark, Math.min(2000, base + 3 * remarkCost));
                 }
             }
         }
@@ -681,10 +687,16 @@ public class ReaderService extends AccessibilityService {
         }, 60);
     }
 
+    private long remarkCost;
+
     private final Runnable remark = () -> {
         remarkPending = false;
+        long t0 = android.os.SystemClock.uptimeMillis();
         if (markFirst >= 0 && Speaker.get(this).isSpeaking()) markOnScreen(markFirst, markLast);
         else unmarkOnScreen();
+        long took = android.os.SystemClock.uptimeMillis() - t0;
+        if (took > 400 && remarkCost <= 400) Logs.d(this, "finding the paragraph is slow here (" + took + " ms): looking less often");
+        remarkCost = took;
     };
 
     /**
@@ -1159,7 +1171,8 @@ public class ReaderService extends AccessibilityService {
     private void swipeToTop(int gen, int n, int still, Shot prev, Runnable then) {
         if (gen != scanGen) return;
         Shot sh = shoot();
-        boolean top = sh == null || n >= 40 || (sh.atTop && n > 0);
+        // ("Can't scroll up" isn't trusted here: EGW Writings stops offering it far from the top.)
+        boolean top = sh == null || n >= 40;
         int nowStill = still;
         if (!top && prev != null) {
             Integer moved = movedBy(prev, sh);
@@ -1450,7 +1463,9 @@ public class ReaderService extends AccessibilityService {
         // A small move is skipped only when the paragraph is fully visible anyway; a hidden edge always moves.
         // (Only for a paragraph that fits: a taller one always has a hidden part.)
         boolean hidden = bottom - top <= room && (visTop < sh.view.top || visBottom > sh.view.bottom);
-        if ((!hidden && Math.abs(move) < Theme.dp(this, 10)) || move == 0 || (move > 0 && sh.atEnd) || (move < 0 && sh.atTop)) {
+        // "Can't scroll up" only counts when the scan agrees the page is near its top (EGW says it far down).
+        boolean atTop = sh.atTop && (measured == null || y < Theme.dp(this, 24));
+        if ((!hidden && Math.abs(move) < Theme.dp(this, 10)) || move == 0 || (move > 0 && sh.atEnd) || (move < 0 && atTop)) {
             then.run(); // in place, or the page ends here and can't move that way
             return;
         }
@@ -1838,7 +1853,12 @@ public class ReaderService extends AccessibilityService {
         if (lines.isEmpty() || (!spk.isSpeaking() && !spk.isPaused())) {
             if (!snapshot()) return;
         }
-        Logs.d(this, "panel opened");
+        // Reading pauses while the panel is open: changes then don't restart the voice again and again
+        // (restarting it quickly froze the phone's voice and ZYLENA with it). Close carries on, once.
+        panelPaused = spk.isSpeaking();
+        panelChanged = false;
+        if (panelPaused) spk.pause();
+        Logs.d(this, "panel opened" + (panelPaused ? ", reading paused" : ""));
         unmarkOnScreen();
         DisplayMetrics dm = getResources().getDisplayMetrics();
         int pad = Theme.dp(this, 12);
@@ -1874,7 +1894,8 @@ public class ReaderService extends AccessibilityService {
             Prefs.setTranslate(this, !Prefs.translate(this));
             Logs.d(this, "translate " + (Prefs.translate(this) ? "on" : "off"));
             trBtn[0].setText(translateLabel());
-            if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
+            if (panelPaused && sp.isPaused()) panelChanged = true; // takes effect on Close
+            else if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
         });
         bar.addView(trBtn[0]);
         android.widget.Button[] sizeBtn = new android.widget.Button[1];
@@ -1900,7 +1921,7 @@ public class ReaderService extends AccessibilityService {
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
         top.addView(strip, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        android.widget.Button close = chip("\u2715 Close", this::hidePanel);
+        android.widget.Button close = chip("\u2715 Close", this::closePanel);
         ((LinearLayout.LayoutParams) close.getLayoutParams()).setMarginEnd(0);
         ((LinearLayout.LayoutParams) close.getLayoutParams()).setMarginStart(Theme.dp(this, 6));
         top.addView(close);
@@ -1937,7 +1958,8 @@ public class ReaderService extends AccessibilityService {
             public void onStopTrackingTouch(android.widget.SeekBar b) {
                 Prefs.setRate(ReaderService.this, min + b.getProgress() * step);
                 Logs.d(ReaderService.this, "speed " + Prefs.rate(ReaderService.this));
-                if (sp.isSpeaking()) sp.skip(0); // queued speech keeps its old speed, so restart this paragraph
+                if (panelPaused && sp.isPaused()) panelChanged = true; // takes effect on Close
+                else if (sp.isSpeaking()) sp.skip(0); // queued speech keeps its old speed, so restart this paragraph
             }
         });
         speed.addView(bar2, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
@@ -2081,7 +2103,21 @@ public class ReaderService extends AccessibilityService {
         return b;
     }
 
+    private boolean panelPaused, panelChanged;
+
+    /** Close from the panel: reading paused by opening it carries on, with any new speed or Translate. */
+    private void closePanel() {
+        boolean carryOn = panelPaused && Speaker.get(this).isPaused();
+        boolean changed = panelChanged;
+        hidePanel();
+        if (!carryOn) return;
+        Logs.d(this, "panel closed, reading on" + (changed ? " with the new settings" : ""));
+        if (changed) speakFrom(Math.max(0, currentLine));
+        else Speaker.get(this).resume();
+    }
+
     private void hidePanel() {
+        panelPaused = false;
         if (panel == null) return;
         try {
             wm.removeView(panel);
@@ -2147,7 +2183,7 @@ public class ReaderService extends AccessibilityService {
             final Runnable longPress = () -> {
                 longPressed = true;
                 button.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
-                if (panel != null) hidePanel();
+                if (panel != null) closePanel();
                 else showPanel();
             };
 
