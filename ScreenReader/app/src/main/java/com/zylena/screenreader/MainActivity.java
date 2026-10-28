@@ -49,6 +49,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
+        Logs.catchCrashes(this);
         Theme.applyWindow(this);
 
         LinearLayout root = new LinearLayout(this);
@@ -74,6 +75,24 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        // Switched on in Accessibility but not running: Android stopped it after a problem and won't start it again
+        // by itself (Settings shows "Not working"). Give Android a moment first: after a restart it binds it again.
+        getWindow().getDecorView().postDelayed(() -> {
+            if (isFinishing() || ReaderService.instance != null || !enabledInSettings()) return;
+            boolean crashed = getSharedPreferences("zylena_reader", MODE_PRIVATE).getBoolean("crashed", false);
+            getSharedPreferences("zylena_reader", MODE_PRIVATE).edit().putBoolean("crashed", false).apply();
+            Logs.d(this, "service on in settings but not running" + (crashed ? " (after a crash)" : ""));
+            new AlertDialog.Builder(this)
+                    .setTitle("ZYLENA stopped")
+                    .setMessage((crashed ? "ZYLENA ran into a problem and Android stopped it" : "Android stopped ZYLENA")
+                            + ", so the floating button is gone. To start it again:\n\n"
+                            + "1. Tap Open Accessibility.\n2. Tap ZYLENA Screen Reader (it may say \"Not working\").\n"
+                            + "3. Turn it off, then on again, and tap Allow.\n4. Come back here."
+                            + (crashed ? "\n\nThe problem is in the log (Logs): please share it so it can be fixed." : ""))
+                    .setPositiveButton("Open Accessibility", (d, w) -> startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)))
+                    .setNegativeButton("Close", null)
+                    .show();
+        }, 1500);
         // ZYLENA was on and now isn't: most likely the phone stopped it to save battery (Xiaomi, Samsung, ...).
         if (!serviceOn() && Prefs.serviceWasOn(this)) {
             Prefs.setServiceWasOn(this, false);
@@ -771,6 +790,11 @@ public class MainActivity extends Activity {
                     });
                 })
                 .show();
+    }
+
+    private boolean enabledInSettings() {
+        String enabled = Settings.Secure.getString(getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+        return enabled != null && enabled.contains(new ComponentName(this, ReaderService.class).flattenToString());
     }
 
     private boolean serviceOn() {

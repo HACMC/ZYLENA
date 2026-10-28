@@ -69,6 +69,30 @@ final class Logs {
         file(c).delete();
     }
 
+    private static boolean catching;
+
+    /**
+     * Writes a crash to the log before Android closes ZYLENA, so it can be found and fixed. (After a
+     * crash Android marks the reader "not working" and the user has to turn it on again.)
+     */
+    static synchronized void catchCrashes(Context c) {
+        if (catching) return;
+        catching = true;
+        Context app = c.getApplicationContext();
+        Thread.UncaughtExceptionHandler before = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((t, e) -> {
+            try {
+                java.io.StringWriter w = new java.io.StringWriter();
+                e.printStackTrace(new java.io.PrintWriter(w));
+                String st = w.toString();
+                d(app, "CRASH in " + t.getName() + ": " + st.substring(0, Math.min(st.length(), 2500)));
+                app.getSharedPreferences("zylena_reader", Context.MODE_PRIVATE).edit().putBoolean("crashed", true).commit();
+            } catch (Throwable ignored) {
+            }
+            if (before != null) before.uncaughtException(t, e);
+        });
+    }
+
     /** Short, single-line preview of screen text for the log. */
     static String snip(String s) {
         s = s.replace('\n', ' ');

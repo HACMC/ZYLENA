@@ -64,6 +64,7 @@ public class ReaderService extends AccessibilityService {
     @Override
     protected void onServiceConnected() {
         instance = this;
+        Logs.catchCrashes(this);
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
         if (look == null) {
             android.os.HandlerThread t = new android.os.HandlerThread("zylena-look");
@@ -2103,9 +2104,9 @@ public class ReaderService extends AccessibilityService {
             tv.setBackground(d);
         }
         TextView cur = lineViews.get(line);
-        if (cur != null && panelScroll != null) {
-            panelScroll.post(() -> panelScroll.smoothScrollTo(0, Math.max(0, cur.getTop() - Theme.dp(this, 40))));
-        }
+        ScrollView sv = panelScroll;
+        // The panel can be closed before this runs (Close while reading): use this panel, never a later null.
+        if (cur != null && sv != null) sv.post(() -> sv.smoothScrollTo(0, Math.max(0, cur.getTop() - Theme.dp(this, 40))));
     }
 
     // ------------------------------------------------------ floating button
