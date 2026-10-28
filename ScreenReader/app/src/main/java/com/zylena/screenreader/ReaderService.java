@@ -570,7 +570,7 @@ public class ReaderService extends AccessibilityService {
         if (Math.abs(shift) < Theme.dp(this, 24)) return;
 
         // Down the empty left margin (touching words selects them); hold still before lifting so it stops.
-        float x = area.left + Theme.dp(this, 10);
+        float x = swipeX(area);
         float startY = shift > 0 ? bottom - Theme.dp(this, 6) : top + Theme.dp(this, 6);
         float endY = startY - shift;
         android.graphics.Path move = new android.graphics.Path();
@@ -581,7 +581,6 @@ public class ReaderService extends AccessibilityService {
                 new android.accessibilityservice.GestureDescription.StrokeDescription(move, 0, ms, true);
         lastSwipe = System.currentTimeMillis();
         turnedFor = paragraph;
-        letTouchesThrough();
         boolean ok = dispatchGesture(new android.accessibilityservice.GestureDescription.Builder().addStroke(drag).build(),
                 new GestureResultCallback() {
                     @Override
@@ -884,16 +883,9 @@ public class ReaderService extends AccessibilityService {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Rect clip = picture || markArea.isEmpty() ? new Rect(0, 0, dm.widthPixels, dm.heightPixels) : markArea;
         if (r.isEmpty() || !r.intersect(clip)) {
-            // Scrolled away by hand while it reads (not by ZYLENA's own swipes): bring it back in a moment.
-            if (m.samePage && !picture && Prefs.autoLocate(this) && Speaker.get(this).isSpeaking()
-                    && System.currentTimeMillis() - lastSwipe > 1500) {
-                main.removeCallbacks(autoLocate);
-                main.postDelayed(autoLocate, 3000);
-            }
             unmarkOnScreen();
             return;
         }
-        main.removeCallbacks(autoLocate);
         if (!Prefs.highlight(this)) return; // only following the reading, no outline
         int pad = Theme.dp(this, 4);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(r.width() + 2 * pad, r.height() + 2 * pad,
@@ -1727,7 +1719,7 @@ public class ReaderService extends AccessibilityService {
         int room = (int) (area.height() * 0.8f);
         int m = Math.max(-room, Math.min(room, move));
         lastScrollAsked = m;
-        float x = sh.list.left + Theme.dp(this, 10);
+        float x = swipeX(sh.list);
         float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.1f;
         // A finger moves a little before the page follows: add that, so the page moves by m itself.
         int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
@@ -1760,7 +1752,7 @@ public class ReaderService extends AccessibilityService {
         Rect area = sh.view;
         int m = Math.max(-(int) (area.height() * 0.8f), Math.min((int) (area.height() * 0.8f), move));
         lastScrollAsked = m;
-        float x = sh.list.left + Theme.dp(this, 10);
+        float x = swipeX(sh.list);
         float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.1f;
         int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
         float endY = startY - m - Integer.signum(m) * slop;
@@ -1779,7 +1771,7 @@ public class ReaderService extends AccessibilityService {
     /** A fast flick towards the top: the page flies up by several screens. */
     private void flick(Shot sh, Runnable done) {
         Rect area = sh.view;
-        float x = sh.list.left + Theme.dp(this, 10);
+        float x = swipeX(sh.list);
         android.graphics.Path p = new android.graphics.Path();
         p.moveTo(x, area.top + area.height() * 0.15f);
         p.lineTo(x, area.top + area.height() * 0.85f);
@@ -1792,7 +1784,6 @@ public class ReaderService extends AccessibilityService {
     /** Plays a stroke, then each next part as its continuation; done once the last part has lifted. */
     private boolean gestureChain(android.accessibilityservice.GestureDescription.StrokeDescription stroke,
                                  android.graphics.Path[] next, long[] ms, int i, Runnable done) {
-        if (i == 0) letTouchesThrough();
         return dispatchGesture(new android.accessibilityservice.GestureDescription.Builder().addStroke(stroke).build(),
                 new GestureResultCallback() {
                     @Override
@@ -2495,42 +2486,7 @@ public class ReaderService extends AccessibilityService {
         main.postDelayed(tuck, 3000);
     }
 
-    private boolean tucked, wokeUp, passing;
-
-    /**
-     * ZYLENA scrolls the page with a finger swipe down the left margin. With the floating button on the left
-     * edge (tucked there, say) that swipe landed on the button instead, and the page never moved. While
-     * ZYLENA's own swipe runs, touches go through the button to the page.
-     */
-    private void letTouchesThrough() {
-        // Right away when on the main thread, so the window changes before the swipe's first touch.
-        onMain(() -> {
-            main.removeCallbacks(touchesBack);
-            main.postDelayed(touchesBack, 1800);
-            if (passing || button == null || buttonLp == null) return;
-            passing = true;
-            buttonLp.flags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-            try {
-                wm.updateViewLayout(button, buttonLp);
-            } catch (Exception ignored) {
-            }
-        });
-    }
-
-    private void onMain(Runnable r) {
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) r.run();
-        else main.post(r);
-    }
-
-    private final Runnable touchesBack = () -> {
-        passing = false;
-        if (button == null || buttonLp == null) return;
-        buttonLp.flags &= ~WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
-        try {
-            wm.updateViewLayout(button, buttonLp);
-        } catch (Exception ignored) {
-        }
-    };
+    private boolean tucked, wokeUp;
     private android.animation.ValueAnimator tuckAnim;
 
     /** Like a phone's quick ball: untouched for 3 seconds, the button slides half into the screen's edge. */
@@ -2573,6 +2529,17 @@ public class ReaderService extends AccessibilityService {
             }
         });
         tuckAnim.start();
+    }
+
+    /** True when the floating button sits on the left side: ZYLENA's own swipes then use the right margin. */
+    private boolean buttonOnLeft() {
+        if (button == null || buttonLp == null) return false;
+        return buttonLp.x + buttonLp.width / 2 < getResources().getDisplayMetrics().widthPixels / 2;
+    }
+
+    /** Where ZYLENA's own swipe runs: down a margin of the page, on the side away from the floating button. */
+    private float swipeX(Rect list) {
+        return buttonOnLeft() ? list.right - Theme.dp(this, 10) : list.left + Theme.dp(this, 10);
     }
 
     private View dismiss;
@@ -2619,12 +2586,6 @@ public class ReaderService extends AccessibilityService {
         }
         dismiss = null;
     }
-
-    private final Runnable autoLocate = () -> {
-        if (!Speaker.get(this).isSpeaking() || markFirst < 0 || onScreenMark != null && onScreenMark.getVisibility() == View.VISIBLE) return;
-        Logs.d(this, "auto-locate: the paragraph being read is off screen, bringing it back");
-        locateHighlight();
-    };
 
     /** Brings the paragraph being read back into view (after scrolling away from it by hand). */
     private void locateHighlight() {

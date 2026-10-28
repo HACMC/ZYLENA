@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row netRow, dataRow, aliveRow, locateRow, fanRow, tuckRow;
+    private Ui.Row netRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -508,9 +508,6 @@ public class MainActivity extends Activity {
         Ui.add(g, shakeRow.view);
         fanRow = Ui.nav(this, R.drawable.ic_touch, "Floating button shortcuts", "", this::pickShortcuts);
         Ui.add(g, fanRow.view);
-        locateRow = Ui.toggle(this, R.drawable.ic_frame, "Auto-locate",
-                "Scrolled away while it reads? The highlighted paragraph comes back after 3 seconds", on -> Prefs.setAutoLocate(this, on));
-        Ui.add(g, locateRow.view);
         sleepRow = Ui.nav(this, R.drawable.ic_timer, "Sleep timer", "", this::pickSleepTimer);
         Ui.add(g, sleepRow.view);
         Ui.add(g, new Ui.Row(this, R.drawable.ic_headset, "Headphone buttons",
@@ -573,7 +570,6 @@ public class MainActivity extends Activity {
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
         set(aliveRow, Prefs.keepAlive(this));
-        set(locateRow, Prefs.autoLocate(this));
         set(tuckRow, Prefs.tuck(this));
         StringBuilder fanNames = new StringBuilder();
         for (String[] sc : Shortcuts.chosen(this)) fanNames.append(fanNames.length() == 0 ? "" : ", ").append(sc[2]);

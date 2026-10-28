@@ -94,15 +94,6 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
-    /** After 3 seconds untouched the floating button tucks half into the screen's edge. */
-    static boolean tuck(Context c) {
-        return sp(c).getBoolean("tuck", true);
-    }
-
-    static void setTuck(Context c, boolean v) {
-        sp(c).edit().putBoolean("tuck", v).apply();
-    }
-
     /** The floating button's four shortcuts (ids from Shortcuts.ALL), comma separated. */
     static String shortcuts(Context c) {
         return sp(c).getString("shortcuts", "scan,translate,locate,settings");
@@ -112,13 +103,13 @@ final class Prefs {
         sp(c).edit().putString("shortcuts", v).apply();
     }
 
-    /** Scrolled away from the paragraph being read: bring it back after a few seconds. */
-    static boolean autoLocate(Context c) {
-        return sp(c).getBoolean("auto_locate", true);
+    /** After 3 seconds untouched the floating button tucks half into the screen's edge. */
+    static boolean tuck(Context c) {
+        return sp(c).getBoolean("tuck", true);
     }
 
-    static void setAutoLocate(Context c, boolean v) {
-        sp(c).edit().putBoolean("auto_locate", v).apply();
+    static void setTuck(Context c, boolean v) {
+        sp(c).edit().putBoolean("tuck", v).apply();
     }
 
     /** A quiet "ZYLENA is ready" notification, so phones that close background apps leave ZYLENA running. */
@@ -176,7 +167,7 @@ final class Prefs {
 
     /** The floating button's size: 0 small, 1 medium, 2 large, 3 extra large. */
     static int buttonSize(Context c) {
-        return sp(c).getInt("btn_size", 1);
+        return sp(c).getInt("btn_size", 0);
     }
 
     static void setButtonSize(Context c, int v) {
