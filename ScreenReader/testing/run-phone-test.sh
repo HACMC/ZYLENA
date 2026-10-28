@@ -33,6 +33,8 @@ adb shell "run-as $Z mkdir -p shared_prefs"
 adb shell "cat /data/local/tmp/zylena_reader.xml | run-as $Z sh -c 'cat > shared_prefs/zylena_reader.xml'"
 adb shell "run-as $Z cat shared_prefs/zylena_reader.xml"
 
+# A bigger log buffer: under load Android dropped lines (a paragraph's start went missing and the check misread it).
+adb logcat -G 16M || true
 adb logcat -c
 adb logcat -v epoch ZYLENA:I MOCK:I '*:S' > "$OUT/logcat.txt" &
 LOGCAT=$!
