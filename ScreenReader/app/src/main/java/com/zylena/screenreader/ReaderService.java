@@ -1058,45 +1058,78 @@ public class ReaderService extends AccessibilityService {
     /**
      * Back to the top of the page with the app's own "scroll up", in quick succession: a new one before
      * the last has finished sliding makes most apps jump instead, so the top comes almost at once.
+     * Then a look makes sure it really is the top before going on.
      */
     private void toTop(int gen, int n, Runnable then) {
+        toTop(gen, n, 0, then);
+    }
+
+    private void toTop(int gen, int n, int refused, Runnable then) {
         if (gen != scanGen) return;
         if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
         AccessibilityNodeInfo root = getRootInActiveWindow();
         AccessibilityNodeInfo list = root == null ? null : pageList(root);
-        if (list == null || !canScroll(list, false) || n >= 200 || !scrollUp(list)) {
-            if (n == 0) {
-                swipeToTop(gen, 0, null, then); // no quick "scroll up" here: flick back by finger
+        boolean more = list != null && canScroll(list, false) && n < 200;
+        if (more && !scrollUp(list)) {
+            // Busy with the last one: that is not the top. Try again a moment later, a few times.
+            if (refused < 4) {
+                main.postDelayed(() -> toTop(gen, n + 1, refused + 1, then), 150);
                 return;
             }
-            if (n < 200) knownY = 0;
+            more = false;
+        }
+        if (!more) {
+            if (n == 0) {
+                swipeToTop(gen, 0, 0, null, () -> checkTop(gen, 0, then)); // no quick "scroll up" here: flick back by finger
+                return;
+            }
             Logs.d(this, "whole page: back at the top after " + n + " scroll-ups");
-            main.postDelayed(() -> {
-                if (gen == scanGen) then.run();
-            }, 250);
+            main.postDelayed(() -> checkTop(gen, 0, then), 250);
             return;
         }
-        main.postDelayed(() -> toTop(gen, n + 1, then), 40);
+        main.postDelayed(() -> toTop(gen, n + 1, 0, then), 40);
     }
 
-    /** Flicks the page down until it stops moving: the top. (Overshooting doesn't matter there.) */
-    private void swipeToTop(int gen, int n, Shot prev, Runnable then) {
+    /**
+     * Flicks the page down until it stops moving: the top. (Overshooting doesn't matter there.) It must stay
+     * still twice in a row: an app can ignore a single flick, and the page then looks as if it were at the top.
+     */
+    private void swipeToTop(int gen, int n, int still, Shot prev, Runnable then) {
         if (gen != scanGen) return;
         Shot sh = shoot();
         boolean top = sh == null || n >= 40 || (sh.atTop && n > 0);
+        int nowStill = still;
         if (!top && prev != null) {
             Integer moved = movedBy(prev, sh);
-            top = moved != null && Math.abs(moved) < Theme.dp(this, 4);
+            nowStill = moved != null && Math.abs(moved) < Theme.dp(this, 4) ? still + 1 : 0;
+            top = nowStill >= 2;
         }
         if (top) {
             if (n > 0) Logs.d(this, "whole page: back at the top after " + n + " swipes");
-            if (n < 40) knownY = 0;
             main.postDelayed(() -> {
                 if (gen == scanGen) then.run();
             }, n == 0 ? 0 : 150);
             return;
         }
-        flick(sh, () -> main.postDelayed(() -> swipeToTop(gen, n + 1, sh, then), 350));
+        final int s2 = nowStill;
+        flick(sh, () -> main.postDelayed(() -> swipeToTop(gen, n + 1, s2, sh, then), 350));
+    }
+
+    /**
+     * Before reading from the top: where the scan says the page is now. Not at the top (the app stopped
+     * short), then flick on up, twice at most.
+     */
+    private void checkTop(int gen, int tries, Runnable then) {
+        if (gen != scanGen) return;
+        Shot sh = spots.isEmpty() ? null : shoot();
+        Integer y = sh == null ? null : pageY(sh);
+        if (y != null && y > Theme.dp(this, 24) && tries < 2) {
+            Logs.d(this, "whole page: not at the top yet (" + y + " px down), going on up");
+            swipeToTop(gen, 0, 0, null, () -> checkTop(gen, tries + 1, then));
+            return;
+        }
+        knownY = y != null ? y : 0;
+        then.run();
     }
 
     private void scanStep(int gen, Shot prev) {
