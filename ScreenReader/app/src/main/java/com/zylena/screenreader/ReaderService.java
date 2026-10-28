@@ -2500,7 +2500,7 @@ public class ReaderService extends AccessibilityService {
     private final Runnable tuck = () -> {
         // (Not in the emulator test: it taps the button where it first appeared.)
         if (button == null || buttonLp == null || tucked || !Prefs.tuck(this) || Prefs.testMode(this)
-                || panel != null || fan != null || dismiss != null) return;
+                || panel != null || ReaderService.this.fan != null || ReaderService.this.dismiss != null) return;
         Rect u = usableScreen();
         int size = buttonLp.width;
         boolean right = buttonLp.x + size / 2 > u.centerX();
