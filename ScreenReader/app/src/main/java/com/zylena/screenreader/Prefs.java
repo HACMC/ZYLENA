@@ -94,6 +94,24 @@ final class Prefs {
         sp(c).edit().putInt("btn_x", x).putInt("btn_y", y).apply();
     }
 
+    /** The floating button's four shortcuts (ids from Shortcuts.ALL), comma separated. */
+    static String shortcuts(Context c) {
+        return sp(c).getString("shortcuts", "scan,translate,locate,settings");
+    }
+
+    static void setShortcuts(Context c, String v) {
+        sp(c).edit().putString("shortcuts", v).apply();
+    }
+
+    /** Scrolled away from the paragraph being read: bring it back after a few seconds. */
+    static boolean autoLocate(Context c) {
+        return sp(c).getBoolean("auto_locate", true);
+    }
+
+    static void setAutoLocate(Context c, boolean v) {
+        sp(c).edit().putBoolean("auto_locate", v).apply();
+    }
+
     /** A quiet "ZYLENA is ready" notification, so phones that close background apps leave ZYLENA running. */
     static boolean keepAlive(Context c) {
         return sp(c).getBoolean("keep_alive", true);

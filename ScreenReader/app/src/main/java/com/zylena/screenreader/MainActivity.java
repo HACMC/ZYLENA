@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row netRow, dataRow, aliveRow;
+    private Ui.Row netRow, dataRow, aliveRow, locateRow, fanRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -273,7 +273,7 @@ public class MainActivity extends Activity {
         String[][] steps = {
                 {"1", "Turn on ZYLENA in Accessibility", "Tap \"Turn on in Accessibility\" above for the steps, one by one."},
                 {"2", "Open any app and tap the gold button", "Tap again to stop. Drag it anywhere; drop it on the \u2715 to hide it. Opening ZYLENA always brings it back. Words inside pictures are read too, in their place."},
-                {"3", "Hold the button for more", "Pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Scan again, Picture text, Save audio and Settings. To put the button away, drag it onto the \u2715 at the bottom; opening ZYLENA brings it back."}};
+                {"3", "Hold the button for shortcuts", "A fan of shortcuts opens (choose them in Controls). All controls in it: pick a line to start from, Back, Pause, Skip, Translate (English read in Tagalog, Tagalog in English; online with internet, which is better, offline without), Button size (tap to change), Scan again, Picture text, Save audio and Settings. To put the button away, drag it onto the \u2715 at the bottom; opening ZYLENA brings it back."}};
         for (String[] st : steps) Ui.add(how, stepRow(st[0], st[1], st[2]));
         col.addView(how);
         return col;
@@ -500,6 +500,11 @@ public class MainActivity extends Activity {
         Ui.add(g, notifRow.view);
         shakeRow = Ui.toggle(this, R.drawable.ic_shake, "Shake to stop", "Shake firmly twice", on -> Prefs.setShakeStop(this, on));
         Ui.add(g, shakeRow.view);
+        fanRow = Ui.nav(this, R.drawable.ic_touch, "Floating button shortcuts", "", this::pickShortcuts);
+        Ui.add(g, fanRow.view);
+        locateRow = Ui.toggle(this, R.drawable.ic_frame, "Auto-locate",
+                "Scrolled away while it reads? The highlighted paragraph comes back after 3 seconds", on -> Prefs.setAutoLocate(this, on));
+        Ui.add(g, locateRow.view);
         sleepRow = Ui.nav(this, R.drawable.ic_timer, "Sleep timer", "", this::pickSleepTimer);
         Ui.add(g, sleepRow.view);
         Ui.add(g, new Ui.Row(this, R.drawable.ic_headset, "Headphone buttons",
@@ -562,6 +567,10 @@ public class MainActivity extends Activity {
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
         set(aliveRow, Prefs.keepAlive(this));
+        set(locateRow, Prefs.autoLocate(this));
+        StringBuilder fanNames = new StringBuilder();
+        for (String[] sc : Shortcuts.chosen(this)) fanNames.append(fanNames.length() == 0 ? "" : ", ").append(sc[2]);
+        fanRow.setSub("Hold the button: " + fanNames + " and All controls");
         dataRow.setSub(Net.usedThisMonth(this) + ". The online voice uses about 11 MB an hour of listening; "
                 + "translation adds less than 1 MB an hour.");
         set(autoRow, Prefs.autoRead(this));
@@ -588,6 +597,35 @@ public class MainActivity extends Activity {
         boolean noFil = Speaker.get(this).voicesFor(TextPrep.FIL).isEmpty();
         warn.setText(noFil ? "No Tagalog voice is installed yet. Tap Download better voices and add Filipino." : "");
         warn.setVisibility(noFil ? View.VISIBLE : View.GONE);
+    }
+
+    /** The four shortcuts in the fan that opens when the floating button is held. */
+    private void pickShortcuts() {
+        java.util.List<String[]> now = Shortcuts.chosen(this);
+        String[] slots = new String[Shortcuts.SLOTS];
+        for (int i = 0; i < slots.length; i++) slots[i] = i < now.size() ? now.get(i)[0] : Shortcuts.ALL[i][0];
+        String[] labels = new String[slots.length];
+        for (int i = 0; i < slots.length; i++) {
+            String[] sc = Shortcuts.find(slots[i]);
+            labels[i] = "Shortcut " + (i + 1) + ":  " + (sc == null ? "?" : sc[1] + "  " + sc[2]);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Floating button shortcuts")
+                .setItems(labels, (d, which) -> {
+                    String[] names = new String[Shortcuts.ALL.length];
+                    for (int k = 0; k < names.length; k++) names[k] = Shortcuts.ALL[k][1] + "  " + Shortcuts.ALL[k][2];
+                    new AlertDialog.Builder(this)
+                            .setTitle("Shortcut " + (which + 1))
+                            .setItems(names, (d2, k) -> {
+                                slots[which] = Shortcuts.ALL[k][0];
+                                Prefs.setShortcuts(this, String.join(",", slots));
+                                refresh();
+                                pickShortcuts();
+                            })
+                            .show();
+                })
+                .setNegativeButton("Done", null)
+                .show();
     }
 
     private void restoreDefaults() {

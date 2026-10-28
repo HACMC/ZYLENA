@@ -169,6 +169,7 @@ public class ReaderService extends AccessibilityService {
         instance = null;
         Logs.d(this, "service unbound");
         hideBanner();
+        hideFan();
         hidePanel();
         removeButton();
         unmarkOnScreen();
@@ -881,9 +882,16 @@ public class ReaderService extends AccessibilityService {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Rect clip = picture || markArea.isEmpty() ? new Rect(0, 0, dm.widthPixels, dm.heightPixels) : markArea;
         if (r.isEmpty() || !r.intersect(clip)) {
+            // Scrolled away by hand while it reads (not by ZYLENA's own swipes): bring it back in a moment.
+            if (m.samePage && !picture && Prefs.autoLocate(this) && Speaker.get(this).isSpeaking()
+                    && System.currentTimeMillis() - lastSwipe > 1500) {
+                main.removeCallbacks(autoLocate);
+                main.postDelayed(autoLocate, 3000);
+            }
             unmarkOnScreen();
             return;
         }
+        main.removeCallbacks(autoLocate);
         if (!Prefs.highlight(this)) return; // only following the reading, no outline
         int pad = Theme.dp(this, 4);
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(r.width() + 2 * pad, r.height() + 2 * pad,
@@ -2397,7 +2405,8 @@ public class ReaderService extends AccessibilityService {
                 longPressed = true;
                 button.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS);
                 if (panel != null) closePanel();
-                else showPanel();
+                else if (fan != null) hideFan();
+                else showFan();
             };
 
             @Override
@@ -2518,6 +2527,167 @@ public class ReaderService extends AccessibilityService {
         } catch (Exception ignored) {
         }
         dismiss = null;
+    }
+
+    private final Runnable autoLocate = () -> {
+        if (!Speaker.get(this).isSpeaking() || markFirst < 0 || onScreenMark != null && onScreenMark.getVisibility() == View.VISIBLE) return;
+        Logs.d(this, "auto-locate: the paragraph being read is off screen, bringing it back");
+        locateHighlight();
+    };
+
+    /** Brings the paragraph being read back into view (after scrolling away from it by hand). */
+    private void locateHighlight() {
+        Speaker sp = Speaker.get(this);
+        if (markFirst < 0 || (!sp.isSpeaking() && !sp.isPaused())) {
+            android.widget.Toast.makeText(this, "Nothing is being read right now", android.widget.Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Logs.d(this, "locate the paragraph being read: " + markFirst);
+        int first = markFirst, last = markLast;
+        if (scanned) {
+            putInView(first, last, Math.max(0f, markAlong), true, () -> {
+                if (markFirst == first) markOnScreen(first, last);
+            });
+        } else {
+            markedFirst = -1; // counts as a paragraph start: the page is turned to it again
+            checksFor = -1;
+            markOnScreen(first, last);
+        }
+    }
+
+    private void runShortcut(String id) {
+        Speaker sp = Speaker.get(this);
+        Logs.d(this, "shortcut: " + id);
+        switch (id) {
+            case "scan":
+                scanAgain();
+                break;
+            case "translate":
+                Prefs.setTranslate(this, !Prefs.translate(this));
+                android.widget.Toast.makeText(this, Prefs.translate(this) ? "Translate on" : "Translate off",
+                        android.widget.Toast.LENGTH_SHORT).show();
+                if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
+                break;
+            case "locate":
+                locateHighlight();
+                break;
+            case "settings":
+                startActivity(new android.content.Intent(this, MainActivity.class)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                break;
+            case "pause":
+                if (sp.isPaused()) sp.resume();
+                else if (sp.isSpeaking()) sp.pause();
+                break;
+            case "back":
+                sp.skip(-1);
+                break;
+            case "skip":
+                sp.skip(1);
+                break;
+            case "top":
+                if (lines.isEmpty()) readScreen();
+                else speakFrom(0);
+                break;
+            case "picture":
+                readPictureText();
+                break;
+            case "audio":
+                saveAudio();
+                break;
+            case "panel":
+                showPanel();
+                break;
+        }
+    }
+
+    private android.widget.FrameLayout fan;
+
+    /**
+     * Hold the button: a fan of round shortcut buttons opens beside it, like a phone's quick ball. The four
+     * are chosen in Controls; "All controls" opens the full panel. Tap anywhere else to close it.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private void showFan() {
+        if (fan != null || button == null) return;
+        List<String[]> items = new ArrayList<>(Shortcuts.chosen(this));
+        items.add(new String[]{"panel", "\u2630", "All controls"});
+        android.widget.FrameLayout f = new android.widget.FrameLayout(this);
+        f.setBackgroundColor(0x33000000);
+        f.setOnClickListener(v -> hideFan());
+        int size = Theme.dp(this, 54), boxW = Theme.dp(this, 84), boxH = size + Theme.dp(this, 22);
+        List<View> boxes = new ArrayList<>();
+        for (String[] it : items) {
+            LinearLayout box = new LinearLayout(this);
+            box.setOrientation(LinearLayout.VERTICAL);
+            box.setGravity(Gravity.CENTER_HORIZONTAL);
+            TextView ball = new TextView(this);
+            ball.setText(it[1]);
+            ball.setTextSize(22);
+            ball.setGravity(Gravity.CENTER);
+            ball.setTextColor(0xFF0D0B0C);
+            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFFF0D690, 0xFFD6AD55});
+            bg.setShape(GradientDrawable.OVAL);
+            ball.setBackground(bg);
+            ball.setContentDescription(it[2]);
+            box.addView(ball, new LinearLayout.LayoutParams(size, size));
+            TextView name = new TextView(this);
+            name.setText(it[2]);
+            name.setTextSize(11);
+            name.setTextColor(0xFFFFFFFF);
+            name.setShadowLayer(4, 0, 1, 0xFF000000);
+            name.setGravity(Gravity.CENTER);
+            name.setMaxLines(1);
+            box.addView(name, new LinearLayout.LayoutParams(boxW, ViewGroup.LayoutParams.WRAP_CONTENT));
+            final String id = it[0];
+            box.setOnClickListener(v -> {
+                hideFan();
+                runShortcut(id);
+            });
+            f.addView(box, new android.widget.FrameLayout.LayoutParams(boxW, boxH));
+            boxes.add(box);
+        }
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        try {
+            wm.addView(f, lp);
+            fan = f;
+        } catch (Exception e) {
+            return;
+        }
+        Logs.d(this, "shortcuts opened");
+        // Placed once the window is up, around where the button really is: a half circle towards the screen's middle.
+        f.post(() -> {
+            if (fan != f || button == null) return;
+            int[] o = new int[2], b = new int[2];
+            f.getLocationOnScreen(o);
+            button.getLocationOnScreen(b);
+            int cx = b[0] + button.getWidth() / 2 - o[0], cy = b[1] + button.getHeight() / 2 - o[1];
+            boolean right = cx > f.getWidth() / 2;
+            int radius = Theme.dp(this, 118);
+            int n = boxes.size();
+            for (int i = 0; i < n; i++) {
+                double a = Math.toRadians(90 + 180.0 * i / Math.max(1, n - 1)); // from above, round the side, to below
+                int x = cx + (int) ((right ? 1 : -1) * radius * Math.cos(a)) - boxW / 2;
+                int y = cy - (int) (radius * Math.sin(a)) - size / 2;
+                x = Math.max(0, Math.min(f.getWidth() - boxW, x));
+                y = Math.max(0, Math.min(f.getHeight() - boxH, y));
+                View box = boxes.get(i);
+                box.setX(x);
+                box.setY(y);
+            }
+        });
+    }
+
+    private void hideFan() {
+        if (fan == null) return;
+        try {
+            wm.removeView(fan);
+        } catch (Exception ignored) {
+        }
+        fan = null;
     }
 
     /** Forgets this page's scan and reads it again from the top, scanning first. */
