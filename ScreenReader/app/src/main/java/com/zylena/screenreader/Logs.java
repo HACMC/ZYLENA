@@ -23,6 +23,8 @@ final class Logs {
 
     /** Set while the emulator test runs: also writes to logcat, where the test reads it. */
     static volatile boolean toLogcat;
+    private static final StringBuilder testBuf = new StringBuilder();
+    private static File testFile;
 
     /** Extra detail that only the emulator test needs (outline positions and the like). */
     static void t(Context c, String msg) {
@@ -34,10 +36,28 @@ final class Logs {
             android.util.Log.i("ZYLENA", msg);
             // Also to a file of its own, in logcat's layout: under load Android drops logcat lines, and the
             // check then misread which paragraph was being read. The test reads this file at the end.
-            try {
-                write(new File(c.getApplicationContext().getFilesDir(), "test-log.txt"),
-                        String.format(Locale.US, "%.3f 0 0 I ZYLENA: %s%n", System.currentTimeMillis() / 1000.0, msg.replace('\n', ' ')), true);
-            } catch (Exception ignored) {
+            // Kept in memory and written once a second on a thread of its own, so it doesn't slow the reader down.
+            synchronized (testBuf) {
+                testBuf.append(String.format(Locale.US, "%.3f 0 0 I ZYLENA: %s%n", System.currentTimeMillis() / 1000.0, msg.replace('\n', ' ')));
+            }
+            if (testFile == null) {
+                testFile = new File(c.getApplicationContext().getFilesDir(), "test-log.txt");
+                Thread t = new Thread(() -> {
+                    while (true) {
+                        try {
+                            Thread.sleep(1000);
+                            String chunk;
+                            synchronized (testBuf) {
+                                chunk = testBuf.toString();
+                                testBuf.setLength(0);
+                            }
+                            if (!chunk.isEmpty()) write(testFile, chunk, true);
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }, "zylena-testlog");
+                t.setDaemon(true);
+                t.start();
             }
         }
         try {
