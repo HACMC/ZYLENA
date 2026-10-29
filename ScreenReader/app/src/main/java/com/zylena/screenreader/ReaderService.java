@@ -1348,7 +1348,7 @@ public class ReaderService extends AccessibilityService {
             AccessibilityNodeInfo root = getRootInActiveWindow();
             // The area that holds the text on screen; the biggest scrolling area may be another one (EGW).
             AccessibilityNodeInfo list = root == null ? null : scrollerOfText(root, true);
-            if (list == null && root != null && paragraphOnScreen(root, 20) == null) list = pageList(root);
+            if (list == null && root != null && paragraphOnScreen(root, 60) == null) list = pageList(root);
             if (list != null && (n == 0 || n % 20 == 0)) Logs.d(this, "whole page: going up in " + describe(list));
             // (An app that always says it can go further up would keep this going: 80 is plenty for a long page.)
             if (list == null || !canScroll(list, false) || n >= 80) return 0;
@@ -1392,8 +1392,9 @@ public class ReaderService extends AccessibilityService {
      * opens the header again).
      */
     private AccessibilityNodeInfo scrollerOfText(AccessibilityNodeInfo root, boolean up) {
+        // Only a real paragraph: with the page's text not there yet (EGW Writings, a moment after opening), a
+        // short title led to a list of chapter names. Then the page's biggest scrolling area is used instead.
         AccessibilityNodeInfo para = paragraphOnScreen(root, 60);
-        if (para == null) para = paragraphOnScreen(root, 20);
         if (para == null) return null;
         AccessibilityNodeInfo p = para.getParent();
         for (int i = 0; p != null && i < 30; i++) {
