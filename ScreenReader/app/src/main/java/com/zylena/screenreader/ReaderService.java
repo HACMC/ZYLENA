@@ -2701,9 +2701,13 @@ public class ReaderService extends AccessibilityService {
         return buttonLp.x + buttonLp.width / 2 < getResources().getDisplayMetrics().widthPixels / 2;
     }
 
-    /** Where ZYLENA's own swipe runs: down a margin of the page, on the side away from the floating button. */
+    /**
+     * Where ZYLENA's own swipe runs: a third of the way into the page, through the text (a moving finger
+     * doesn't select or tap words). Not down the very edge: EGW Writings has a small arrow there that opens
+     * the chapter list, and the floating button sits at the edges.
+     */
     private float swipeX(Rect list) {
-        return buttonOnLeft() ? list.right - Theme.dp(this, 10) : list.left + Theme.dp(this, 10);
+        return list.left + list.width() * 0.3f;
     }
 
     private View dismiss;
