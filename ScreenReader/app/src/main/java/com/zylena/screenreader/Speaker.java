@@ -78,6 +78,7 @@ final class Speaker {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
         curRun = i;
+        if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
         Logs.d(ctx, "speaking run " + i + "/" + runs.size() + " [" + r.lang + "] lines " + r.line + "-" + r.lastLine
                 + ": " + Logs.snip(r.text));
@@ -140,6 +141,7 @@ final class Speaker {
             tts.setSpeechRate(Prefs.rate(ctx));
             tts.setPitch(Prefs.pitch(ctx));
             tts.setVoice(v);
+            lastSet = v;
             String l = v.getLocale().getLanguage();
             tts.speak(TextPrep.sayName(text, l.equals("fil") || l.equals("tl") ? TextPrep.FIL : TextPrep.EN),
                     TextToSpeech.QUEUE_FLUSH, null, gen + ":0:last");
@@ -306,12 +308,32 @@ final class Speaker {
             tts.setSpeechRate(Prefs.rate(ctx));
             tts.setPitch(Prefs.pitch(ctx));
             tts.stop();
+            translating = translate;
             if (translate) {
                 translateNext(runs, gen, 0);
                 return;
             }
-            for (int i = 0; i < runs.size(); i++) queue(runs, gen, i);
+            queuedTo = -1;
+            queueAhead(runs, gen, 0);
         });
+    }
+
+    /** The last run handed to the voice; the rest follow as the voice gets to them. */
+    private volatile int queuedTo = -1;
+    private volatile boolean translating; // translateNext queues each run itself, as its translation comes
+    private static final int AHEAD = 3;
+
+    /**
+     * Gives the voice only a few runs ahead of the one being spoken. Handing it a whole long page at once
+     * (each run a call into the voice app, which waits while the voice app is busy) froze ZYLENA.
+     */
+    private void queueAhead(List<TextPrep.Seg> runs, int gen, int speaking) {
+        if (gen != generation || runs != currentRuns || tts == null) return;
+        int upTo = Math.min(runs.size() - 1, speaking + AHEAD);
+        while (queuedTo < upTo) {
+            queuedTo++;
+            queue(runs, gen, queuedTo);
+        }
     }
 
     /**
@@ -380,11 +402,15 @@ final class Speaker {
     }
 
     /** Sets the engine's voice for the next utterance: the chosen one, else the best female voice. */
+    private Voice lastSet;
+
     private void applyVoice(String lang) {
         Voice v = chosenVoice(lang);
         if (v != null) {
-            tts.setVoice(v);
+            if (!v.equals(lastSet)) tts.setVoice(v); // the voice app loads a voice on each call: only when it changes
+            lastSet = v;
         } else {
+            lastSet = null;
             tts.setLanguage(lang.equals(TextPrep.FIL) ? new Locale("fil", "PH") : Locale.US);
         }
     }
@@ -414,11 +440,33 @@ final class Speaker {
         return v;
     }
 
+    private java.util.Set<Voice> voiceCache;
+    private long voiceCacheAt;
+
+    /**
+     * The engine's voices. Asking for them is a call into the voice app that returns hundreds of voices;
+     * done for every piece queued (twice), a long page held ZYLENA up for many seconds and Android closed
+     * it ("isn't responding"). Kept for a minute, and asked afresh when the voice app changes.
+     */
+    private java.util.Set<Voice> allVoices() {
+        long now = android.os.SystemClock.uptimeMillis();
+        if (voiceCache == null || now - voiceCacheAt > 60_000) {
+            java.util.Set<Voice> v = tts.getVoices();
+            if (v != null) {
+                voiceCache = v;
+                voiceCacheAt = now;
+            }
+        }
+        return voiceCache;
+    }
+
     /** Installed voices for "en" or "fil", most likely female and best quality first. */
     List<Voice> voicesFor(String lang) {
         List<Voice> out = new ArrayList<>();
-        if (tts == null || !ttsReady || tts.getVoices() == null) return out;
-        for (Voice v : tts.getVoices()) {
+        if (tts == null || !ttsReady) return out;
+        java.util.Set<Voice> all = allVoices();
+        if (all == null) return out;
+        for (Voice v : all) {
             String l = v.getLocale().getLanguage();
             boolean match = lang.equals(TextPrep.FIL) ? (l.equals("fil") || l.equals("tl")) : l.equals("en");
             if (match && !v.getFeatures().contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)) out.add(v);
@@ -520,6 +568,8 @@ final class Speaker {
         if (tts != null) tts.shutdown();
         tts = null;
         ttsReady = false;
+        voiceCache = null;
+        lastSet = null;
         Logs.d(ctx, "phone voice app: " + (pkg.isEmpty() ? "default" : pkg));
         whenSystemReady(r);
     }

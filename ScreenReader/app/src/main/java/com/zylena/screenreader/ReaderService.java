@@ -1167,7 +1167,9 @@ public class ReaderService extends AccessibilityService {
         AccessibilityNodeInfo root = getRootInActiveWindow();
         if (root == null) return null;
         if (!pkg.isEmpty() && !String.valueOf(root.getPackageName()).equals(pkg)) return null;
-        AccessibilityNodeInfo list = pageList(root);
+        // The scrolling area that holds the text on screen; else the biggest one.
+        AccessibilityNodeInfo list = textScroller(root);
+        if (list == null) list = pageList(root);
         // Some apps stop offering any scroll at all at the page's end; the page itself is still there.
         if (list == null && lastList != null && lastList.refresh() && lastList.isVisibleToUser()) list = lastList;
         if (list == null) return null;
@@ -1301,10 +1303,94 @@ public class ReaderService extends AccessibilityService {
         ask(() -> {
             if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            AccessibilityNodeInfo list = root == null ? null : pageList(root);
+            // The area that holds the text on screen; the biggest scrolling area may be another one (EGW).
+            AccessibilityNodeInfo list = root == null ? null : textScroller(root);
+            if (list == null && root != null) list = pageList(root);
+            if (n == 0 && list != null) Logs.d(this, "whole page: going up in " + describe(list));
             if (list == null || !canScroll(list, false) || n >= 200) return 0;
             return scrollUp(list) ? 1 : 2;
         }, r -> toTopNext(gen, n, refused, r == null ? 0 : r, then));
+    }
+
+    /** Scroll-ups on the area that holds the text on screen until it can't go further. */
+    private void upOnText(int gen, int n, int refused, Runnable then) {
+        if (gen != scanGen) return;
+        ask(() -> {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            AccessibilityNodeInfo t = root == null ? null : textScroller(root);
+            if (t == null || !canScroll(t, false) || n >= 200) return 0;
+            return scrollUp(t) ? 1 : 2;
+        }, r -> {
+            if (gen != scanGen) return;
+            int res = r == null ? 0 : r;
+            if (res == 1) main.postDelayed(() -> upOnText(gen, n + 1, 0, then), 40);
+            else if (res == 2 && refused < 4) main.postDelayed(() -> upOnText(gen, n + 1, refused + 1, then), 150);
+            else {
+                Logs.d(this, "whole page: " + n + " scroll-ups on the text's own area");
+                main.postDelayed(then, 300);
+            }
+        });
+    }
+
+    /**
+     * The scrolling area that holds the text being read: the nearest scrolling parent of a paragraph on
+     * screen. (The biggest scrolling area can be another one: in EGW Writings the book's pages sit side by
+     * side, and scrolling the biggest one moved nothing that could be seen.)
+     */
+    private AccessibilityNodeInfo textScroller(AccessibilityNodeInfo root) {
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        java.util.ArrayDeque<AccessibilityNodeInfo> todo = new java.util.ArrayDeque<>();
+        todo.add(root);
+        Rect b = new Rect();
+        int visited = 0;
+        while (!todo.isEmpty() && visited++ < 3000) {
+            AccessibilityNodeInfo n = todo.poll();
+            if (n.isVisibleToUser() && ScreenText.ownText(n).length() >= 20) {
+                n.getBoundsInScreen(b);
+                if (b.left >= 0 && b.right <= dm.widthPixels && b.bottom > 0 && b.top < dm.heightPixels) {
+                    AccessibilityNodeInfo p = n.getParent();
+                    for (int up = 0; p != null && up < 30; up++) {
+                        if (ScreenText.scrollsVertically(p) && (canScroll(p, false) || canScroll(p, true))) return p;
+                        p = p.getParent();
+                    }
+                }
+            }
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo c = n.getChild(i);
+                if (c != null) todo.add(c);
+            }
+        }
+        return null;
+    }
+
+    private String describe(AccessibilityNodeInfo n) {
+        Rect b = new Rect();
+        n.getBoundsInScreen(b);
+        String id = n.getViewIdResourceName();
+        return n.getClassName() + (id == null ? "" : " " + id.replaceAll(".*/", "")) + " " + b.toShortString()
+                + (canScroll(n, false) ? " up" : "") + (canScroll(n, true) ? " down" : "") + (n.isVisibleToUser() ? "" : " hidden");
+    }
+
+    /** Every scrolling area on screen, for the log. */
+    private String describeScrollers(AccessibilityNodeInfo root) {
+        StringBuilder sb = new StringBuilder();
+        java.util.ArrayDeque<AccessibilityNodeInfo> todo = new java.util.ArrayDeque<>();
+        todo.add(root);
+        int visited = 0, found = 0;
+        while (!todo.isEmpty() && visited++ < 3000 && found < 10) {
+            AccessibilityNodeInfo n = todo.poll();
+            if (n.isScrollable()) {
+                found++;
+                sb.append(found == 1 ? "" : "; ").append(describe(n));
+            }
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo c = n.getChild(i);
+                if (c != null) todo.add(c);
+            }
+        }
+        AccessibilityNodeInfo t = textScroller(root), p = pageList(root);
+        sb.append(" | text's own: ").append(t == null ? "none" : describe(t)).append(" | biggest: ").append(p == null ? "none" : describe(p));
+        return sb.toString();
     }
 
     private void toTopNext(int gen, int n, int refused, int result, Runnable then) {
@@ -1378,9 +1464,18 @@ public class ReaderService extends AccessibilityService {
     private void checkTop(int gen, int tries, Shot sh, Runnable then) {
         if (gen != scanGen) return;
         Integer y = sh == null ? null : pageY(sh);
-        if (y != null && y > Theme.dp(this, 24) && tries < 2) {
+        if (y != null && y > Theme.dp(this, 24) && tries < 3) {
             Logs.d(this, "whole page: not at the top yet (" + y + " px down), going on up");
-            swipeToTop(gen, 0, 0, null, () -> checkTop(gen, tries + 1, then));
+            if (tries == 0) {
+                // What scrolls on this screen, for the log, then scroll-ups on the area that holds the text.
+                ask(() -> {
+                    AccessibilityNodeInfo root = getRootInActiveWindow();
+                    return root == null ? "no window" : describeScrollers(root);
+                }, d -> Logs.d(this, "whole page: scrolling areas here: " + d));
+                upOnText(gen, 0, 0, () -> checkTop(gen, tries + 1, then));
+            } else {
+                swipeToTop(gen, 0, 0, null, () -> checkTop(gen, tries + 1, then));
+            }
             return;
         }
         knownY = y != null ? y : 0;
