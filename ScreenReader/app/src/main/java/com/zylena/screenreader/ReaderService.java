@@ -614,7 +614,8 @@ public class ReaderService extends AccessibilityService {
 
         // Down the empty left margin (touching words selects them); hold still before lifting so it stops.
         float x = swipeX(area);
-        float startY = shift > 0 ? bottom - Theme.dp(this, 6) : top + Theme.dp(this, 6);
+        if (shift < 0) shift = Math.max(shift, -room / 2); // pulled down from below the middle (see swipe)
+        float startY = shift > 0 ? bottom - Theme.dp(this, 6) : top + room * 0.45f;
         float endY = startY - shift;
         android.graphics.Path move = new android.graphics.Path();
         move.moveTo(x, startY);
@@ -1880,10 +1881,12 @@ public class ReaderService extends AccessibilityService {
         }
         Rect area = sh.view;
         int room = (int) (area.height() * 0.8f);
-        int m = Math.max(-room, Math.min(room, move));
+        // Pulling the page down starts below the middle: higher up can be a header picture that the app
+        // takes as a tap (EGW Writings' book cover opens the chapter list). So at most half a page each time.
+        int m = Math.max(-(int) (area.height() * 0.48f), Math.min(room, move));
         lastScrollAsked = m;
         float x = swipeX(sh.list);
-        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.1f;
+        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.45f;
         // A finger moves a little before the page follows: add that, so the page moves by m itself.
         int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
         float endY = startY - m - Integer.signum(m) * slop;
@@ -1913,10 +1916,10 @@ public class ReaderService extends AccessibilityService {
      */
     private void quickSwipe(Shot sh, int move, Runnable done) {
         Rect area = sh.view;
-        int m = Math.max(-(int) (area.height() * 0.8f), Math.min((int) (area.height() * 0.8f), move));
+        int m = Math.max(-(int) (area.height() * 0.48f), Math.min((int) (area.height() * 0.8f), move));
         lastScrollAsked = m;
         float x = swipeX(sh.list);
-        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.1f;
+        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.45f;
         int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
         float endY = startY - m - Integer.signum(m) * slop;
         android.graphics.Path drag = new android.graphics.Path();
@@ -1936,8 +1939,8 @@ public class ReaderService extends AccessibilityService {
         Rect area = sh.view;
         float x = swipeX(sh.list);
         android.graphics.Path p = new android.graphics.Path();
-        p.moveTo(x, area.top + area.height() * 0.15f);
-        p.lineTo(x, area.top + area.height() * 0.85f);
+        p.moveTo(x, area.top + area.height() * 0.45f); // below the middle: not on a header picture
+        p.lineTo(x, area.top + area.height() * 0.95f);
         lastSwipe = System.currentTimeMillis();
         boolean ok = gestureChain(new android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 90, false),
                 new android.graphics.Path[0], new long[0], 0, done);
