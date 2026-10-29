@@ -30,7 +30,16 @@ final class Logs {
     }
 
     static synchronized void d(Context c, String msg) {
-        if (toLogcat) android.util.Log.i("ZYLENA", msg);
+        if (toLogcat) {
+            android.util.Log.i("ZYLENA", msg);
+            // Also to a file of its own, in logcat's layout: under load Android drops logcat lines, and the
+            // check then misread which paragraph was being read. The test reads this file at the end.
+            try {
+                write(new File(c.getApplicationContext().getFilesDir(), "test-log.txt"),
+                        String.format(Locale.US, "%.3f 0 0 I ZYLENA: %s%n", System.currentTimeMillis() / 1000.0, msg.replace('\n', ' ')), true);
+            } catch (Exception ignored) {
+            }
+        }
         try {
             File f = file(c);
             if (f.length() > MAX) {

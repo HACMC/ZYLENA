@@ -36,6 +36,7 @@ adb shell "run-as $Z cat shared_prefs/zylena_reader.xml"
 # A bigger log buffer: under load Android dropped lines (a paragraph's start went missing and the check misread it).
 adb logcat -G 16M || true
 adb logcat -c
+adb shell "run-as $Z rm -f files/test-log.txt" || true
 adb logcat -v epoch ZYLENA:I MOCK:I '*:S' > "$OUT/logcat.txt" &
 LOGCAT=$!
 
@@ -153,7 +154,9 @@ watch_until "whole page: the end" 900 "$FROM" s2r || true
 sleep 2
 
 kill $LOGCAT
-python3 "$ROOT/ScreenReader/testing/check_reading.py" "$OUT/logcat.txt" > "$OUT/report.txt"
+# ZYLENA's own copy of its log has every line (logcat can drop some under load): use it for ZYLENA's lines.
+adb shell "run-as $Z cat files/test-log.txt" > "$OUT/zylena.txt" || true
+python3 "$ROOT/ScreenReader/testing/check_reading.py" "$OUT/logcat.txt" "$OUT/zylena.txt" > "$OUT/report.txt"
 RESULT=$?
 cat "$OUT/report.txt"
 exit $RESULT

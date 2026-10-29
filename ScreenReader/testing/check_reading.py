@@ -17,7 +17,7 @@ def norm(s):
     return re.sub(r'\s+', ' ', s.replace('​', '').replace('…', '')).strip()
 
 
-def main(path):
+def main(path, own=None):
     texts = {}  # (page, i) -> start of the paragraph
     pos = []  # (t, page, bar, bottom, {i: (top, bottom)})
     moving = []  # times the page was reported moving
@@ -46,6 +46,18 @@ def main(path):
                 markers.append((t, msg))
         elif tag == 'ZYLENA':
             zyl.append((t, msg))
+    # ZYLENA's own log file has every line; logcat may have dropped some.
+    if own:
+        try:
+            mine = []
+            for raw in open(own, encoding='utf-8', errors='replace'):
+                m = LINE.match(raw.rstrip('\n'))
+                if m and m.group(2) == 'ZYLENA':
+                    mine.append((float(m.group(1)), m.group(3)))
+            if len(mine) >= len(zyl) * 0.9 and mine:
+                zyl = mine
+        except OSError:
+            pass
 
     def which(snip):
         s = norm(snip)
@@ -214,4 +226,4 @@ def main(path):
 
 
 if __name__ == '__main__':
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None))
