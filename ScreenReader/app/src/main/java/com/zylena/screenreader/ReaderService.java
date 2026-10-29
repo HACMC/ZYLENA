@@ -76,6 +76,14 @@ public class ReaderService extends AccessibilityService {
         if (Prefs.readVerses(this)) verses.warmUp();
         Prefs.applyLists(this);
         controls = new Controls(this);
+        if (!lockWatching) {
+            android.content.IntentFilter f = new android.content.IntentFilter();
+            f.addAction(android.content.Intent.ACTION_SCREEN_OFF);
+            f.addAction(android.content.Intent.ACTION_SCREEN_ON);
+            f.addAction(android.content.Intent.ACTION_USER_PRESENT);
+            registerReceiver(lockWatch, f);
+            lockWatching = true;
+        }
         Speaker.get(this).setListener(speaking -> {
             updateButtonIcon();
             if (controls != null) controls.update(null);
@@ -98,6 +106,8 @@ public class ReaderService extends AccessibilityService {
         Prefs.setServiceWasOn(this, true);
         applyKeepAlive();
         applyPrefs();
+        android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        if (km != null && km.isKeyguardLocked()) showOnScreen(false); // started while the phone is locked
     }
 
     @Override
@@ -167,6 +177,13 @@ public class ReaderService extends AccessibilityService {
     @Override
     public boolean onUnbind(android.content.Intent intent) {
         instance = null;
+        if (lockWatching) {
+            try {
+                unregisterReceiver(lockWatch);
+            } catch (Exception ignored) {
+            }
+            lockWatching = false;
+        }
         Logs.d(this, "service unbound");
         hideBanner();
         hideFan();
@@ -215,6 +232,32 @@ public class ReaderService extends AccessibilityService {
         } catch (Exception e) {
             Logs.d(this, "stay-on notification not possible: " + e);
         }
+    }
+
+    private boolean lockWatching;
+
+    /** The floating button stays off the lock screen: hidden when the screen goes off, back once unlocked. */
+    private final android.content.BroadcastReceiver lockWatch = new android.content.BroadcastReceiver() {
+        @Override
+        public void onReceive(android.content.Context c, android.content.Intent i) {
+            String a = String.valueOf(i.getAction());
+            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            boolean locked = a.equals(android.content.Intent.ACTION_SCREEN_OFF) || (km != null && km.isKeyguardLocked());
+            if (a.equals(android.content.Intent.ACTION_USER_PRESENT)) locked = false;
+            showOnScreen(!locked);
+        }
+    };
+
+    private boolean lockHidden;
+
+    private void showOnScreen(boolean on) {
+        if (on == !lockHidden) return;
+        lockHidden = !on;
+        if (!on) {
+            hideFan();
+            hidePanel();
+        }
+        if (button != null) button.setVisibility(on ? View.VISIBLE : View.GONE);
     }
 
     /** Call after a setting changes. */
@@ -2576,6 +2619,7 @@ public class ReaderService extends AccessibilityService {
                 }
             }
         });
+        if (lockHidden) button.setVisibility(View.GONE);
         try {
             wm.addView(button, buttonLp);
             fadeSoon();
