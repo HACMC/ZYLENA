@@ -139,6 +139,12 @@ final class ScreenText {
             node.getBoundsInScreen(bounds);
             if (!bounds.isEmpty() && (bounds.left >= screenRight || bounds.right <= screenLeft)) return;
         }
+        if (visible) {
+            // Some apps report a pager's neighbouring pages as visible (EGW Writings: each chapter is a web
+            // page, the ones before and after kept just off the screen's sides). Those are not on screen.
+            node.getBoundsInScreen(bounds);
+            if (!bounds.isEmpty() && (bounds.left >= screenRight || bounds.right <= screenLeft)) return;
+        }
         inScroll |= scrollsVertically(node);
         if (node.isClickable() || node.isLongClickable() || buttonClass(node)) tapDepth = 3;
         boolean tappable = tapDepth > 0;

@@ -501,7 +501,7 @@ public class ReaderService extends AccessibilityService {
     private Rect readArea(AccessibilityNodeInfo root) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Rect view = new Rect(0, 0, dm.widthPixels, dm.heightPixels);
-        AccessibilityNodeInfo list = root == null ? null : pageList(root);
+        AccessibilityNodeInfo list = root == null ? null : textArea(root);
         if (list == null) return view;
         pageBounds(list, view);
         return visibleArea(root, list, view);
@@ -535,7 +535,7 @@ public class ReaderService extends AccessibilityService {
             }, 850);
             return;
         }
-        AccessibilityNodeInfo list = pageList(root);
+        AccessibilityNodeInfo list = textArea(root);
         if (list == null) return;
         DisplayMetrics dm = getResources().getDisplayMetrics();
         Rect area = readArea(root);
@@ -1361,6 +1361,12 @@ public class ReaderService extends AccessibilityService {
             }
         }
         return null;
+    }
+
+    /** The scrolling area of the text on screen, else the biggest one. */
+    private AccessibilityNodeInfo textArea(AccessibilityNodeInfo root) {
+        AccessibilityNodeInfo t = textScroller(root);
+        return t != null ? t : pageList(root);
     }
 
     private String describe(AccessibilityNodeInfo n) {
