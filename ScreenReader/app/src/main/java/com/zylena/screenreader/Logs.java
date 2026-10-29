@@ -9,9 +9,9 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-/** A small on-device log (last ~100 KB) so problems can be read and shared from the app. */
+/** A small on-device log (last ~400 KB) so problems can be read and shared from the app. */
 final class Logs {
-    private static final int MAX = 200_000, KEEP = 100_000;
+    private static final int MAX = 600_000, KEEP = 400_000;
     private static final SimpleDateFormat TIME = new SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US);
 
     private Logs() {

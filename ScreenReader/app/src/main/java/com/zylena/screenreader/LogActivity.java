@@ -36,10 +36,11 @@ public class LogActivity extends Activity {
 
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        Button share = Theme.button(this, "Share", true);
+        Button save = Theme.button(this, "Save .txt", true);
+        Button share = Theme.button(this, "Share", false);
         Button copy = Theme.button(this, "Copy", false);
         Button clear = Theme.button(this, "Clear", false);
-        for (Button x : new Button[]{share, copy, clear}) {
+        for (Button x : new Button[]{save, share, copy, clear}) {
             x.setMinHeight(Theme.dp(this, 44));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             lp.setMarginEnd(Theme.dp(this, 8));
@@ -57,6 +58,7 @@ public class LogActivity extends Activity {
         col.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         ((LinearLayout.LayoutParams) scroll.getLayoutParams()).topMargin = Theme.dp(this, 12);
 
+        save.setOnClickListener(v -> saveTxt());
         share.setOnClickListener(v -> {
             Intent i = new Intent(Intent.ACTION_SEND).setType("text/plain")
                     .putExtra(Intent.EXTRA_SUBJECT, "ZYLENA Screen Reader log")
@@ -104,6 +106,35 @@ public class LogActivity extends Activity {
             if (nl >= 0) all = "(older entries left out)\n" + all.substring(nl + 1);
         }
         return header() + all;
+    }
+
+    /** The whole log (not only the newest part) as a .txt file in Downloads, to attach where it's needed. */
+    private void saveTxt() {
+        String name = "ZYLENA-log-" + new java.text.SimpleDateFormat("yyyy-MM-dd-HHmm", java.util.Locale.US).format(new java.util.Date()) + ".txt";
+        byte[] body = (header() + Logs.read(this)).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        try {
+            if (Build.VERSION.SDK_INT >= 29) {
+                android.content.ContentValues cv = new android.content.ContentValues();
+                cv.put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, name);
+                cv.put(android.provider.MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+                cv.put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/ZYLENA");
+                android.net.Uri uri = getContentResolver().insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, cv);
+                if (uri == null) throw new java.io.IOException("no file");
+                try (java.io.OutputStream o = getContentResolver().openOutputStream(uri)) {
+                    o.write(body);
+                }
+                Toast.makeText(this, "Saved in Downloads/ZYLENA: " + name, Toast.LENGTH_LONG).show();
+            } else {
+                java.io.File dir = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS);
+                java.io.File f = new java.io.File(dir, name);
+                try (java.io.FileOutputStream o = new java.io.FileOutputStream(f)) {
+                    o.write(body);
+                }
+                Toast.makeText(this, "Saved: " + f.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            }
+        } catch (Exception e) {
+            Toast.makeText(this, "Couldn't save the log: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void show() {
