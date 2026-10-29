@@ -1304,10 +1304,11 @@ public class ReaderService extends AccessibilityService {
             if (android.os.Build.VERSION.SDK_INT >= 33) clearCache();
             AccessibilityNodeInfo root = getRootInActiveWindow();
             // The area that holds the text on screen; the biggest scrolling area may be another one (EGW).
-            AccessibilityNodeInfo list = root == null ? null : textScroller(root);
-            if (list == null && root != null) list = pageList(root);
-            if (n == 0 && list != null) Logs.d(this, "whole page: going up in " + describe(list));
-            if (list == null || !canScroll(list, false) || n >= 200) return 0;
+            AccessibilityNodeInfo list = root == null ? null : scrollerOfText(root, true);
+            if (list == null && root != null && paragraphOnScreen(root, 20) == null) list = pageList(root);
+            if (list != null && (n == 0 || n % 20 == 0)) Logs.d(this, "whole page: going up in " + describe(list));
+            // (An app that always says it can go further up would keep this going: 80 is plenty for a long page.)
+            if (list == null || !canScroll(list, false) || n >= 80) return 0;
             return scrollUp(list) ? 1 : 2;
         }, r -> toTopNext(gen, n, refused, r == null ? 0 : r, then));
     }
@@ -1317,8 +1318,8 @@ public class ReaderService extends AccessibilityService {
         if (gen != scanGen) return;
         ask(() -> {
             AccessibilityNodeInfo root = getRootInActiveWindow();
-            AccessibilityNodeInfo t = root == null ? null : textScroller(root);
-            if (t == null || !canScroll(t, false) || n >= 200) return 0;
+            AccessibilityNodeInfo t = root == null ? null : scrollerOfText(root, true);
+            if (t == null || !canScroll(t, false) || n >= 80) return 0;
             return scrollUp(t) ? 1 : 2;
         }, r -> {
             if (gen != scanGen) return;
@@ -1338,6 +1339,29 @@ public class ReaderService extends AccessibilityService {
      * side, and scrolling the biggest one moved nothing that could be seen.)
      */
     private AccessibilityNodeInfo textScroller(AccessibilityNodeInfo root) {
+        return scrollerOfText(root, false);
+    }
+
+    /**
+     * Starting from a paragraph on screen (not a title: EGW Writings' chapter title sits in a header that
+     * scrolls with the whole screen), its nearest scrolling parent. up: the nearest one that can still
+     * scroll up, so going to the top first scrolls the chapter itself, then the screen around it (which
+     * opens the header again).
+     */
+    private AccessibilityNodeInfo scrollerOfText(AccessibilityNodeInfo root, boolean up) {
+        AccessibilityNodeInfo para = paragraphOnScreen(root, 60);
+        if (para == null) para = paragraphOnScreen(root, 20);
+        if (para == null) return null;
+        AccessibilityNodeInfo p = para.getParent();
+        for (int i = 0; p != null && i < 30; i++) {
+            if (ScreenText.scrollsVertically(p) && (up ? canScroll(p, false) : canScroll(p, false) || canScroll(p, true))) return p;
+            p = p.getParent();
+        }
+        return null;
+    }
+
+    /** The first text on screen at least this long, fully within the screen's width. */
+    private AccessibilityNodeInfo paragraphOnScreen(AccessibilityNodeInfo root, int minChars) {
         DisplayMetrics dm = getResources().getDisplayMetrics();
         java.util.ArrayDeque<AccessibilityNodeInfo> todo = new java.util.ArrayDeque<>();
         todo.add(root);
@@ -1345,15 +1369,9 @@ public class ReaderService extends AccessibilityService {
         int visited = 0;
         while (!todo.isEmpty() && visited++ < 3000) {
             AccessibilityNodeInfo n = todo.poll();
-            if (n.isVisibleToUser() && ScreenText.ownText(n).length() >= 20) {
+            if (n.isVisibleToUser() && ScreenText.ownText(n).length() >= minChars) {
                 n.getBoundsInScreen(b);
-                if (b.left >= 0 && b.right <= dm.widthPixels && b.bottom > 0 && b.top < dm.heightPixels) {
-                    AccessibilityNodeInfo p = n.getParent();
-                    for (int up = 0; p != null && up < 30; up++) {
-                        if (ScreenText.scrollsVertically(p) && (canScroll(p, false) || canScroll(p, true))) return p;
-                        p = p.getParent();
-                    }
-                }
+                if (b.left >= 0 && b.right <= dm.widthPixels && b.bottom > 0 && b.top < dm.heightPixels) return n;
             }
             for (int i = 0; i < n.getChildCount(); i++) {
                 AccessibilityNodeInfo c = n.getChild(i);
