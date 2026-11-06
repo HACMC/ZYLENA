@@ -108,6 +108,70 @@ public class ReaderService extends AccessibilityService {
         applyPrefs();
         android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
         if (km != null && km.isKeyguardLocked()) showOnScreen(false); // started while the phone is locked
+        logLastExit();
+    }
+
+    /** Notes in the log why Android ended ZYLENA's last run (closed to save battery, not responding, ...). */
+    private void logLastExit() {
+        if (android.os.Build.VERSION.SDK_INT < 30) return;
+        try {
+            android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+            android.content.SharedPreferences sp = getSharedPreferences("exits", MODE_PRIVATE);
+            long seen = sp.getLong("seen", 0), newest = seen;
+            for (android.app.ApplicationExitInfo x : am.getHistoricalProcessExitReasons(getPackageName(), 0, 5)) {
+                if (x.getTimestamp() <= seen) continue;
+                newest = Math.max(newest, x.getTimestamp());
+                Logs.d(this, "last stop: " + exitReason(x.getReason()) + " at "
+                        + android.text.format.DateFormat.format("MM-dd HH:mm:ss", x.getTimestamp())
+                        + (x.getDescription() != null ? " (" + x.getDescription() + ")" : ""));
+                if (x.getReason() == android.app.ApplicationExitInfo.REASON_ANR) logAnrTrace(x);
+            }
+            sp.edit().putLong("seen", newest).apply();
+        } catch (Exception e) {
+            Logs.d(this, "last stop: unknown (" + e + ")");
+        }
+    }
+
+    private static String exitReason(int r) {
+        switch (r) {
+            case android.app.ApplicationExitInfo.REASON_ANR: return "not responding";
+            case android.app.ApplicationExitInfo.REASON_CRASH: return "crash";
+            case android.app.ApplicationExitInfo.REASON_CRASH_NATIVE: return "native crash";
+            case android.app.ApplicationExitInfo.REASON_LOW_MEMORY: return "low memory";
+            case android.app.ApplicationExitInfo.REASON_USER_REQUESTED: return "stopped (force stop or cleared from recent apps)";
+            case android.app.ApplicationExitInfo.REASON_USER_STOPPED: return "user stopped";
+            case android.app.ApplicationExitInfo.REASON_SIGNALED: return "killed by the system";
+            case android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE: return "too much battery or CPU";
+            case android.app.ApplicationExitInfo.REASON_PERMISSION_CHANGE: return "permission changed";
+            case android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED: return "dependency died";
+            case android.app.ApplicationExitInfo.REASON_EXIT_SELF: return "exited";
+            case android.app.ApplicationExitInfo.REASON_INITIALIZATION_FAILURE: return "start failed";
+            case android.app.ApplicationExitInfo.REASON_FREEZER: return "frozen";
+            case android.app.ApplicationExitInfo.REASON_PACKAGE_UPDATED: return "app updated";
+            case android.app.ApplicationExitInfo.REASON_OTHER: return "other";
+            default: return "reason " + r;
+        }
+    }
+
+    /** For "not responding": the main thread's place in ZYLENA's code, so the cause can be fixed. */
+    private void logAnrTrace(android.app.ApplicationExitInfo x) {
+        try (java.io.InputStream in = x.getTraceInputStream()) {
+            if (in == null) return;
+            java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(in));
+            String line;
+            boolean inMain = false;
+            int kept = 0;
+            while ((line = r.readLine()) != null && kept < 40) {
+                if (line.startsWith("\"main\"")) inMain = true;
+                else if (inMain && line.trim().isEmpty()) break;
+                if (inMain) {
+                    Logs.d(this, "  anr " + line.trim());
+                    kept++;
+                }
+            }
+        } catch (Exception e) {
+            Logs.d(this, "  anr trace unreadable: " + e);
+        }
     }
 
     @Override
@@ -131,6 +195,11 @@ public class ReaderService extends AccessibilityService {
             }
         }
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        // Some phones are slow to tell about the unlock (or never do): an app coming up means unlocked.
+        if (lockHidden) {
+            android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+            if (km != null && !km.isKeyguardLocked()) showOnScreen(true);
+        }
         if (!Prefs.autoRead(this)) return;
         CharSequence pkg = e.getPackageName();
         if (pkg == null || pkg.toString().equals(getPackageName())) return;
@@ -253,6 +322,7 @@ public class ReaderService extends AccessibilityService {
     private void showOnScreen(boolean on) {
         if (on == !lockHidden) return;
         lockHidden = !on;
+        Logs.d(this, on ? "floating button back (unlocked)" : "floating button hidden (locked)");
         if (!on) {
             hideFan();
             hidePanel();
@@ -1305,7 +1375,7 @@ public class ReaderService extends AccessibilityService {
         upSeen = false;
         scanSteps = 0;
         scanStuck = 0;
-        Logs.d(this, "whole page: scanning before reading");
+        Logs.d(this, "whole page: scanning before reading in " + pkg);
         updateButtonIcon();
         showBanner("Scanning the page\u2026 please wait");
         toTop(gen, 0, () -> scanStep(gen, null));
