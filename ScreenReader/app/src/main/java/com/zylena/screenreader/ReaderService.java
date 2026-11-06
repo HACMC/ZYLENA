@@ -194,6 +194,14 @@ public class ReaderService extends AccessibilityService {
                 }
             }
         }
+        if (type == AccessibilityEvent.TYPE_VIEW_SCROLLED && android.os.Build.VERSION.SDK_INT >= 28
+                && e.getPackageName() != null && e.getPackageName().toString().equals(pkg)) {
+            int dy = e.getScrollDeltaY();
+            if (dy != -1 && dy != 0) {
+                Integer was = scrolledBy;
+                scrolledBy = (was == null ? 0 : was) + dy;
+            }
+        }
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         // Some phones are slow to tell about the unlock (or never do): an app coming up means unlocked.
         if (lockHidden) {
@@ -1315,6 +1323,11 @@ public class ReaderService extends AccessibilityService {
         return r.top > sh.view.top + sh.edge && r.top < sh.view.bottom;
     }
 
+    /** The box reaches past the visible part: it is the paragraph's whole box, not cut to what shows. */
+    private static boolean beyond(Shot sh, Rect r) {
+        return r.top < sh.list.top - 2 || r.bottom > sh.list.bottom + 2;
+    }
+
     private static boolean bottomSeen(Shot sh, Rect r) {
         return r.bottom < sh.view.bottom - sh.edge && r.bottom > sh.view.top;
     }
@@ -1584,7 +1597,16 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         final int s2 = nowStill;
-        flick(sh, () -> main.postDelayed(() -> swipeToTop(gen, n + 1, s2, sh, then), 350));
+        // The app's own "scroll up" (a pulled-down finger could land on a header picture and open it).
+        scrollPage(false, ok -> {
+            if (gen != scanGen) return;
+            if (!ok) {
+                if (n > 0) Logs.d(this, "whole page: back at the top after " + n + " scroll-ups");
+                then.run();
+                return;
+            }
+            main.postDelayed(() -> swipeToTop(gen, n + 1, s2, sh, then), 300);
+        });
     }
 
     /**
@@ -1658,8 +1680,11 @@ public class ReaderService extends AccessibilityService {
         }
         if (prev != null) {
             Integer moved = movedBy(prev, sh);
-            if (moved == null) {
-                // Nothing seen on both screens: the swipe's length, less the bit a finger moves before the page follows.
+            Integer told = scrolledBy;
+            if (moved == null && told != null && told != 0) {
+                moved = told; // the page said how far it scrolled
+            } else if (moved == null) {
+                // Nothing seen on both screens: the size of the step asked for.
                 moved = lastScrollAsked;
                 Logs.d(this, "whole page: step " + scanSteps + " not measured, taking " + moved + " px");
             }
@@ -1673,9 +1698,47 @@ public class ReaderService extends AccessibilityService {
             endScan(gen);
             return;
         }
-        // Overlapping steps, so each move can be measured from text seen before and after it.
-        int step = (int) (sh.view.height() * 0.7f);
-        quickSwipe(sh, step, () -> main.postDelayed(() -> scanStep(gen, sh), 120));
+        // The app's own "scroll down", never a finger: a touch on the page can land on something that opens
+        // (EGW Writings' book cover opens the chapter list).
+        scrollPage(true, ok -> {
+            if (gen != scanGen) return;
+            if (!ok) {
+                Logs.d(this, "whole page: the page scrolls no further");
+                endScan(gen);
+                return;
+            }
+            main.postDelayed(() -> scanStep(gen, sh), 250);
+        });
+    }
+
+    /** Sum of the page's own reports of how far it scrolled, since the last scrollPage (null: none came). */
+    private volatile Integer scrolledBy;
+
+    /**
+     * The app's own one-screen scroll on the area that holds the text (no touch on the screen). ok: false
+     * when it can't scroll that way. Sets lastScrollAsked to the area's height, the usual size of the step.
+     */
+    private void scrollPage(boolean down, java.util.function.Consumer<Boolean> done) {
+        ask(() -> {
+            AccessibilityNodeInfo root = getRootInActiveWindow();
+            if (root == null) return false;
+            AccessibilityNodeInfo t = scrollerOfText(root, !down);
+            if (t == null && paragraphOnScreen(root, 60) == null) t = pageList(root);
+            if (t == null || !canScroll(t, down)) return false;
+            Rect b = new Rect();
+            t.getBoundsInScreen(b);
+            lastScrollAsked = down ? b.height() : -b.height();
+            scrolledBy = null;
+            lastSwipe = System.currentTimeMillis();
+            return down ? scrollDown(t) : scrollUp(t);
+        }, ok -> done.accept(ok != null && ok));
+    }
+
+    private static boolean scrollDown(AccessibilityNodeInfo list) {
+        if (list.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN)) {
+            return list.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_DOWN.getId());
+        }
+        return list.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD);
     }
 
     private void endScan(int gen) {
@@ -1698,6 +1761,7 @@ public class ReaderService extends AccessibilityService {
             Rect ra = a.rects.get(j), rb = b.rects.get(i);
             if (topSeen(a, ra) && topSeen(b, rb)) d.add(ra.top - rb.top);
             else if (bottomSeen(a, ra) && bottomSeen(b, rb)) d.add(ra.bottom - rb.bottom);
+            else if (Math.abs(ra.height() - rb.height()) <= 2 && (beyond(a, ra) || beyond(b, rb))) d.add(ra.top - rb.top);
         }
         if (d.isEmpty()) return null;
         java.util.Collections.sort(d);
@@ -1980,42 +2044,7 @@ public class ReaderService extends AccessibilityService {
         if (!ok) done.run();
     }
 
-    /**
-     * The scan's swipe: no need to land on an exact spot (each move is measured), only to stop dead.
-     * One quick drag, then the finger rests a moment before lifting, so the page doesn't fling on.
-     */
-    private void quickSwipe(Shot sh, int move, Runnable done) {
-        Rect area = sh.view;
-        int m = Math.max(-(int) (area.height() * 0.48f), Math.min((int) (area.height() * 0.8f), move));
-        lastScrollAsked = m;
-        float x = swipeX(sh.list);
-        float startY = m > 0 ? area.top + area.height() * 0.9f : area.top + area.height() * 0.45f;
-        int slop = android.view.ViewConfiguration.get(this).getScaledTouchSlop();
-        float endY = startY - m - Integer.signum(m) * slop;
-        android.graphics.Path drag = new android.graphics.Path();
-        drag.moveTo(x, startY);
-        drag.lineTo(x, endY);
-        android.graphics.Path hold = new android.graphics.Path();
-        hold.moveTo(x, endY);
-        hold.lineTo(x, endY + 1);
-        lastSwipe = System.currentTimeMillis();
-        boolean ok = gestureChain(new android.accessibilityservice.GestureDescription.StrokeDescription(drag, 0, 220, true),
-                new android.graphics.Path[]{hold}, new long[]{150}, 0, done);
-        if (!ok) done.run();
-    }
 
-    /** A fast flick towards the top: the page flies up by several screens. */
-    private void flick(Shot sh, Runnable done) {
-        Rect area = sh.view;
-        float x = swipeX(sh.list);
-        android.graphics.Path p = new android.graphics.Path();
-        p.moveTo(x, area.top + area.height() * 0.45f); // below the middle: not on a header picture
-        p.lineTo(x, area.top + area.height() * 0.95f);
-        lastSwipe = System.currentTimeMillis();
-        boolean ok = gestureChain(new android.accessibilityservice.GestureDescription.StrokeDescription(p, 0, 90, false),
-                new android.graphics.Path[0], new long[0], 0, done);
-        if (!ok) done.run();
-    }
 
     /** Plays a stroke, then each next part as its continuation; done once the last part has lifted. */
     private boolean gestureChain(android.accessibilityservice.GestureDescription.StrokeDescription stroke,
