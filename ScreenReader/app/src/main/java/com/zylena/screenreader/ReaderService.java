@@ -3129,6 +3129,10 @@ public class ReaderService extends AccessibilityService {
         spots.clear();
         scanOrder.clear();
         scanPkg = "";
+        // From the top: forget where reading stopped on this page.
+        LinkedList<String> list = marks.get(pkg);
+        if (list != null && lines != null) list.removeIf(m -> lines.contains(m));
+        currentLine = -1;
         main.postDelayed(this::readScreen, 300); // the panel goes away first
     }
 

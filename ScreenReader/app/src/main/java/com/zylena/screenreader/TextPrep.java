@@ -537,7 +537,9 @@ final class TextPrep {
                 cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
             } else if (skipRefs) {
                 // A reference shown as its own link leaves "Apostol (" and "). Matapos" behind; tidy those ends.
-                cleaned = Bible.stripRefs(cleaned).replaceAll("\\s*[(\\[]\\s*$", "").replaceAll("^[\\s)\\];,.]+", "");
+                cleaned = Bible.stripRefs(cleaned).replaceAll("\\s*[(\\[]\\s*$", "")
+                        .replaceAll("\\s*(?:[(\\[]\\s*(?:[Cc]f\\.?|[Ss]ee(?: also)?|[Cc]ompare)|[Cc]f\\.)\\s*$", "") // "(Cf." left by a skipped reference
+                        .replaceAll("^[\\s)\\];,.]+", "");
                 if (cleaned.chars().noneMatch(Character::isLetter)) continue;
             }
             // Before sentence splitting, so "Gen. 1:1-5" isn't cut at the abbreviation's full stop.

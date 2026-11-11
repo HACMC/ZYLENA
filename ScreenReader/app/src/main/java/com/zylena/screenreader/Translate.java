@@ -202,6 +202,7 @@ final class Translate {
         h.setRequestMethod("POST");
         h.setDoOutput(true);
         h.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        h.setRequestProperty("User-Agent", "ZYLENAScreenReader (Android)");
         try {
             byte[] body = ("q=" + java.net.URLEncoder.encode(text, "UTF-8")).getBytes("UTF-8");
             h.getOutputStream().write(body);
