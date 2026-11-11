@@ -33,11 +33,64 @@ final class Translate {
         return TextPrep.FIL.equals(lang) ? TextPrep.EN : TextPrep.FIL;
     }
 
-    private static int onlineFails;
+    private static int onlineFails, waitMinutes;
     private static long onlineOffUntil;
     private static final java.util.concurrent.ExecutorService net = java.util.concurrent.Executors.newSingleThreadExecutor();
 
+    /** Names a translator would translate as words ("White" becomes "puti"): kept as they are. */
+    private static final java.util.regex.Pattern KEEP = java.util.regex.Pattern.compile(
+            "\\b(?:(?:Mrs?\\.?|Missus|Mister|Elder|Pastor)\\s)?(?:(?:Ellen|E\\.?)\\s?G\\.?\\s?|James\\s|J\\.?\\s?)?White\\b");
+
+    /** The Tagalog the reader respelled for its voice goes back to the usual spelling before it is translated. */
+    private static final String[][] UNSAY = {
+            {"Hesu Kristo", "Jesus Christ"}, {"Hesus", "Jesus"}, {"Kristo", "Christ"}, {"Huwan", "John"}, {"Hose", "Joseph"},
+            {"Herusalem", "Jerusalem"}, {"Heremias", "Jeremiah"}, {"Hosue", "Joshua"}, {"Hudas", "Judas"}, {"Hudea", "Judea"},
+            {"Huda", "Judah"}, {"Hordan", "Jordan"}, {"Hehoba", "Jehovah"}};
+
+    private static String original(String text, String fromLang) {
+        if (TextPrep.FIL.equals(fromLang)) {
+            for (String[] u : UNSAY) text = text.replaceAll("(?<![\\p{L}-])" + u[0] + "(?![\\p{L}-])", u[1]);
+        } else {
+            text = text.replaceAll("\\bMissus\\b", "Mrs.").replaceAll("\\bMister\\b", "Mr.");
+        }
+        return text;
+    }
+
     static void text(Context c, String text, String fromLang, Done out) {
+        text = original(text, fromLang);
+        java.util.List<String> kept = new java.util.ArrayList<>();
+        String sent = text;
+        if (!TextPrep.FIL.equals(fromLang)) {
+            java.util.regex.Matcher m = KEEP.matcher(text);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                kept.add(m.group());
+                m.appendReplacement(sb, "ZQ" + kept.size() + "X");
+            }
+            m.appendTail(sb);
+            sent = sb.toString();
+        }
+        final String plain = text;
+        translate(c, sent, fromLang, got -> {
+            if (got == null || kept.isEmpty()) {
+                out.done(got);
+                return;
+            }
+            String back = got;
+            for (int i = 0; i < kept.size(); i++) {
+                java.util.regex.Pattern ph = java.util.regex.Pattern.compile("ZQ\\s?" + (i + 1) + "\\s?X", java.util.regex.Pattern.CASE_INSENSITIVE);
+                if (!ph.matcher(back).find()) {
+                    // The marker was lost: take the plain translation instead.
+                    translate(c, plain, fromLang, out);
+                    return;
+                }
+                back = ph.matcher(back).replaceFirst(java.util.regex.Matcher.quoteReplacement(kept.get(i)));
+            }
+            out.done(back);
+        });
+    }
+
+    private static void translate(Context c, String text, String fromLang, Done out) {
         if (System.currentTimeMillis() < onlineOffUntil || !Net.online(c)) {
             offline(c, text, fromLang, out);
             return;
@@ -57,14 +110,17 @@ final class Translate {
             main.post(() -> {
                 if (got != null && !got.isEmpty()) {
                     onlineFails = 0;
+                    waitMinutes = 0;
                     out.done(got);
                     return;
                 }
                 // Google says too many requests: respect it and leave it alone for an hour.
                 if (busy) {
-                    onlineOffUntil = System.currentTimeMillis() + 60 * 60_000L;
+                    // 10 minutes, then 20, up to an hour if it keeps asking.
+                    waitMinutes = Math.min(60, waitMinutes == 0 ? 10 : waitMinutes * 2);
+                    onlineOffUntil = System.currentTimeMillis() + waitMinutes * 60_000L;
                     onlineFails = 0;
-                    Logs.d(c, "translate: Google asks to slow down, offline for an hour");
+                    Logs.d(c, "translate: Google asks to slow down, offline for " + waitMinutes + " minutes");
                 } else if (++onlineFails >= 2) {
                     // Not answering: offline for a while, rather than waiting on every paragraph.
                     onlineOffUntil = System.currentTimeMillis() + 10 * 60_000L;

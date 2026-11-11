@@ -93,7 +93,7 @@ final class TextPrep {
                 "pls", "please", "plz", "please", "thx", "thanks", "tnx", "thanks", "ty", "thank you",
                 "btw", "by the way", "idk", "I don't know", "omg", "oh my gosh", "asap", "as soon as possible",
                 "w/", "with", "w/o", "without", "e.g.", "for example", "i.e.", "that is", "etc.", "et cetera",
-                "vs.", "versus", "a.d.", "A D", "b.c.", "B C", "vs", "versus", "approx.", "about",
+                "vs.", "versus", "vs", "versus", "approx.", "about",
                 // Taglish texting
                 "lng", "lang", "nmn", "naman", "kc", "kasi", "ksi", "kasi", "sna", "sana", "pra", "para",
                 "hnd", "hindi", "hndi", "hindi", "nde", "hindi", "ung", "yung", "yng", "yung", "tlga", "talaga",
@@ -140,7 +140,7 @@ final class TextPrep {
      * voice so it comes out that way: English "Zeleena", Tagalog "Zelina".
      */
     static String sayName(String s, String lang) {
-        return NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena");
+        return sayDates(NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena"), lang);
     }
 
     static String sayTagalog(String s) {
@@ -268,7 +268,131 @@ final class TextPrep {
         return fil > en;
     }
 
+    // ---- Page numbers and book codes are not read ("Page 229", "EW 15.1", "(1SM 123.2)", "Ms 12, 1890") ----
+    private static final String CODE = "(?:\\d{1,2}\\s?)?[A-Z][A-Za-z]{0,5}\\s?(?:\\d{1,4}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})\\.\\d{1,3}(?:\\s?[-–]\\s?\\d{1,3})?";
+    private static final String SOURCE = "(?:Ms|MS|Lt|MR|Letter|Manuscript|RH|ST|YI|Sp\\.?\\s?T)\\s?\\d{1,4}[a-z]?,?\\s\\d{4}";
+    private static final String PAGE = "(?i:Page|Pg|Pp?|Pahina|Pah)\\.?\\s?\\d{1,4}(?:\\s?[-–]\\s?\\d{1,4})?";
+    private static final Pattern CODE_LINE = Pattern.compile("^[\\s(\\[—–-]*(?:" + CODE + "|" + SOURCE + "|" + PAGE + "|\\[\\d{1,4}\\])[\\s)\\].,;:—–-]*$");
+    private static final Pattern CODE_END = Pattern.compile("[\\s—–(\\[-]+(?:" + CODE + "|" + SOURCE + "|[A-Z]{2,5}\\s(?:[ivxlc]{2,7}|[IVXLC]{2,7}))\\.?[\\s)\\].]*$");
+    private static final Pattern CODE_PAREN = Pattern.compile("\\s*[(\\[]\\s*(?:" + CODE + "|" + SOURCE + "|" + PAGE + ")\\s*[)\\]]");
+    private static final Pattern PAGE_BRACKET = Pattern.compile("\\s*\\[\\s*" + PAGE + "\\s*\\]", Pattern.CASE_INSENSITIVE);
+
+    /** The line without page numbers and book codes; empty when the whole line was one. */
+    static String dropCodes(String line) {
+        String t = line.trim();
+        if (CODE_LINE.matcher(t).matches()) return "";
+        t = CODE_PAREN.matcher(t).replaceAll("");
+        t = PAGE_BRACKET.matcher(t).replaceAll("");
+        t = CODE_END.matcher(t).replaceAll("");
+        return t.trim();
+    }
+
+    // ---- A.D. and B.C. and calendar years ----
+    private static final Pattern ERA = Pattern.compile("(?<![\\p{L}.])(A\\.D|B\\.C\\.E|B\\.C)\\.?(?![\\p{L}])");
+
+    /** "A.D." and "B.C." lose their dots, so the dot isn't taken for a sentence end: "A.D. 31" becomes "AD 31". */
+    private static String eraDots(String s) {
+        java.util.regex.Matcher m = ERA.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String era = m.group(1).replace(".", "");
+            String after = s.substring(m.end());
+            // A full stop that really ends the sentence stays.
+            boolean dot = m.group().endsWith(".") && (after.trim().isEmpty() || after.matches("^\\s+[\\p{Lu}\"“‘'(].*"));
+            m.appendReplacement(sb, era + (dot ? "." : ""));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private static final String[] ONES = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+            "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"};
+    private static final String[] TENS = {"", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"};
+
+    private static String below100(int n) {
+        if (n < 20) return ONES[n];
+        return TENS[n / 10] + (n % 10 == 0 ? "" : "-" + ONES[n % 10]);
+    }
+
+    /** How a year is said in English: 457 "four fifty-seven", 1844 "eighteen forty-four", 1905 "nineteen oh five", 2026 "twenty twenty-six". */
+    static String yearWords(int y) {
+        if (y < 100) return below100(y);
+        if (y >= 2000 && y <= 2009) return y == 2000 ? "two thousand" : "two thousand " + ONES[y - 2000];
+        if (y == 1000) return "one thousand";
+        int hi = y / 100, lo = y % 100;
+        if (lo == 0) return below100(hi) + " hundred";
+        return below100(hi) + " " + (lo < 10 ? "oh " + ONES[lo] : below100(lo));
+    }
+
+    private static final String MONTHS = "(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?";
+    private static final Pattern YEAR_ERA_AFTER = Pattern.compile("\\b(\\d{1,4})\\s?(AD|BCE|BC)\\b");
+    private static final Pattern YEAR_ERA_BEFORE = Pattern.compile("\\b(AD)\\s?(\\d{1,4})\\b");
+    private static final Pattern YEAR_CUE = Pattern.compile("\\b(in|since|until|till|by|before|after|from|during|year|circa|noong|nang|taong|taon)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)", Pattern.CASE_INSENSITIVE);
+    private static final Pattern YEAR_DATE = Pattern.compile("\\b(" + MONTHS + "\\s\\d{1,2},?\\s)(1[0-9]{3}|20[0-9]{2})\\b");
+    private static final Pattern ERA_WORD = Pattern.compile("(?<![\\p{L}])(AD|BCE|BC)(?![\\p{L}])");
+
+    private static String era(String e, boolean fil) {
+        return e.equals("AD") ? "A.D." : e.equals("BC") ? "B.C." : "B.C.E.";
+    }
+
+    /**
+     * What a voice should be given for eras and years, just before it speaks (so a translation sees the
+     * original "A.D. 31"): the eras as letters, and in English the years as years, not as "one thousand
+     * eight hundred forty-four". Tagalog numbers are left to the Tagalog voice.
+     */
+    static String sayDates(String s, String lang) {
+        boolean fil = FIL.equals(lang);
+        if (!fil) {
+            s = replaceAll(YEAR_ERA_AFTER, s, m -> yearWords(Integer.parseInt(m.group(1))) + " " + era(m.group(2), false));
+            s = replaceAll(YEAR_ERA_BEFORE, s, m -> "A.D. " + yearWords(Integer.parseInt(m.group(2))));
+            s = replaceAll(YEAR_CUE, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
+            s = replaceAll(YEAR_DATE, s, m -> m.group(1) + yearWords(Integer.parseInt(m.group(2))));
+        }
+        return replaceAll(ERA_WORD, s, m -> era(m.group(1), fil)).replaceAll("(A\\.D\\.|B\\.C\\.(?:E\\.)?)\\.", "$1");
+    }
+
+    private static String replaceAll(Pattern p, String s, java.util.function.Function<java.util.regex.Matcher, String> f) {
+        java.util.regex.Matcher m = p.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(f.apply(m)));
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    /** A translated paragraph shared out over n runs again, in order, cut at sentence ends (else commas, else spaces). */
+    static List<String> shareOut(String text, int n) {
+        List<String> pieces = new ArrayList<>(Arrays.asList(text.trim().split("(?<=[.!?…])\\s+")));
+        while (pieces.size() < n) {
+            int at = 0;
+            for (int i = 1; i < pieces.size(); i++) if (pieces.get(i).length() > pieces.get(at).length()) at = i;
+            String longest = pieces.get(at);
+            int cut = longest.indexOf(',', longest.length() / 3);
+            if (cut < 0 || cut > longest.length() * 2 / 3) cut = longest.indexOf(' ', longest.length() / 2);
+            if (cut <= 0 || cut >= longest.length() - 1) break;
+            pieces.set(at, longest.substring(0, cut + 1).trim());
+            pieces.add(at + 1, longest.substring(cut + 1).trim());
+        }
+        List<String> out = new ArrayList<>();
+        int total = 0;
+        for (String p : pieces) total += p.length() + 1;
+        int left = pieces.size(), k = 0;
+        for (int r = 0; r < n; r++) {
+            StringBuilder sb = new StringBuilder();
+            int want = (total / n) * (r + 1);
+            int runsLeft = n - r;
+            int used = 0;
+            for (int q = 0; q < r; q++) used += out.get(q).length() + 1;
+            while (k < pieces.size() && (sb.length() == 0 || (pieces.size() - k > runsLeft - 1 && used + sb.length() < want))) {
+                if (sb.length() > 0) sb.append(' ');
+                sb.append(pieces.get(k++));
+            }
+            out.add(sb.length() == 0 ? "." : sb.toString());
+        }
+        return out;
+    }
+
     static String clean(String s) {
+        s = eraDots(s);
         s = URL.matcher(s).replaceAll(" link ");
         s = EMAIL.matcher(s).replaceAll(" email address ");
         s = PESO.matcher(s).replaceAll("$1 pesos");
@@ -387,7 +511,7 @@ final class TextPrep {
         lastVerseMode = verse;
         for (int li = 0; li < lines.size(); li++) {
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
-            String cleaned = applyUserLists(clean(lines.get(li)));
+            String cleaned = applyUserLists(clean(dropCodes(lines.get(li))));
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);

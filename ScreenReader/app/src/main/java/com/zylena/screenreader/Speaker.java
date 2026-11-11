@@ -349,17 +349,36 @@ final class Speaker {
             translateNext(runs, gen, i + 1);
             return;
         }
-        Translate.text(ctx, s.text, s.lang, out -> main.post(() -> {
+        // A whole paragraph is translated in one go, so each sentence has its context, then shared out over
+        // the runs it was cut into.
+        int j = i;
+        int chars = s.text.length();
+        while (j + 1 < runs.size()) {
+            TextPrep.Seg n = runs.get(j + 1);
+            if (n.translated || n.line != s.line || n.lastLine != s.lastLine || !n.lang.equals(s.lang) || n.heading != s.heading
+                    || chars + n.text.length() > 2500) break;
+            chars += n.text.length() + 1;
+            j++;
+        }
+        final int last = j;
+        StringBuilder all = new StringBuilder();
+        for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
+        Translate.text(ctx, all.toString(), s.lang, out -> main.post(() -> {
             if (gen != generation) return;
             if (out != null && !out.trim().isEmpty()) {
                 String to = Translate.other(s.lang);
-                String said = to.equals(TextPrep.FIL) ? TextPrep.sayTagalog(out) : out;
-                runs.set(i, new TextPrep.Seg(said, to, s.line, s.lastLine, s.heading, true));
+                List<String> parts = TextPrep.shareOut(out, last - i + 1);
+                for (int k = i; k <= last; k++) {
+                    String part = parts.get(k - i);
+                    String said = to.equals(TextPrep.FIL) ? TextPrep.sayTagalog(part) : part;
+                    TextPrep.Seg o = runs.get(k);
+                    runs.set(k, new TextPrep.Seg(said, to, o.line, o.lastLine, o.heading, true));
+                }
             } else if (i == 0) {
                 toast("Couldn't translate. Reading as it is. The translation pack needs internet the first time.");
             }
-            queue(runs, gen, i);
-            translateNext(runs, gen, i + 1);
+            for (int k = i; k <= last; k++) queue(runs, gen, k);
+            translateNext(runs, gen, last + 1);
         }));
     }
 
