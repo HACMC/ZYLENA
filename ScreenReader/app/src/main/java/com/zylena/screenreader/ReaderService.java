@@ -2373,6 +2373,7 @@ public class ReaderService extends AccessibilityService {
         android.widget.Button[] trBtn = new android.widget.Button[1];
         trBtn[0] = chip(translateLabel(), () -> {
             cycleTranslate();
+            updateButtonIcon();
             Logs.d(this, "translate: " + translateName());
             trBtn[0].setText(translateLabel());
             if (panelPaused && sp.isPaused()) panelChanged = true; // takes effect on Close
@@ -2905,6 +2906,7 @@ public class ReaderService extends AccessibilityService {
                 break;
             case "translate":
                 cycleTranslate();
+                updateButtonIcon();
                 android.widget.Toast.makeText(this, translateName(), android.widget.Toast.LENGTH_SHORT).show();
                 if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
                 break;
@@ -2960,8 +2962,9 @@ public class ReaderService extends AccessibilityService {
         for (String[] it0 : items) {
             String[] it = it0;
             boolean on = it0[0].equals("translate") && Prefs.translate(this);
-            if (on) it = new String[]{it0[0], it0[1], Prefs.taglish(this) ? "Taglish ON" : "Tagalog ON"};
-            else if (it0[0].equals("translate")) it = new String[]{it0[0], it0[1], "Translate off"};
+            boolean isTr = it0[0].equals("translate");
+            if (on) it = new String[]{it0[0], it0[1], Prefs.taglish(this) ? "Taglish: ON" : "Tagalog: ON"};
+            else if (isTr) it = new String[]{it0[0], it0[1], "Translate: OFF"};
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -2971,9 +2974,10 @@ public class ReaderService extends AccessibilityService {
             ball.setGravity(Gravity.CENTER);
             ball.setTextColor(0xFF0D0B0C);
             GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                    on ? new int[]{0xFF7BE495, 0xFF2EAD5B} : new int[]{0xFFF0D690, 0xFFD6AD55});
+                    on ? new int[]{0xFF7BE495, 0xFF2EAD5B} : isTr ? new int[]{0xFF8A8A8A, 0xFF5E5E5E} : new int[]{0xFFF0D690, 0xFFD6AD55});
             bg.setShape(GradientDrawable.OVAL);
-            if (on) bg.setStroke(Theme.dp(this, 3), 0xFFFFFFFF);
+            if (on) bg.setStroke(Theme.dp(this, 4), 0xFFFFFFFF);
+            if (isTr && !on) ball.setAlpha(0.75f);
             ball.setBackground(bg);
             ball.setContentDescription(it[2]);
             box.addView(ball, new LinearLayout.LayoutParams(size, size));
@@ -3116,6 +3120,13 @@ public class ReaderService extends AccessibilityService {
         } else {
             fadeSoon();
         }
+        // Green with a thick white ring while Translate is on, gold otherwise.
+        boolean tr = Prefs.translate(this);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                tr ? new int[]{0xFF7BE495, 0xFF2EAD5B} : new int[]{0xFFF0D690, 0xFFD6AD55});
+        bg.setShape(GradientDrawable.OVAL);
+        bg.setStroke(tr ? Theme.dp(this, 3) : (int) getResources().getDisplayMetrics().density, tr ? 0xFFFFFFFF : 0x99FFFFFF);
+        button.setBackground(bg);
         button.setImageResource(Speaker.get(this).isSpeaking() || scanning ? R.drawable.ic_stop : R.drawable.ic_speaker);
         button.setContentDescription(Speaker.get(this).isSpeaking() ? "Stop reading" : "Read screen");
     }
