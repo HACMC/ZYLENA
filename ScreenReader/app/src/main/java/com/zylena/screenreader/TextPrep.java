@@ -274,6 +274,9 @@ final class TextPrep {
     private static final String PAGE = "(?i:Page|Pg|Pp?|Pahina|Pah)\\.?\\s?\\d{1,4}(?:\\s?[-–]\\s?\\d{1,4})?";
     private static final Pattern CODE_LINE = Pattern.compile("^[\\s(\\[—–-]*(?:" + CODE + "|" + SOURCE + "|" + PAGE + "|\\[\\d{1,4}\\])[\\s)\\].,;:—–-]*$");
     private static final Pattern CODE_END = Pattern.compile("[\\s—–(\\[-]+(?:" + CODE + "|" + SOURCE + "|[A-Z]{2,5}\\s(?:[ivxlc]{2,7}|[IVXLC]{2,7}))\\.?[\\s)\\].]*$");
+    /** A code stuck straight to the end of a sentence ("...Spirit of God.EW v.3"), anywhere in the line. */
+    private static final Pattern CODE_STUCK = Pattern.compile("(?<=[.!?,;:”\"’)\\]])(?:(?:\\d[A-Z]{1,4}|[A-Z]{2,5}|[A-Z][a-z]{1,4})\\s?(?:\\d{1,4}|[ivxlcdm]{1,7}|[IVXLCDM]{1,7})\\.\\d{1,3}(?:\\s?[-–]\\s?\\d{1,3})?"
+            + "|[A-Z]{2,5}\\s?(?:[ivxlc]{1,7}|[IVXLC]{1,7}))(?![\\p{L}\\d])");
     private static final Pattern CODE_PAREN = Pattern.compile("\\s*[(\\[]\\s*(?:" + CODE + "|" + SOURCE + "|" + PAGE + ")\\s*[)\\]]");
     private static final Pattern PAGE_BRACKET = Pattern.compile("\\s*\\[\\s*" + PAGE + "\\s*\\]", Pattern.CASE_INSENSITIVE);
 
@@ -294,6 +297,7 @@ final class TextPrep {
         String t = line.trim();
         if (t.length() <= 16 && SHORT_CODE.matcher(t).matches()) return "";
         if (CODE_LINE.matcher(t).matches()) return "";
+        t = CODE_STUCK.matcher(t).replaceAll("");
         t = CODE_PAREN.matcher(t).replaceAll("");
         t = PAGE_BRACKET.matcher(t).replaceAll("");
         t = CODE_END.matcher(t).replaceAll("");

@@ -344,7 +344,8 @@ final class Speaker {
     private void translateNext(List<TextPrep.Seg> runs, int gen, int i) {
         if (gen != generation || i >= runs.size()) return;
         TextPrep.Seg s = runs.get(i);
-        if (s.translated) {
+        String target = "en".equals(Prefs.translateTo(ctx)) ? TextPrep.EN : TextPrep.FIL;
+        if (s.translated || s.lang.equals(target)) { // already in the language asked for
             queue(runs, gen, i);
             translateNext(runs, gen, i + 1);
             return;

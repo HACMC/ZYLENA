@@ -2371,14 +2371,11 @@ public class ReaderService extends AccessibilityService {
         bar.addView(chip("\u25A0 Stop", sp::stop));
         // Translate: English is read in Tagalog and Tagalog in English. On or off, it starts again at this paragraph.
         android.widget.Button[] trBtn = new android.widget.Button[1];
-        trBtn[0] = chip(translateLabel(), () -> {
-            cycleTranslate();
-            updateButtonIcon();
-            Logs.d(this, "translate: " + translateName());
+        trBtn[0] = chip(translateLabel(), () -> chooseTranslate(() -> {
             trBtn[0].setText(translateLabel());
             if (panelPaused && sp.isPaused()) panelChanged = true; // takes effect on Close
             else if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
-        });
+        }));
         bar.addView(trBtn[0]);
         android.widget.Button[] sizeBtn = new android.widget.Button[1];
         sizeBtn[0] = chip(sizeLabel(), () -> {
@@ -2571,22 +2568,107 @@ public class ReaderService extends AccessibilityService {
         return "🌐 " + translateName();
     }
 
-    /** Off, then Tagalog (pure), then Taglish, then off again. */
-    private void cycleTranslate() {
-        if (!Prefs.translate(this)) {
-            Prefs.setTranslate(this, true);
-            Prefs.setTaglish(this, false);
-        } else if (!Prefs.taglish(this)) {
-            Prefs.setTaglish(this, true);
-        } else {
-            Prefs.setTranslate(this, false);
-            Prefs.setTaglish(this, false);
+    private String translateName() {
+        switch (Prefs.translateTo(this)) {
+            case "fil":
+                return "Translate: Tagalog";
+            case "taglish":
+                return "Translate: Taglish";
+            case "en":
+                return "Translate: English";
+            default:
+                return "Translate: off";
         }
     }
 
-    private String translateName() {
-        if (!Prefs.translate(this)) return "Translate: off";
-        return Prefs.taglish(this) ? "Translate: Taglish" : "Translate: pure Tagalog";
+    private android.widget.FrameLayout chooser;
+
+    /**
+     * A card in the middle of the screen: what to turn the reading into. Off, Tagalog, Taglish (Tagalog with
+     * English names and everyday words) or English. The chosen one is green, and the floating button turns
+     * green while one is on.
+     */
+    @SuppressLint("ClickableViewAccessibility")
+    private void chooseTranslate(Runnable after) {
+        if (chooser != null || wm == null) return;
+        String now = Prefs.translateTo(this);
+        String[][] opts = {
+                {"", "Off", "Read as it is"},
+                {"fil", "Tagalog", "English read in Tagalog"},
+                {"taglish", "Taglish", "Tagalog with English names and everyday words"},
+                {"en", "English", "Tagalog read in English"}};
+        android.widget.FrameLayout f = new android.widget.FrameLayout(this);
+        f.setBackgroundColor(0x99000000);
+        f.setOnClickListener(v -> hideChooser());
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = Theme.dp(this, 16);
+        card.setPadding(pad, pad, pad, pad);
+        GradientDrawable cbg = new GradientDrawable();
+        cbg.setColor(0xFF1B1718);
+        cbg.setCornerRadius(Theme.dp(this, 20));
+        cbg.setStroke(Theme.dp(this, 1), 0x66D6AD55);
+        card.setBackground(cbg);
+        card.setClickable(true);
+        TextView title = new TextView(this);
+        title.setText("\uD83C\uDF10  Translate to");
+        title.setTextColor(0xFFF0D690);
+        title.setTextSize(18);
+        title.setPadding(0, 0, 0, Theme.dp(this, 10));
+        card.addView(title);
+        for (String[] o : opts) {
+            boolean sel = o[0].equals(now);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.VERTICAL);
+            row.setPadding(Theme.dp(this, 14), Theme.dp(this, 10), Theme.dp(this, 14), Theme.dp(this, 10));
+            GradientDrawable rbg = new GradientDrawable();
+            rbg.setCornerRadius(Theme.dp(this, 14));
+            rbg.setColor(sel ? 0xFF2EAD5B : 0xFF2A2425);
+            if (sel) rbg.setStroke(Theme.dp(this, 2), 0xFFFFFFFF);
+            row.setBackground(rbg);
+            TextView t = new TextView(this);
+            t.setText((sel ? "\u2713  " : "") + o[1]);
+            t.setTextColor(0xFFFFFFFF);
+            t.setTextSize(17);
+            row.addView(t);
+            TextView d = new TextView(this);
+            d.setText(o[2]);
+            d.setTextColor(sel ? 0xFFE9FFF0 : 0xFFB8AEB0);
+            d.setTextSize(12);
+            row.addView(d);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.bottomMargin = Theme.dp(this, 8);
+            card.addView(row, lp);
+            row.setOnClickListener(v -> {
+                Prefs.setTranslateTo(this, o[0]);
+                Logs.d(this, "translate: " + translateName());
+                hideChooser();
+                updateButtonIcon();
+                android.widget.Toast.makeText(this, translateName(), android.widget.Toast.LENGTH_SHORT).show();
+                if (after != null && !o[0].equals(now)) after.run();
+            });
+        }
+        android.widget.FrameLayout.LayoutParams cl = new android.widget.FrameLayout.LayoutParams(
+                getResources().getDisplayMetrics().widthPixels * 8 / 10, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        f.addView(card, cl);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                PixelFormat.TRANSLUCENT);
+        try {
+            wm.addView(f, lp);
+            chooser = f;
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void hideChooser() {
+        if (chooser == null) return;
+        try {
+            wm.removeView(chooser);
+        } catch (Exception ignored) {
+        }
+        chooser = null;
     }
 
     /** A button sized to its label, for the sideways-scrolling row. */
@@ -2905,10 +2987,9 @@ public class ReaderService extends AccessibilityService {
                 scanAgain();
                 break;
             case "translate":
-                cycleTranslate();
-                updateButtonIcon();
-                android.widget.Toast.makeText(this, translateName(), android.widget.Toast.LENGTH_SHORT).show();
-                if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
+                chooseTranslate(() -> {
+                    if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
+                });
                 break;
             case "locate":
                 locateHighlight();
@@ -2963,7 +3044,7 @@ public class ReaderService extends AccessibilityService {
             String[] it = it0;
             boolean on = it0[0].equals("translate") && Prefs.translate(this);
             boolean isTr = it0[0].equals("translate");
-            if (on) it = new String[]{it0[0], it0[1], Prefs.taglish(this) ? "Taglish: ON" : "Tagalog: ON"};
+            if (on) it = new String[]{it0[0], it0[1], translateName().replace("Translate: ", "") + ": ON"};
             else if (isTr) it = new String[]{it0[0], it0[1], "Translate: OFF"};
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);

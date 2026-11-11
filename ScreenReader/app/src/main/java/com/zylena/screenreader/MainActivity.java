@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row netRow, dataRow, aliveRow, fanRow, tuckRow;
+    private Ui.Row keyRow, netRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -460,6 +460,8 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, netRow.view);
+        keyRow = Ui.nav(this, R.drawable.ic_translate, "Google Translate key (optional)", "", this::editTranslateKey);
+        Ui.add(n, keyRow.view);
         dataRow = new Ui.Row(this, R.drawable.ic_info, "Data used", "");
         Ui.add(n, dataRow.view);
         col.addView(n);
@@ -569,6 +571,7 @@ public class MainActivity extends Activity {
 
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
+        keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translator is used" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
         set(tuckRow, Prefs.tuck(this));
         StringBuilder fanNames = new StringBuilder();
@@ -628,6 +631,30 @@ public class MainActivity extends Activity {
                             .show();
                 })
                 .setNegativeButton("Done", null)
+                .show();
+    }
+
+    /**
+     * The free web translator often turns this phone away ("too many requests"), and the translator on the
+     * phone is rougher. With the person's own Google Cloud Translation key (500,000 characters a month free)
+     * Translate is accurate. The key stays on this phone.
+     */
+    private void editTranslateKey() {
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setSingleLine(true);
+        e.setHint("Paste the key here");
+        e.setText(Prefs.translateKey(this));
+        new AlertDialog.Builder(this)
+                .setTitle("Google Translate key")
+                .setMessage("For the most accurate Translate. In Google Cloud console: create a project, turn on \"Cloud Translation API\", "
+                        + "then Credentials > Create API key. The first 500,000 characters a month are free. The key stays on this phone "
+                        + "and is only sent to Google. Leave empty to use the free translator.")
+                .setView(e)
+                .setPositiveButton("Save", (d, w) -> {
+                    Prefs.setTranslateKey(this, e.getText().toString());
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 

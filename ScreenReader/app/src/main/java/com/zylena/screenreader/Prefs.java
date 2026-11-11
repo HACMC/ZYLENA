@@ -57,22 +57,33 @@ final class Prefs {
         sp(c).edit().putString("tts_pkg", v).apply();
     }
 
-    /** Read each paragraph translated: English in Tagalog, Tagalog in English. */
+    /** What Translate turns the reading into: "" off, "fil" Tagalog, "taglish", "en" English. */
+    static String translateTo(Context c) {
+        SharedPreferences p = sp(c);
+        if (p.contains("translateTo")) return p.getString("translateTo", "");
+        return p.getBoolean("translate", false) ? (p.getBoolean("taglish", false) ? "taglish" : "fil") : "";
+    }
+
+    static void setTranslateTo(Context c, String v) {
+        sp(c).edit().putString("translateTo", v).putBoolean("translate", !v.isEmpty()).putBoolean("taglish", v.equals("taglish")).apply();
+    }
+
     static boolean translate(Context c) {
-        return sp(c).getBoolean("translate", false);
+        return !translateTo(c).isEmpty();
     }
 
-    /** Translate into Taglish (English names and everyday English words stay) rather than pure Tagalog. */
+    /** Taglish: English names and everyday English words stay in the Tagalog. */
     static boolean taglish(Context c) {
-        return sp(c).getBoolean("taglish", false);
+        return translateTo(c).equals("taglish");
     }
 
-    static void setTaglish(Context c, boolean v) {
-        sp(c).edit().putBoolean("taglish", v).apply();
+    /** The user's own Google Cloud Translation key (optional): accurate, and not turned away like the free web one. */
+    static String translateKey(Context c) {
+        return sp(c).getString("translate_key", "").trim();
     }
 
-    static void setTranslate(Context c, boolean v) {
-        sp(c).edit().putBoolean("translate", v).apply();
+    static void setTranslateKey(Context c, String v) {
+        sp(c).edit().putString("translate_key", v.trim()).apply();
     }
 
     static boolean floatingButton(Context c) {

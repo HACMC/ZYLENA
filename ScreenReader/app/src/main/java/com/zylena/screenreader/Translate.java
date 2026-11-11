@@ -116,7 +116,7 @@ final class Translate {
     }
 
     private static void translate(Context c, String text, String fromLang, Done out) {
-        if (System.currentTimeMillis() < onlineOffUntil || !Net.online(c)) {
+        if ((System.currentTimeMillis() < onlineOffUntil && Prefs.translateKey(c).isEmpty()) || !Net.online(c)) {
             offline(c, text, fromLang, out);
             return;
         }
@@ -124,8 +124,16 @@ final class Translate {
         net.execute(() -> {
             String said = null;
             boolean limited = false;
+            String key = Prefs.translateKey(c);
+            if (!key.isEmpty()) {
+                try {
+                    said = cloud(c, key, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
+                } catch (Exception e) {
+                    Logs.d(c, "translate with your Google key failed: " + e.getMessage());
+                }
+            }
             try {
-                said = google(c, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
+                if (said == null) said = google(c, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
             } catch (Exception e) {
                 Logs.d(c, "translate online failed: " + e);
                 limited = String.valueOf(e.getMessage()).contains("HTTP 429");
@@ -155,6 +163,34 @@ final class Translate {
                 offline(c, text, fromLang, out);
             });
         });
+    }
+
+    /** Google Cloud Translation with the user's own key: the official, accurate one. Runs off the main thread. */
+    private static String cloud(Context c, String key, String text, String from, String to) throws Exception {
+        java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
+                "https://translation.googleapis.com/language/translate/v2").openConnection();
+        h.setConnectTimeout(5000);
+        h.setReadTimeout(8000);
+        h.setRequestMethod("POST");
+        h.setDoOutput(true);
+        h.setRequestProperty("Content-Type", "application/x-www-form-urlencoded; charset=UTF-8");
+        h.setRequestProperty("X-goog-api-key", key);
+        try {
+            byte[] body = ("q=" + java.net.URLEncoder.encode(text, "UTF-8") + "&source=" + from + "&target=" + to + "&format=text").getBytes("UTF-8");
+            h.getOutputStream().write(body);
+            if (h.getResponseCode() != 200) throw new java.io.IOException("HTTP " + h.getResponseCode());
+            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+            try (java.io.InputStream in = h.getInputStream()) {
+                byte[] buf = new byte[8192];
+                for (int n; (n = in.read(buf)) > 0; ) b.write(buf, 0, n);
+            }
+            Net.translated(c, body.length + b.size() + 900);
+            String got = new org.json.JSONObject(b.toString("UTF-8")).getJSONObject("data").getJSONArray("translations")
+                    .getJSONObject(0).getString("translatedText").trim();
+            return got.isEmpty() ? null : got;
+        } finally {
+            h.disconnect();
+        }
     }
 
     /** Google Translate online (the free web one). Runs off the main thread. */
