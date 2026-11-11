@@ -116,53 +116,166 @@ final class Translate {
     }
 
     private static void translate(Context c, String text, String fromLang, Done out) {
-        if ((System.currentTimeMillis() < onlineOffUntil && Prefs.translateKey(c).isEmpty()) || !Net.online(c)) {
+        if (!Net.online(c)) {
             offline(c, text, fromLang, out);
             return;
         }
         Handler main = new Handler(Looper.getMainLooper());
         net.execute(() -> {
             String said = null;
-            boolean limited = false;
+            boolean limited = false, tried = false;
+            String from = TextPrep.FIL.equals(fromLang) ? "tl" : "en", to = TextPrep.FIL.equals(fromLang) ? "en" : "tl";
             String key = Prefs.translateKey(c);
             if (!key.isEmpty()) {
                 try {
-                    said = cloud(c, key, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
+                    said = cloud(c, key, text, from, to);
                 } catch (Exception e) {
                     Logs.d(c, "translate with your Google key failed: " + e.getMessage());
                 }
             }
-            try {
-                if (said == null) said = google(c, text, TextPrep.FIL.equals(fromLang) ? "tl" : "en", TextPrep.FIL.equals(fromLang) ? "en" : "tl");
-            } catch (Exception e) {
-                Logs.d(c, "translate online failed: " + e);
-                limited = String.valueOf(e.getMessage()).contains("HTTP 429");
+            if (said == null && System.currentTimeMillis() >= onlineOffUntil) {
+                tried = true;
+                try {
+                    said = google(c, text, from, to);
+                } catch (Exception e) {
+                    Logs.d(c, "translate online failed: " + e);
+                    limited = String.valueOf(e.getMessage()).contains("HTTP 429");
+                }
+            }
+            final boolean googleOk = said != null && !said.isEmpty();
+            // Google did not answer: the free MyMemory translator, as far as its daily allowance goes.
+            if (!googleOk && System.currentTimeMillis() >= memoryOffUntil) {
+                try {
+                    said = memory(c, text, from, to);
+                    if (said != null && !toldMemory) {
+                        toldMemory = true;
+                        Logs.d(c, "translate: using the free MyMemory translator");
+                    }
+                } catch (Exception e) {
+                    said = null;
+                    Logs.d(c, "translate with MyMemory failed: " + e.getMessage());
+                    memoryOffUntil = System.currentTimeMillis() + 10 * 60_000L;
+                }
             }
             final String got = said;
-            final boolean busy = limited;
+            final boolean busy = limited, asked = tried;
             main.post(() -> {
-                if (got != null && !got.isEmpty()) {
+                if (googleOk) {
                     onlineFails = 0;
                     waitMinutes = 0;
-                    out.done(got);
-                    return;
-                }
-                // Google says too many requests: respect it and leave it alone for an hour.
-                if (busy) {
-                    // 10 minutes, then 20, up to an hour if it keeps asking.
+                } else if (busy) {
+                    // Google says too many requests: respect it. 10 minutes, then 20, up to an hour if it keeps asking.
                     waitMinutes = Math.min(60, waitMinutes == 0 ? 10 : waitMinutes * 2);
                     onlineOffUntil = System.currentTimeMillis() + waitMinutes * 60_000L;
                     onlineFails = 0;
-                    Logs.d(c, "translate: Google asks to slow down, offline for " + waitMinutes + " minutes");
-                } else if (++onlineFails >= 2) {
-                    // Not answering: offline for a while, rather than waiting on every paragraph.
+                    Logs.d(c, "translate: Google asks to slow down, leaving it for " + waitMinutes + " minutes");
+                } else if (asked && ++onlineFails >= 2) {
+                    // Not answering: leave it for a while, rather than waiting on every paragraph.
                     onlineOffUntil = System.currentTimeMillis() + 10 * 60_000L;
                     onlineFails = 0;
-                    Logs.d(c, "translate: online not answering, offline for 10 minutes");
+                    Logs.d(c, "translate: Google not answering, leaving it for 10 minutes");
                 }
-                offline(c, text, fromLang, out);
+                if (got != null && !got.isEmpty()) out.done(got);
+                else offline(c, text, fromLang, out);
             });
         });
+    }
+
+    private static volatile long memoryOffUntil;
+    private static volatile boolean toldMemory;
+
+    /**
+     * MyMemory's free translator (api.mymemory.translated.net): no key, 500 bytes a request and a daily
+     * allowance, so the text goes in sentence-sized parts. Null when the allowance is used up. Off the main thread.
+     */
+    private static String memory(Context c, String text, String from, String to) throws Exception {
+        StringBuilder all = new StringBuilder();
+        for (String part : parts(text, 440)) {
+            java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
+                    "https://api.mymemory.translated.net/get?langpair=" + from + "%7C" + to + "&q="
+                            + java.net.URLEncoder.encode(part, "UTF-8")).openConnection();
+            h.setConnectTimeout(4000);
+            h.setReadTimeout(8000);
+            h.setRequestProperty("User-Agent", "ZYLENAScreenReader (Android)");
+            try {
+                int code = h.getResponseCode();
+                if (code == 429) {
+                    memoryOffUntil = System.currentTimeMillis() + 6 * 3600_000L;
+                    Logs.d(c, "translate: MyMemory's free allowance for today is used up");
+                    return null;
+                }
+                if (code != 200) throw new java.io.IOException("HTTP " + code);
+                java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+                try (java.io.InputStream in = h.getInputStream()) {
+                    byte[] buf = new byte[8192];
+                    for (int n; (n = in.read(buf)) > 0; ) b.write(buf, 0, n);
+                }
+                Net.translated(c, part.length() + b.size() + 900);
+                org.json.JSONObject j = new org.json.JSONObject(b.toString("UTF-8"));
+                String got = j.optJSONObject("responseData") == null ? "" : j.getJSONObject("responseData").optString("translatedText", "");
+                if (!"200".equals(j.optString("responseStatus")) || got.toUpperCase(java.util.Locale.ROOT).contains("MYMEMORY WARNING")) {
+                    memoryOffUntil = System.currentTimeMillis() + 6 * 3600_000L;
+                    Logs.d(c, "translate: MyMemory's free allowance for today is used up");
+                    return null;
+                }
+                if (got.trim().isEmpty()) return null;
+                if (all.length() > 0) all.append(' ');
+                all.append(android.text.Html.fromHtml(got.trim(), android.text.Html.FROM_HTML_MODE_LEGACY).toString());
+            } finally {
+                h.disconnect();
+            }
+        }
+        return all.toString().trim();
+    }
+
+    /** The text in parts of at most max UTF-8 bytes, cut at sentence ends, else at commas, else at spaces. */
+    static java.util.List<String> parts(String text, int max) {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        String rest = text.trim();
+        while (!rest.isEmpty()) {
+            if (rest.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= max) {
+                out.add(rest);
+                break;
+            }
+            int end = Math.min(rest.length(), max);
+            while (rest.substring(0, end).getBytes(java.nio.charset.StandardCharsets.UTF_8).length > max) end -= 8;
+            int cut = -1;
+            for (int i = end - 1; i > end / 3 && cut < 0; i--)
+                if (".!?".indexOf(rest.charAt(i)) >= 0 && i + 1 < rest.length() && rest.charAt(i + 1) == ' ') cut = i + 1;
+            for (int i = end - 1; i > end / 3 && cut < 0; i--) if (",;:".indexOf(rest.charAt(i)) >= 0) cut = i + 1;
+            for (int i = end - 1; i > 0 && cut < 0; i--) if (rest.charAt(i) == ' ') cut = i;
+            if (cut < 0) cut = end;
+            out.add(rest.substring(0, cut).trim());
+            rest = rest.substring(cut).trim();
+        }
+        return out;
+    }
+
+    /** Old English words the phone's small translator trips over, in today's words. */
+    private static final String[][] OLD = {
+            {"brethren and sisters", "brothers and sisters"}, {"brethren", "brothers"}, {"saith", "says"}, {"unto", "to"},
+            {"thou", "you"}, {"thee", "you"}, {"thy", "your"}, {"thine", "yours"}, {"ye", "you"}, {"hath", "has"},
+            {"doth", "does"}, {"hast", "have"}, {"art", "are"}, {"shalt", "shall"}, {"wilt", "will"}, {"whence", "from where"},
+            {"thither", "there"}, {"hither", "here"}, {"wherefore", "why"}, {"behold", "look"}, {"forcible", "powerful"},
+            {"verily", "truly"}, {"cometh", "comes"}, {"giveth", "gives"}, {"knoweth", "knows"}, {"loveth", "loves"},
+            {"maketh", "makes"}, {"sayeth", "says"}, {"goeth", "goes"}, {"doeth", "does"}, {"believeth", "believes"}};
+
+    static String modern(String s) {
+        for (String[] o : OLD) {
+            if ("art".equals(o[0])) {
+                s = s.replaceAll("\\b([Tt]hou|[Yy]ou) art\\b", "$1 are");
+                continue;
+            }
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\b" + o[0] + "\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                String r = Character.isUpperCase(m.group().charAt(0)) ? Character.toUpperCase(o[1].charAt(0)) + o[1].substring(1) : o[1];
+                m.appendReplacement(sb, r);
+            }
+            m.appendTail(sb);
+            s = sb.toString();
+        }
+        return s;
     }
 
     /** Google Cloud Translation with the user's own key: the official, accurate one. Runs off the main thread. */
@@ -226,8 +339,9 @@ final class Translate {
         }
     }
 
-    private static void offline(Context c, String text, String fromLang, Done out) {
+    private static void offline(Context c, String text0, String fromLang, Done out) {
         boolean fil = TextPrep.FIL.equals(fromLang);
+        final String text = fil ? text0 : modern(text0);
         Translator t = translator(fil);
         Handler main = new Handler(Looper.getMainLooper());
         // Only the first time: the pack takes a while to come, so say what's going on.

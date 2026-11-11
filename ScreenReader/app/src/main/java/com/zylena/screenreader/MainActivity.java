@@ -571,7 +571,7 @@ public class MainActivity extends Activity {
 
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
-        keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translator is used" : "Set: Translate uses your Google key");
+        keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
         set(tuckRow, Prefs.tuck(this));
         StringBuilder fanNames = new StringBuilder();
