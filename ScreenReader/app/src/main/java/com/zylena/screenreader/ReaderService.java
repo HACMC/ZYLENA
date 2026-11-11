@@ -435,6 +435,7 @@ public class ReaderService extends AccessibilityService {
         markedAlong = -1f;
         Logs.d(this, "screen " + pkg + ": " + lines.size() + " lines, " + segs.size() + " pieces, "
                 + TextPrep.lastDropped + " timestamp lines skipped" + (TextPrep.lastVerseMode ? ", verse numbers skipped" : ""));
+        if (!TextPrep.lastCodes.isEmpty()) Logs.d(this, "  left out as page numbers / book codes: " + TextPrep.lastCodes);
         if (Prefs.skipButtons(this) && !sn.skipped.isEmpty()) {
             Logs.d(this, "  left out as buttons: " + sn.skipped);
         }
@@ -2371,8 +2372,8 @@ public class ReaderService extends AccessibilityService {
         // Translate: English is read in Tagalog and Tagalog in English. On or off, it starts again at this paragraph.
         android.widget.Button[] trBtn = new android.widget.Button[1];
         trBtn[0] = chip(translateLabel(), () -> {
-            Prefs.setTranslate(this, !Prefs.translate(this));
-            Logs.d(this, "translate " + (Prefs.translate(this) ? "on" : "off"));
+            cycleTranslate();
+            Logs.d(this, "translate: " + translateName());
             trBtn[0].setText(translateLabel());
             if (panelPaused && sp.isPaused()) panelChanged = true; // takes effect on Close
             else if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
@@ -2566,7 +2567,25 @@ public class ReaderService extends AccessibilityService {
     }
 
     private String translateLabel() {
-        return Prefs.translate(this) ? "🌐 Translate: on" : "🌐 Translate: off";
+        return "🌐 " + translateName();
+    }
+
+    /** Off, then Tagalog (pure), then Taglish, then off again. */
+    private void cycleTranslate() {
+        if (!Prefs.translate(this)) {
+            Prefs.setTranslate(this, true);
+            Prefs.setTaglish(this, false);
+        } else if (!Prefs.taglish(this)) {
+            Prefs.setTaglish(this, true);
+        } else {
+            Prefs.setTranslate(this, false);
+            Prefs.setTaglish(this, false);
+        }
+    }
+
+    private String translateName() {
+        if (!Prefs.translate(this)) return "Translate: off";
+        return Prefs.taglish(this) ? "Translate: Taglish" : "Translate: pure Tagalog";
     }
 
     /** A button sized to its label, for the sideways-scrolling row. */
@@ -2885,9 +2904,8 @@ public class ReaderService extends AccessibilityService {
                 scanAgain();
                 break;
             case "translate":
-                Prefs.setTranslate(this, !Prefs.translate(this));
-                android.widget.Toast.makeText(this, Prefs.translate(this) ? "Translate on" : "Translate off",
-                        android.widget.Toast.LENGTH_SHORT).show();
+                cycleTranslate();
+                android.widget.Toast.makeText(this, translateName(), android.widget.Toast.LENGTH_SHORT).show();
                 if (sp.isSpeaking() || sp.isPaused()) speakFrom(Math.max(0, currentLine));
                 break;
             case "locate":
@@ -2939,7 +2957,11 @@ public class ReaderService extends AccessibilityService {
         f.setOnClickListener(v -> hideFan());
         int size = Theme.dp(this, 54), boxW = Theme.dp(this, 84), boxH = size + Theme.dp(this, 22);
         List<View> boxes = new ArrayList<>();
-        for (String[] it : items) {
+        for (String[] it0 : items) {
+            String[] it = it0;
+            boolean on = it0[0].equals("translate") && Prefs.translate(this);
+            if (on) it = new String[]{it0[0], it0[1], Prefs.taglish(this) ? "Taglish ON" : "Tagalog ON"};
+            else if (it0[0].equals("translate")) it = new String[]{it0[0], it0[1], "Translate off"};
             LinearLayout box = new LinearLayout(this);
             box.setOrientation(LinearLayout.VERTICAL);
             box.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -2948,8 +2970,10 @@ public class ReaderService extends AccessibilityService {
             ball.setTextSize(22);
             ball.setGravity(Gravity.CENTER);
             ball.setTextColor(0xFF0D0B0C);
-            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFFF0D690, 0xFFD6AD55});
+            GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    on ? new int[]{0xFF7BE495, 0xFF2EAD5B} : new int[]{0xFFF0D690, 0xFFD6AD55});
             bg.setShape(GradientDrawable.OVAL);
+            if (on) bg.setStroke(Theme.dp(this, 3), 0xFFFFFFFF);
             ball.setBackground(bg);
             ball.setContentDescription(it[2]);
             box.addView(ball, new LinearLayout.LayoutParams(size, size));

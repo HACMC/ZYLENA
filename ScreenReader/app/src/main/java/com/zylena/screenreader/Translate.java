@@ -56,21 +56,32 @@ final class Translate {
         return text;
     }
 
+    /** Taglish: names and these everyday English words stay English in the Tagalog. */
+    private static final java.util.regex.Pattern CAPS = java.util.regex.Pattern.compile(
+            "(?<=[\\p{Ll},;:] )\\p{Lu}[\\p{L}'\u2019-]*(?: \\p{Lu}[\\p{L}'\u2019-]*)*");
+    private static final java.util.regex.Pattern LOAN = java.util.regex.Pattern.compile(
+            "\\b(?:church|churches|Bible|prophecy|prophecies|prophet|prophets|message|messages|vision|visions|volume|experience|"
+                    + "experiences|Sabbath|Christian|Christians|angel|angels|gospel|chapter|book|books|world|power|faith|grace|sin|sins|"
+                    + "truth|love|life|time|people|family|work|test|study|lesson|prayer|pray|Spirit|mission|movement|doctrine|"
+                    + "judgment|sanctuary|covenant|law|commandments|salvation|baptism|reform|publish|published|edition|"
+                    + "page|pages|science|report|plan|point|error|proof|fact)\\b", java.util.regex.Pattern.CASE_INSENSITIVE);
+
     static void text(Context c, String text, String fromLang, Done out) {
         text = original(text, fromLang);
+        boolean toFil = !TextPrep.FIL.equals(fromLang);
         java.util.List<String> kept = new java.util.ArrayList<>();
+        int strict = 0;
         String sent = text;
-        if (!TextPrep.FIL.equals(fromLang)) {
-            java.util.regex.Matcher m = KEEP.matcher(text);
-            StringBuffer sb = new StringBuffer();
-            while (m.find()) {
-                kept.add(m.group());
-                m.appendReplacement(sb, "ZQ" + kept.size() + "X");
+        if (toFil) {
+            sent = protect(KEEP, sent, kept);
+            strict = kept.size();
+            if (Prefs.taglish(c)) {
+                sent = protect(CAPS, sent, kept);
+                sent = protect(LOAN, sent, kept);
             }
-            m.appendTail(sb);
-            sent = sb.toString();
         }
         final String plain = text;
+        final int must = strict;
         translate(c, sent, fromLang, got -> {
             if (got == null || kept.isEmpty()) {
                 out.done(got);
@@ -80,14 +91,28 @@ final class Translate {
             for (int i = 0; i < kept.size(); i++) {
                 java.util.regex.Pattern ph = java.util.regex.Pattern.compile("ZQ\\s?" + (i + 1) + "\\s?X", java.util.regex.Pattern.CASE_INSENSITIVE);
                 if (!ph.matcher(back).find()) {
-                    // The marker was lost: take the plain translation instead.
-                    translate(c, plain, fromLang, out);
-                    return;
+                    // A name's marker was lost: take the plain translation instead. Other words just go missing.
+                    if (i < must) {
+                        translate(c, plain, fromLang, out);
+                        return;
+                    }
+                    continue;
                 }
                 back = ph.matcher(back).replaceFirst(java.util.regex.Matcher.quoteReplacement(kept.get(i)));
             }
             out.done(back);
         });
+    }
+
+    private static String protect(java.util.regex.Pattern p, String text, java.util.List<String> kept) {
+        java.util.regex.Matcher m = p.matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            kept.add(m.group());
+            m.appendReplacement(sb, "ZQ" + kept.size() + "X");
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private static void translate(Context c, String text, String fromLang, Done out) {

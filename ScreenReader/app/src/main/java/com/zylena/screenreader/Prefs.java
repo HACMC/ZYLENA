@@ -62,6 +62,15 @@ final class Prefs {
         return sp(c).getBoolean("translate", false);
     }
 
+    /** Translate into Taglish (English names and everyday English words stay) rather than pure Tagalog. */
+    static boolean taglish(Context c) {
+        return sp(c).getBoolean("taglish", false);
+    }
+
+    static void setTaglish(Context c, boolean v) {
+        sp(c).edit().putBoolean("taglish", v).apply();
+    }
+
     static void setTranslate(Context c, boolean v) {
         sp(c).edit().putBoolean("translate", v).apply();
     }
@@ -96,7 +105,7 @@ final class Prefs {
 
     /** The floating button's four shortcuts (ids from Shortcuts.ALL), comma separated. */
     static String shortcuts(Context c) {
-        return sp(c).getString("shortcuts", "scan,translate,locate,settings");
+        return sp(c).getString("shortcuts", "picture,translate,scan,locate");
     }
 
     static void setShortcuts(Context c, String v) {

@@ -278,8 +278,21 @@ final class TextPrep {
     private static final Pattern PAGE_BRACKET = Pattern.compile("\\s*\\[\\s*" + PAGE + "\\s*\\]", Pattern.CASE_INSENSITIVE);
 
     /** The line without page numbers and book codes; empty when the whole line was one. */
+    static volatile String lastCodes = "";
+    private static final Pattern ODD_SPACE = Pattern.compile("[\\p{Z}\\u200B-\\u200D\\u2060\\uFEFF]+");
+    /** A short line that is only letters, a number (or roman numeral), a full stop and a number: "EW vi.1". */
+    private static final Pattern SHORT_CODE = Pattern.compile("^[\\s(\\[—–-]*\\d?\\p{L}{1,6}\\s?(?:\\d{1,4}|[ivxlcdmIVXLCDM]{1,7})\\s?[.,:·]\\s?\\d{1,3}[\\s)\\].,;:—–-]*$");
+
     static String dropCodes(String line) {
+        String was = line.trim();
+        String r = dropCodes0(ODD_SPACE.matcher(line).replaceAll(" "));
+        if (!r.equals(was) && lastCodes.length() < 160) lastCodes += (lastCodes.isEmpty() ? "" : " | ") + (was.length() > 40 ? was.substring(Math.max(0, was.length() - 40)) : was);
+        return r;
+    }
+
+    private static String dropCodes0(String line) {
         String t = line.trim();
+        if (t.length() <= 16 && SHORT_CODE.matcher(t).matches()) return "";
         if (CODE_LINE.matcher(t).matches()) return "";
         t = CODE_PAREN.matcher(t).replaceAll("");
         t = PAGE_BRACKET.matcher(t).replaceAll("");
@@ -506,12 +519,13 @@ final class TextPrep {
     static List<Seg> prepare(List<String> lines, boolean skipTimes, boolean skipRefs, boolean readVerses) {
         List<Seg> out = new ArrayList<>();
         int dropped = 0;
+        lastCodes = "";
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
         for (int li = 0; li < lines.size(); li++) {
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
-            String cleaned = applyUserLists(clean(dropCodes(lines.get(li))));
+            String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);
