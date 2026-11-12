@@ -542,6 +542,8 @@ final class TextPrep {
                         .replaceAll("^[\\s)\\];,.]+", "");
                 if (cleaned.chars().noneMatch(Character::isLetter)) continue;
             }
+            // "(Cf." and the like, left alone on a line when its reference is a separate link.
+            if (cleaned.replaceAll("(?i)\\b(?:cf|see also|see|compare)\\b", "").chars().noneMatch(Character::isLetter)) continue;
             // Before sentence splitting, so "Gen. 1:1-5" isn't cut at the abbreviation's full stop.
             boolean fil = Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL);
             cleaned = Bible.expand(cleaned, fil);

@@ -100,8 +100,22 @@ final class Translate {
                 }
                 back = ph.matcher(back).replaceFirst(java.util.regex.Matcher.quoteReplacement(kept.get(i)));
             }
-            out.done(back);
+            out.done(toFil && must > 0 ? personMarkers(back) : back);
         });
+    }
+
+    /** A person's name takes si / ni / kay in Tagalog, where the translator saw only a marker and wrote ang / ng / sa. */
+    static String personMarkers(String s) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\b([Aa]ng|[Nn]g|[Ss]a) (?=" + KEEP.pattern() + ")").matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String w = m.group(1), l = w.toLowerCase(java.util.Locale.ROOT);
+            String r = l.equals("ang") ? "si" : l.equals("ng") ? "ni" : "kay";
+            if (Character.isUpperCase(w.charAt(0))) r = Character.toUpperCase(r.charAt(0)) + r.substring(1);
+            m.appendReplacement(sb, r + " ");
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private static String protect(java.util.regex.Pattern p, String text, java.util.List<String> kept) {
