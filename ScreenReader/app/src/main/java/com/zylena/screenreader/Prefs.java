@@ -161,6 +161,15 @@ final class Prefs {
         sp(c).edit().putBoolean("use_internet", v).apply();
     }
 
+    /** How the Tagalog translation talks: "everyday" (for anyone), "casual", "modern" or "formal". */
+    static String tagStyle(Context c) {
+        return sp(c).getString("tag_style", "everyday");
+    }
+
+    static void setTagStyle(Context c, String v) {
+        sp(c).edit().putString("tag_style", v).apply();
+    }
+
     /** The online twin of the voice when there is internet; off, the voice on the phone always reads. */
     static boolean onlineVoice(Context c) {
         return sp(c).getBoolean("online_voice", true);

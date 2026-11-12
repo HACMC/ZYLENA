@@ -69,6 +69,7 @@ final class Translate {
     static void text(Context c, String text, String fromLang, Done out) {
         text = original(text, fromLang);
         boolean toFil = !TextPrep.FIL.equals(fromLang);
+        final String style = Prefs.tagStyle(c);
         if (toFil) text = sense(text);
         final boolean prophesy = toFil && java.util.regex.Pattern.compile("\\bprophes(?:y|ies|ied|ying)\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text).find();
         java.util.List<String> kept = new java.util.ArrayList<>();
@@ -80,12 +81,14 @@ final class Translate {
             if (Prefs.taglish(c)) {
                 sent = protect(CAPS, sent, kept);
                 sent = protect(LOAN, sent, kept);
+            } else if (style.equals("modern")) {
+                sent = protect(LOAN, sent, kept); // today's speech keeps everyday English words
             }
         }
         final String plain = text;
         final int must = strict;
         translate(c, sent, fromLang, got -> {
-            if (got != null && toFil) got = churchWords(got, prophesy);
+            if (got != null && toFil) got = churchWords(got, prophesy, style);
             if (got == null || kept.isEmpty()) {
                 out.done(got);
                 return;
@@ -96,7 +99,7 @@ final class Translate {
                 if (!ph.matcher(back).find()) {
                     // A name's marker was lost: take the plain translation instead. Other words just go missing.
                     if (i < must) {
-                        translate(c, plain, fromLang, g -> out.done(g == null ? null : churchWords(g, prophesy)));
+                        translate(c, plain, fromLang, g -> out.done(g == null ? null : churchWords(g, prophesy, style)));
                         return;
                     }
                     continue;
@@ -118,14 +121,35 @@ final class Translate {
      * The words an Adventist reader expects: to prophesy is magpropesiya, never manghula (fortune telling);
      * one spelling of Diyos; mesmerismo.
      */
-    static String churchWords(String s, boolean prophesy) {
+    static String churchWords(String s, boolean prophesy, String style) {
         if (prophesy) {
-            s = s.replaceAll("\\b[Mm]anganghuhula\\b|\\b[Mm]anghuhula\\b", "magpopropesiya")
-                    .replaceAll("\\b[Mm]anghula(?: ka)?\\b", "magpropesiya")
-                    .replaceAll("\\b[Nn]anghula\\b", "nagpropesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpopropesiya");
+            s = s.replaceAll("\\b[Mm]anganghuhula\\b|\\b[Mm]anghuhula\\b|\\b[Mm]agpopropesiya\\b", "magpapahayag ng propesiya")
+                    .replaceAll("\\b[Mm]anghula(?: ka)?\\b|\\b[Mm]agpropesiya\\b", "magpahayag ng propesiya")
+                    .replaceAll("\\b[Nn]anghula\\b", "nagpahayag ng propesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpapahayag ng propesiya");
         }
-        return everyday(s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo"));
+        s = s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo");
+        if (style.equals("formal")) return s;
+        s = swap(swap(s, PLAIN), SPANISH);
+        return style.equals("casual") ? swap(s, CASUAL) : s;
     }
+
+    /** Deep Tagalog words in the Spanish-rooted ones everybody uses. */
+    private static final String[][] SPANISH = {
+            {"aklat", "libro"}, {"mga aklat", "mga libro"}, {"salapi", "pera"}, {"silid", "kuwarto"}, {"pahayagan", "diyaryo"},
+            {"paaralan", "eskuwelahan"}, {"dalubhasa", "eksperto"}, {"agham", "siyensiya"}, {"talaan", "listahan"},
+            {"suliranin", "problema"}, {"mga suliranin", "mga problema"}, {"pook", "lugar"}, {"dako", "lugar"}, {"mag-anak", "pamilya"},
+            {"sanlinggo", "linggo"}, {"liham", "sulat"}, {"panauhin", "bisita"}, {"kawani", "empleyado"}, {"hapag", "mesa"},
+            {"durungawan", "bintana"}, {"pagsusulit", "eksamen"}, {"kalatas", "mensahe"}, {"salarin", "kriminal"},
+            {"pamahalaan", "gobyerno"}, {"manggagamot", "doktor"}, {"sasakyang-dagat", "barko"}, {"lathalain", "artikulo"}, {"tanggapan", "opisina"},
+            {"bantayog", "monumento"}, {"sagisag", "simbolo"}, {"kasapi", "miyembro"}, {"mga kasapi", "mga miyembro"},
+            {"panukala", "plano"}, {"layon", "layunin"}, {"batayan", "basehan"}};
+
+    /** How friends talk. */
+    private static final String[][] CASUAL = {
+            {"dahil", "kasi"}, {"mayroon", "meron"}, {"mayroong", "merong"}, {"ganoon", "ganun"}, {"kaunti", "konti"},
+            {"iyon", "yun"}, {"iyan", "yan"}, {"niyon", "nun"}, {"noon", "nun"}, {"papaano", "paano"},
+            {"nasaan", "nasan"}, {"hindi ba", "di ba"}, {"at saka", "tsaka"}, {"kailan man", "kahit kailan"}, {"sapat na", "tama na"},
+            {"lubha", "sobra"}, {"lubhang", "sobrang"}, {"subukin", "subukan"}, {"batiin", "kumustahin"}};
 
     /** Deep or bookish Tagalog in the words people use every day, so anyone can follow. */
     private static final String[][] PLAIN = {
@@ -138,10 +162,6 @@ final class Translate {
             {"nais", "gusto"}, {"batid", "alam"}, {"tuwina", "palagi"}, {"labis na", "sobrang"}, {"sapul", "mula"},
             {"kaniyang", "kanyang"}, {"kaniya", "kanya"}, {"kanilang mga sarili", "sarili nila"}, {"yaon", "iyon"},
             {"wari", "parang"}, {"tila", "parang"}, {"sakaling", "kung"}, {"pagkaraan", "pagkatapos"}, {"pagkaraang", "pagkatapos"}};
-
-    static String everyday(String s) {
-        return swap(s, PLAIN);
-    }
 
     /** Whole words only, keeping a capital first letter. */
     private static String swap(String s, String[][] pairs) {

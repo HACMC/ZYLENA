@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row keyRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
+    private Ui.Row keyRow, styleRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -468,6 +468,8 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, onlineVoiceRow.view);
+        styleRow = Ui.nav(this, R.drawable.ic_translate, "Tagalog translation style", "", this::pickTagStyle);
+        Ui.add(n, styleRow.view);
         keyRow = Ui.nav(this, R.drawable.ic_translate, "Google Translate key (optional)", "", this::editTranslateKey);
         Ui.add(n, keyRow.view);
         dataRow = new Ui.Row(this, R.drawable.ic_info, "Data used", "");
@@ -579,6 +581,9 @@ public class MainActivity extends Activity {
 
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
+        int st = Math.max(0, java.util.Arrays.asList(STYLE_IDS).indexOf(Prefs.tagStyle(this)));
+        styleRow.setValue(STYLE_NAMES[st]);
+        styleRow.setSub(STYLE_SUBS[st]);
         set(onlineVoiceRow, Prefs.onlineVoice(this));
         keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
@@ -681,6 +686,28 @@ public class MainActivity extends Activity {
                     recreate(); // sliders and switches show the defaults
                 })
                 .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private static final String[] STYLE_IDS = {"everyday", "casual", "modern", "formal"};
+    private static final String[] STYLE_NAMES = {"Everyday", "Casual", "Modern", "Formal"};
+    private static final String[] STYLE_SUBS = {
+            "Everyday words anyone can follow: pero, dahil, para, libro",
+            "How friends talk: kasi, meron, yung, ganun",
+            "Everyday words, and common English words stay English",
+            "Book Tagalog as the translator gives it: ngunit, sapagkat, upang"};
+
+    private void pickTagStyle() {
+        String[] labels = new String[STYLE_IDS.length];
+        for (int i = 0; i < labels.length; i++) labels[i] = STYLE_NAMES[i] + ": " + STYLE_SUBS[i];
+        int now = java.util.Arrays.asList(STYLE_IDS).indexOf(Prefs.tagStyle(this));
+        new AlertDialog.Builder(this)
+                .setTitle("Tagalog translation style")
+                .setSingleChoiceItems(labels, now, (d, which) -> {
+                    Prefs.setTagStyle(this, STYLE_IDS[which]);
+                    d.dismiss();
+                    refresh();
+                })
                 .show();
     }
 
