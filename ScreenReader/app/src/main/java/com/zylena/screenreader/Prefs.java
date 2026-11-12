@@ -161,6 +161,15 @@ final class Prefs {
         sp(c).edit().putBoolean("use_internet", v).apply();
     }
 
+    /** "word = translation" lines the user taught Translate. */
+    static String glossary(Context c) {
+        return sp(c).getString("tr_list", "");
+    }
+
+    static void setGlossary(Context c, String v) {
+        sp(c).edit().putString("tr_list", v).apply();
+    }
+
     /** How the Tagalog translation talks: "everyday" (for anyone), "casual", "modern" or "formal". */
     static String tagStyle(Context c) {
         return sp(c).getString("tag_style", "everyday");

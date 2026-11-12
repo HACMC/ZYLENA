@@ -58,7 +58,7 @@ final class Translate {
 
     /** Taglish: names and these everyday English words stay English in the Tagalog. */
     private static final java.util.regex.Pattern CAPS = java.util.regex.Pattern.compile(
-            "(?<=[\\p{Ll},;:] )\\p{Lu}[\\p{L}'\u2019-]*(?: \\p{Lu}[\\p{L}'\u2019-]*)*");
+            "(?<=[\\p{Ll},;:] )(?!ZQ\\d)\\p{Lu}[\\p{L}'\u2019-]*(?: (?!ZQ\\d)\\p{Lu}[\\p{L}'\u2019-]*)*");
     private static final java.util.regex.Pattern LOAN = java.util.regex.Pattern.compile(
             "\\b(?:church|churches|Bible|prophecy|prophecies|prophet|prophets|message|messages|vision|visions|volume|experience|"
                     + "experiences|Sabbath|Christian|Christians|angel|angels|gospel|chapter|book|books|world|power|faith|grace|sin|sins|"
@@ -78,6 +78,20 @@ final class Translate {
         if (toFil) {
             sent = protect(KEEP, sent, kept);
             strict = kept.size();
+        }
+        // The words the user taught: on the page they are swapped for a marker that comes back as the taught word.
+        final java.util.List<String[]> taught = TextPrep.parseSay(Prefs.glossary(c));
+        for (String[] t : taught) {
+            java.util.regex.Matcher m = word(t[0]).matcher(sent);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                kept.add(t[1]);
+                m.appendReplacement(sb, "ZQ" + kept.size() + "X");
+            }
+            m.appendTail(sb);
+            sent = sb.toString();
+        }
+        if (toFil) {
             if (Prefs.taglish(c)) {
                 sent = protect(CAPS, sent, kept);
                 sent = protect(LOAN, sent, kept);
@@ -90,7 +104,7 @@ final class Translate {
         translate(c, sent, fromLang, got -> {
             if (got != null && toFil) got = churchWords(got, prophesy, style);
             if (got == null || kept.isEmpty()) {
-                out.done(got);
+                out.done(got == null ? null : taught(got, taught));
                 return;
             }
             String back = got;
@@ -99,20 +113,34 @@ final class Translate {
                 if (!ph.matcher(back).find()) {
                     // A name's marker was lost: take the plain translation instead. Other words just go missing.
                     if (i < must) {
-                        translate(c, plain, fromLang, g -> out.done(g == null ? null : churchWords(g, prophesy, style)));
+                        translate(c, plain, fromLang, g -> out.done(g == null ? null : taught(churchWords(g, prophesy, style), taught)));
                         return;
                     }
                     continue;
                 }
                 back = ph.matcher(back).replaceFirst(java.util.regex.Matcher.quoteReplacement(kept.get(i)));
             }
-            out.done(toFil && must > 0 ? personMarkers(back) : back);
+            out.done(taught(toFil && must > 0 ? personMarkers(back) : back, taught));
         });
+    }
+
+    private static java.util.regex.Pattern word(String w) {
+        return java.util.regex.Pattern.compile("(?<![\\p{L}\\d'’-])" + java.util.regex.Pattern.quote(w) + "(?![\\p{L}\\d'’-])",
+                java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+    }
+
+    /** The taught words again, on the translation itself: for a word the translator keeps getting wrong. */
+    static String taught(String s, java.util.List<String[]> pairs) {
+        for (String[] t : pairs) s = word(t[0]).matcher(s).replaceAll(java.util.regex.Matcher.quoteReplacement(t[1]));
+        return s;
     }
 
     /** Old senses of everyday words, said the way they are meant, so the translator picks the right Tagalog. */
     static String sense(String s) {
         s = modern(s);
+        // "A counterfeit" alone comes out as the half word "pekeng": give the translator a noun to hang it on.
+        s = s.replaceAll("\\b([Aa]|[Tt]he|[Tt]his|[Tt]hat|[Ee]very|[Nn]o) counterfeit(?= (?:is|was|also|has|had|will|would|may|can|must|appeared|of)\\b|[,.;:!?])", "$1 fake thing")
+                .replaceAll("\\b([Cc])ounterfeits(?= (?:are|were|also|have|had|will|would|may|can|must|appeared|of)\\b|[,.;:!?])", "$1ake things");
         return s.replaceAll("\\b([Tt])he design of\\b", "$1he purpose of")
                 .replaceAll("\\b([Hh]is|[Hh]er|[Tt]heir|[Gg]od's|[Mm]y|[Oo]ur) design\\b", "$1 purpose");
     }
@@ -128,6 +156,9 @@ final class Translate {
                     .replaceAll("\\b[Nn]anghula\\b", "nagpahayag ng propesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpapahayag ng propesiya");
         }
         s = s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo");
+        // "The purpose … is to imitate": ang layunin … ay gayahin, without a second "para".
+        s = s.replaceAll("\\b((?:[Ll]ayunin|[Ll]ayon|[Tt]ungkulin)\\b[^.!?;]{0,80}? ay) (?:para|upang) (?!sa\\b|kay\\b|ng\\b)", "$1 ")
+                .replaceAll("\\b([Ii]sang|[Aa]ng|[Mm]ga) pekeng ay\\b", "$1 peke ay");
         if (style.equals("formal")) return s;
         s = swap(swap(s, PLAIN), SPANISH);
         return style.equals("casual") ? swap(s, CASUAL) : s;

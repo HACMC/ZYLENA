@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row keyRow, styleRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
+    private Ui.Row keyRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -470,6 +470,8 @@ public class MainActivity extends Activity {
         Ui.add(n, onlineVoiceRow.view);
         styleRow = Ui.nav(this, R.drawable.ic_translate, "Tagalog translation style", "", this::pickTagStyle);
         Ui.add(n, styleRow.view);
+        glossRow = Ui.nav(this, R.drawable.ic_translate, "My translation words", "", this::editGlossary);
+        Ui.add(n, glossRow.view);
         keyRow = Ui.nav(this, R.drawable.ic_translate, "Google Translate key (optional)", "", this::editTranslateKey);
         Ui.add(n, keyRow.view);
         dataRow = new Ui.Row(this, R.drawable.ic_info, "Data used", "");
@@ -584,6 +586,8 @@ public class MainActivity extends Activity {
         int st = Math.max(0, java.util.Arrays.asList(STYLE_IDS).indexOf(Prefs.tagStyle(this)));
         styleRow.setValue(STYLE_NAMES[st]);
         styleRow.setSub(STYLE_SUBS[st]);
+        int gl = TextPrep.parseSay(Prefs.glossary(this)).size();
+        glossRow.setSub(gl == 0 ? "Teach Translate which word to use" : gl + (gl == 1 ? " word" : " words"));
         set(onlineVoiceRow, Prefs.onlineVoice(this));
         keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
@@ -747,6 +751,34 @@ public class MainActivity extends Activity {
                     Speaker.get(this).setSleepTimer(mins[which]);
                     refresh();
                 })
+                .show();
+    }
+
+    /** Edits the words the user taught Translate. */
+    private void editGlossary() {
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setText(Prefs.glossary(this));
+        e.setHint("counterfeit = huwad\npekeng = huwad na\nsimbahan = iglesia");
+        e.setMinLines(6);
+        e.setGravity(android.view.Gravity.TOP);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int p = Theme.dp(this, 20);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(p, Theme.dp(this, 8), p, 0);
+        box.addView(Theme.body(this, "One per line: word = the word you want. The left side can be the word on the page "
+                + "(English or Tagalog) or a word the translation keeps saying wrong.", Theme.MUTED, 13));
+        box.addView(e);
+        new AlertDialog.Builder(this)
+                .setTitle("My translation words")
+                .setView(box)
+                .setPositiveButton("Save", (d, w) -> {
+                    Prefs.setGlossary(this, e.getText().toString());
+                    Logs.d(this, "translation words: " + TextPrep.parseSay(Prefs.glossary(this)).size() + " saved");
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
                 .show();
     }
 
