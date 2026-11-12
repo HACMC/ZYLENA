@@ -109,6 +109,7 @@ final class Translate {
 
     /** Old senses of everyday words, said the way they are meant, so the translator picks the right Tagalog. */
     static String sense(String s) {
+        s = modern(s);
         return s.replaceAll("\\b([Tt])he design of\\b", "$1he purpose of")
                 .replaceAll("\\b([Hh]is|[Hh]er|[Tt]heir|[Gg]od's|[Mm]y|[Oo]ur) design\\b", "$1 purpose");
     }
@@ -123,7 +124,39 @@ final class Translate {
                     .replaceAll("\\b[Mm]anghula(?: ka)?\\b", "magpropesiya")
                     .replaceAll("\\b[Nn]anghula\\b", "nagpropesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpopropesiya");
         }
-        return s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo");
+        return everyday(s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo"));
+    }
+
+    /** Deep or bookish Tagalog in the words people use every day, so anyone can follow. */
+    private static final String[][] PLAIN = {
+            {"sapagka't", "dahil"}, {"sapagkat", "dahil"}, {"yamang", "dahil"}, {"nguni't", "pero"}, {"ngunit", "pero"},
+            {"subali't", "pero"}, {"subalit", "pero"}, {"datapuwa't", "pero"}, {"datapwat", "pero"}, {"gayunpaman", "kahit ganoon"},
+            {"gayon pa man", "kahit ganoon"}, {"samakatuwid", "kaya"}, {"upang", "para"}, {"nararapat", "dapat"},
+            {"marahil", "siguro"}, {"lamang", "lang"}, {"bagama't", "kahit na"}, {"bagamat", "kahit na"}, {"bagaman", "kahit na"},
+            {"ukol sa", "tungkol sa"}, {"hinggil sa", "tungkol sa"}, {"maaaring", "puwedeng"}, {"maaari", "puwede"},
+            {"kinakailangang", "kailangang"}, {"kinakailangan", "kailangan"}, {"gayundin", "ganoon din"}, {"gayon din", "ganoon din"},
+            {"nais", "gusto"}, {"batid", "alam"}, {"tuwina", "palagi"}, {"labis na", "sobrang"}, {"sapul", "mula"},
+            {"kaniyang", "kanyang"}, {"kaniya", "kanya"}, {"kanilang mga sarili", "sarili nila"}, {"yaon", "iyon"},
+            {"wari", "parang"}, {"tila", "parang"}, {"sakaling", "kung"}, {"pagkaraan", "pagkatapos"}, {"pagkaraang", "pagkatapos"}};
+
+    static String everyday(String s) {
+        return swap(s, PLAIN);
+    }
+
+    /** Whole words only, keeping a capital first letter. */
+    private static String swap(String s, String[][] pairs) {
+        for (String[] o : pairs) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?<![\\p{L}'’-])" + java.util.regex.Pattern.quote(o[0]) + "(?![\\p{L}'’-])",
+                    java.util.regex.Pattern.CASE_INSENSITIVE).matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                String r = Character.isUpperCase(m.group().charAt(0)) ? Character.toUpperCase(o[1].charAt(0)) + o[1].substring(1) : o[1];
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(r));
+            }
+            m.appendTail(sb);
+            s = sb.toString();
+        }
+        return s;
     }
 
     /** A person's name takes si / ni / kay in Tagalog, where the translator saw only a marker and wrote ang / ng / sa. */
