@@ -161,6 +161,23 @@ final class Prefs {
         sp(c).edit().putBoolean("use_internet", v).apply();
     }
 
+    /** The user's own Gemini key (Google AI Studio, free): Translate then tells it like a storyteller. */
+    static String aiKey(Context c) {
+        return sp(c).getString("ai_key", "").trim();
+    }
+
+    static void setAiKey(Context c, String v) {
+        sp(c).edit().putString("ai_key", v.trim()).apply();
+    }
+
+    static String aiModel(Context c) {
+        return sp(c).getString("ai_model", "gemini-flash-latest");
+    }
+
+    static void setAiModel(Context c, String v) {
+        sp(c).edit().putString("ai_model", v).apply();
+    }
+
     /** "word = translation" lines the user taught Translate. */
     static String glossary(Context c) {
         return sp(c).getString("tr_list", "");

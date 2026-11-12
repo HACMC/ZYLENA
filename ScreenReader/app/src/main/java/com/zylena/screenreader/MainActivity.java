@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row keyRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
+    private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -468,6 +468,8 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, onlineVoiceRow.view);
+        aiRow = Ui.nav(this, R.drawable.ic_translate, "AI storyteller translation (free key)", "", this::editAiKey);
+        Ui.add(n, aiRow.view);
         styleRow = Ui.nav(this, R.drawable.ic_translate, "Tagalog translation style", "", this::pickTagStyle);
         Ui.add(n, styleRow.view);
         glossRow = Ui.nav(this, R.drawable.ic_translate, "My translation words", "", this::editGlossary);
@@ -586,6 +588,8 @@ public class MainActivity extends Activity {
         int st = Math.max(0, java.util.Arrays.asList(STYLE_IDS).indexOf(Prefs.tagStyle(this)));
         styleRow.setValue(STYLE_NAMES[st]);
         styleRow.setSub(STYLE_SUBS[st]);
+        aiRow.setSub(Prefs.aiKey(this).isEmpty() ? "Not set. With a free Gemini key, Translate tells it naturally instead of word for word"
+                : "Set: an AI translates by meaning, like a storyteller");
         int gl = TextPrep.parseSay(Prefs.glossary(this)).size();
         glossRow.setSub(gl == 0 ? "Teach Translate which word to use" : gl + (gl == 1 ? " word" : " words"));
         set(onlineVoiceRow, Prefs.onlineVoice(this));
@@ -670,6 +674,27 @@ public class MainActivity extends Activity {
                 .setView(e)
                 .setPositiveButton("Save", (d, w) -> {
                     Prefs.setTranslateKey(this, e.getText().toString());
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void editAiKey() {
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setSingleLine(true);
+        e.setHint("Paste the Gemini key here");
+        e.setText(Prefs.aiKey(this));
+        new AlertDialog.Builder(this)
+                .setTitle("AI storyteller translation")
+                .setMessage("Translate then goes by meaning and sounds natural, not word for word. Free, no card: open "
+                        + "aistudio.google.com/apikey in a browser, sign in with a Google account, tap \"Create API key\", copy it "
+                        + "and paste it here. The key stays on this phone and is only sent to Google. The text being translated is "
+                        + "sent to Google's Gemini; on the free plan Google may use it to improve its products. When the free "
+                        + "allowance runs out for the moment, the usual translator takes over. Leave empty to turn this off.")
+                .setView(e)
+                .setPositiveButton("Save", (d, w) -> {
+                    Prefs.setAiKey(this, e.getText().toString());
                     refresh();
                 })
                 .setNegativeButton("Cancel", null)
