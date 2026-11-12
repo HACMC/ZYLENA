@@ -135,9 +135,48 @@ final class Translate {
         return s;
     }
 
+    /**
+     * Nineteenth-century phrasing in plain English of today. A translator turns the old wording word for word
+     * into stiff Tagalog; given the plain wording it answers the way people speak.
+     */
+    private static final String[][] PLAIN_EN = {
+            {"we are well aware", "we know very well"}, {"seekers after", "seekers of"}, {"accompanied by", "together with"},
+            {"more or less almost everywhere", "in almost every place"}, {"more or less everywhere", "in almost every place"},
+            {"anything of the kind", "anything like it"}, {"nothing of the kind", "nothing like it"}, {"of the kind", "like it"},
+            {"many of the sincere", "many sincere people"}, {"the sincere", "sincere people"}, {"the exhibition of", "the display of"},
+            {"mysterious rappings", "mysterious knockings"}, {"mysterious rapping", "mysterious knocking"}, {"rappings", "knockings"},
+            {"are perfectly calculated to", "are fully meant to"}, {"is perfectly calculated to", "is fully meant to"},
+            {"are calculated to", "are meant to"}, {"is calculated to", "is meant to"}, {"was calculated to", "was meant to"},
+            {"well calculated to", "well suited to"}, {"relative to", "about"}, {"in regard to", "about"}, {"with regard to", "about"},
+            {"in reference to", "about"}, {"with reference to", "about"}, {"gifts and operations", "gifts and workings"},
+            {"visions and exercises", "visions and practices"}, {"notwithstanding", "even though"}, {"wrought by", "done by"},
+            {"wrought", "worked"}, {"unbounded", "unlimited"}, {"it came to pass", "it happened"}, {"shall come to pass", "will happen"},
+            {"come to pass", "happen"}, {"came to pass", "happened"}, {"inasmuch as", "because"}, {"forasmuch as", "because"},
+            {"insomuch that", "so much that"}, {"thereof", "of it"}, {"therein", "in it"}, {"thereby", "by this"}, {"thereupon", "then"},
+            {"wherein", "in which"}, {"whereby", "by which"}, {"whereas", "while"}, {"hitherto", "until now"},
+            {"henceforth", "from now on"}, {"heretofore", "before now"}, {"ere long", "soon"}, {"ere", "before"}, {"oft", "often"},
+            {"nigh", "near"}, {"amidst", "among"}, {"whilst", "while"}, {"peradventure", "perhaps"}, {"perchance", "perhaps"},
+            {"betwixt", "between"}, {"aught", "anything"}, {"naught", "nothing"}, {"nought", "nothing"}, {"yea", "yes"},
+            {"tidings", "news"}, {"raiment", "clothing"}, {"dwelt", "lived"}, {"dwell", "live"}, {"spake", "spoke"}, {"shew", "show"},
+            {"shewed", "showed"}, {"shewn", "shown"}, {"smote", "struck"}, {"slew", "killed"}, {"tarry", "wait"}, {"tarried", "waited"},
+            {"beseech", "beg"}, {"besought", "begged"}, {"exceedingly", "very"}, {"exceeding", "very"}, {"wroth", "angry"},
+            {"hearken", "listen"}, {"hearkened", "listened"}, {"countenance", "face"}, {"a multitude of", "a crowd of"},
+            {"ascertain", "find out"}, {"endeavor to", "try to"}, {"endeavored to", "tried to"}, {"endeavoring to", "trying to"},
+            {"endeavour to", "try to"}, {"in order that", "so that"}, {"in the midst of", "among"}, {"prior to", "before"},
+            {"subsequent to", "after"}, {"in consequence of", "because of"}, {"on account of", "because of"},
+            {"by reason of", "because of"}, {"for the purpose of", "for"}, {"a great many", "very many"}, {"the brethren", "the brothers"},
+            {"manifestations of", "showings of"}, {"is not the purpose of God to", "is not God's plan to"},
+            {"for the most part", "mostly"}, {"at length", "finally"}, {"of necessity", "necessarily"}, {"it is well to", "it is good to"},
+            {"would fain", "would gladly"}, {"fain", "gladly"}, {"needful", "needed"}, {"oftentimes", "often"}, {"ofttimes", "often"},
+            {"likewise", "also"}, {"moreover", "also"}, {"furthermore", "also"}, {"nevertheless", "but still"}, {"hence", "so"},
+            {"therefore", "so"}, {"wherefore", "so"}, {"commenced", "began"}, {"commence", "begin"},
+            {"perceive", "see"}, {"perceived", "saw"}, {"behold", "look"}, {"beheld", "saw"}, {"repaired to", "went to"},
+            {"partake of", "share in"}, {"partook of", "shared in"}, {"bestow", "give"}, {"bestowed", "gave"}, {"abide", "stay"},
+            {"afflicted", "suffering"}, {"toil", "hard work"}, {"weary", "tired"}, {"feeble", "weak"}};
+
     /** Old senses of everyday words, said the way they are meant, so the translator picks the right Tagalog. */
     static String sense(String s) {
-        s = modern(s);
+        s = swap(modern(s), PLAIN_EN).replaceAll("(?<=[.!?] )(First|Second|Third)(?= [a-z]+,)", "$1,");
         // "A counterfeit" alone comes out as the half word "pekeng": give the translator a noun to hang it on.
         s = s.replaceAll("\\b([Aa]|[Tt]he|[Tt]his|[Tt]hat|[Ee]very|[Nn]o) counterfeit(?= (?:is|was|also|has|had|will|would|may|can|must|appeared|of)\\b|[,.;:!?])", "$1 fake thing")
                 .replaceAll("\\b([Cc])ounterfeits(?= (?:are|were|also|have|had|will|would|may|can|must|appeared|of)\\b|[,.;:!?])", "$1ake things");
