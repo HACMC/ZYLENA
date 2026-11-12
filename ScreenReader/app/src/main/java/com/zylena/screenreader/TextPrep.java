@@ -529,6 +529,7 @@ final class TextPrep {
         lastVerseMode = verse;
         for (int li = 0; li < lines.size(); li++) {
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
+            if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
             String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
             char endCh = cleaned.charAt(cleaned.length() - 1);
@@ -603,10 +604,15 @@ final class TextPrep {
         String lang = null;
         int first = 0, last = 0;
         boolean head = true, done = false;
+        String prev = "";
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
             boolean newLang = !anyLang && lang != null && !lang.equals(s.lang);
-            boolean newLine = perLine && lang != null && s.line != last;
+            // A link or an italic word inside a sentence comes as its own line ("shall" / "prophesy" / "and your…"):
+            // that is still one sentence, read and translated in one go.
+            boolean goesOn = perLine && lang != null && s.line != last && continues(prev, s.text);
+            if (goesOn && sb.length() > 0 && sb.charAt(sb.length() - 1) == '.' && !prev.endsWith(".")) sb.setLength(sb.length() - 1);
+            boolean newLine = perLine && lang != null && s.line != last && !goesOn;
             boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
             if (lang != null && (newLang || newLine || newKind || sb.length() + s.text.length() > max)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
@@ -619,11 +625,24 @@ final class TextPrep {
             if (sb.length() == 0) first = s.line;
             last = s.lastLine;
             if (lang == null || !anyLang || s.lang.equals(FIL)) lang = s.lang;
-            if (sb.length() > 0) sb.append(' ');
+            if (sb.length() > 0 && !(goesOn && ",;:".indexOf(s.text.charAt(0)) >= 0)) sb.append(' ');
             sb.append(endWithStop(s.text));
+            prev = s.text;
         }
         if (lang != null && sb.length() > 0) out.add(new Seg(sb.toString(), lang, first, last, head, done));
         return out;
+    }
+
+    /** The sentence in a goes on in b: a has no sentence end, and b starts small or with a comma, colon or semicolon. */
+    static boolean continues(String a, String b) {
+        if (a.isEmpty() || b.isEmpty()) return false;
+        int e = a.length() - 1;
+        while (e > 0 && "\"”’')]".indexOf(a.charAt(e)) >= 0) e--;
+        if (".!?…".indexOf(a.charAt(e)) >= 0) return false;
+        int i = 0;
+        while (i < b.length() - 1 && "\"“‘'([ ".indexOf(b.charAt(i)) >= 0) i++;
+        char c = b.charAt(i);
+        return Character.isLowerCase(c) || ",;:".indexOf(c) >= 0;
     }
 
     /** A closing full stop gives the voice its sentence-final fall and a natural pause. */

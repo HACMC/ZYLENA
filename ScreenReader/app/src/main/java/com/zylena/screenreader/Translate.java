@@ -69,6 +69,8 @@ final class Translate {
     static void text(Context c, String text, String fromLang, Done out) {
         text = original(text, fromLang);
         boolean toFil = !TextPrep.FIL.equals(fromLang);
+        if (toFil) text = sense(text);
+        final boolean prophesy = toFil && java.util.regex.Pattern.compile("\\bprophes(?:y|ies|ied|ying)\\b", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(text).find();
         java.util.List<String> kept = new java.util.ArrayList<>();
         int strict = 0;
         String sent = text;
@@ -83,6 +85,7 @@ final class Translate {
         final String plain = text;
         final int must = strict;
         translate(c, sent, fromLang, got -> {
+            if (got != null && toFil) got = churchWords(got, prophesy);
             if (got == null || kept.isEmpty()) {
                 out.done(got);
                 return;
@@ -93,7 +96,7 @@ final class Translate {
                 if (!ph.matcher(back).find()) {
                     // A name's marker was lost: take the plain translation instead. Other words just go missing.
                     if (i < must) {
-                        translate(c, plain, fromLang, out);
+                        translate(c, plain, fromLang, g -> out.done(g == null ? null : churchWords(g, prophesy)));
                         return;
                     }
                     continue;
@@ -102,6 +105,25 @@ final class Translate {
             }
             out.done(toFil && must > 0 ? personMarkers(back) : back);
         });
+    }
+
+    /** Old senses of everyday words, said the way they are meant, so the translator picks the right Tagalog. */
+    static String sense(String s) {
+        return s.replaceAll("\\b([Tt])he design of\\b", "$1he purpose of")
+                .replaceAll("\\b([Hh]is|[Hh]er|[Tt]heir|[Gg]od's|[Mm]y|[Oo]ur) design\\b", "$1 purpose");
+    }
+
+    /**
+     * The words an Adventist reader expects: to prophesy is magpropesiya, never manghula (fortune telling);
+     * one spelling of Diyos; mesmerismo.
+     */
+    static String churchWords(String s, boolean prophesy) {
+        if (prophesy) {
+            s = s.replaceAll("\\b[Mm]anganghuhula\\b|\\b[Mm]anghuhula\\b", "magpopropesiya")
+                    .replaceAll("\\b[Mm]anghula(?: ka)?\\b", "magpropesiya")
+                    .replaceAll("\\b[Nn]anghula\\b", "nagpropesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpopropesiya");
+        }
+        return s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo");
     }
 
     /** A person's name takes si / ni / kay in Tagalog, where the translator saw only a marker and wrote ang / ng / sa. */
