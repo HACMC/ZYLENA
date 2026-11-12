@@ -161,6 +161,15 @@ final class Prefs {
         sp(c).edit().putBoolean("use_internet", v).apply();
     }
 
+    /** The online twin of the voice when there is internet; off, the voice on the phone always reads. */
+    static boolean onlineVoice(Context c) {
+        return sp(c).getBoolean("online_voice", true);
+    }
+
+    static void setOnlineVoice(Context c, boolean v) {
+        sp(c).edit().putBoolean("online_voice", v).apply();
+    }
+
     /** Data used this month under key ("data_tr", "data_voice"); starts again each month. */
     static long data(Context c, String key) {
         String month = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(new java.util.Date());

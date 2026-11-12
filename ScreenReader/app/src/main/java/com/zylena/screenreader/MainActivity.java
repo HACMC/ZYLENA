@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row keyRow, netRow, dataRow, aliveRow, fanRow, tuckRow;
+    private Ui.Row keyRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
     private TextView warn;
@@ -460,6 +460,14 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, netRow.view);
+        onlineVoiceRow = Ui.toggle(this, R.drawable.ic_download, "Online voice",
+                "Sounds better, but can pause between sentences and change loudness when the internet is slow. "
+                        + "Off: the voice on the phone reads, steady and without waiting.",
+                on -> {
+                    Prefs.setOnlineVoice(this, on);
+                    refresh();
+                });
+        Ui.add(n, onlineVoiceRow.view);
         keyRow = Ui.nav(this, R.drawable.ic_translate, "Google Translate key (optional)", "", this::editTranslateKey);
         Ui.add(n, keyRow.view);
         dataRow = new Ui.Row(this, R.drawable.ic_info, "Data used", "");
@@ -571,6 +579,7 @@ public class MainActivity extends Activity {
 
         set(floatRow, Prefs.floatingButton(this));
         set(netRow, Prefs.useInternet(this));
+        set(onlineVoiceRow, Prefs.onlineVoice(this));
         keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
         set(tuckRow, Prefs.tuck(this));

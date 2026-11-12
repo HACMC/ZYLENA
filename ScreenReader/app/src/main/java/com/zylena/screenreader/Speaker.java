@@ -124,8 +124,9 @@ final class Speaker {
         tracking = track;
         setSpeaking(true);
         Logs.d(ctx, "speak " + segs.size() + " pieces, track=" + track);
-        // One run per screen line, with a short breath between paragraphs.
-        List<TextPrep.Seg> runs = TextPrep.merge(segs, 350, 350, false, true);
+        // One run per screen line, with a short breath between paragraphs. A whole paragraph goes to the voice
+        // in one piece where it can: the voice waits a moment before each piece, which sounds wrong mid-paragraph.
+        List<TextPrep.Seg> runs = TextPrep.merge(segs, 350, 900, false, true);
         currentRuns = runs;
         speakSystem(runs, gen);
     }
@@ -396,7 +397,10 @@ final class Speaker {
         if (i > 0 && runs.get(i - 1).lastLine != s.line) {
             // A person takes a breath between paragraphs, and a longer one around a heading.
             boolean head = s.heading || runs.get(i - 1).heading;
-            tts.playSilentUtterance(head ? HEADING_PAUSE_MS : PARAGRAPH_PAUSE_MS, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            // The online voice already waits a moment before each piece.
+            long breath = head ? HEADING_PAUSE_MS : PARAGRAPH_PAUSE_MS;
+            if (used != null && used.isNetworkConnectionRequired()) breath /= 2;
+            tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
         tts.setSpeechRate(rateFor(s.lang));
         // Voice and language switch between runs, so each run is queued as its own utterance.
@@ -452,7 +456,7 @@ final class Speaker {
     private Voice twin(Voice v, List<Voice> all) {
         if (v == null) return null;
         String n = v.getName();
-        boolean on = Net.online(ctx);
+        boolean on = Prefs.onlineVoice(ctx) && Net.online(ctx);
         String want = on && n.endsWith("-local") ? n.substring(0, n.length() - 6) + "-network"
                 : !on && n.endsWith("-network") ? n.substring(0, n.length() - 8) + "-local" : null;
         if (want == null) return v;
