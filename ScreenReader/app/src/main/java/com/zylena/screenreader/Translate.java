@@ -237,7 +237,8 @@ final class Translate {
         }
         lastBy = "AI " + model;
         if (got == null) return null;
-        got = got.trim().replaceAll("\\bDios\\b", "Diyos");
+        got = got.trim().replaceAll("\\bDios\\b", "Diyos")
+                .replaceAll("\\b([Uu]pang)(?=[a-z]{4,})", "$1 "); // the light model sometimes glues words: "upangantigin"
         // A model that answers with far too little or far too much did something other than translate.
         if (got.isEmpty() || got.length() < text.length() / 4 || got.length() > text.length() * 4 + 80) return null;
         return got;
