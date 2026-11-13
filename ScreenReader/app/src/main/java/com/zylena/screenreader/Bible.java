@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -228,6 +229,48 @@ final class Bible {
         m.appendTail(sb);
         // The separator after a quoted verse (";" or ")") would only be read as an odd pause.
         return any ? sb.toString().replaceAll("\u0003[\\s;,.)]*", " ").trim() : text;
+    }
+
+    /** The first reference with a verse in the text ("Acts 2:17"), or null. */
+    static String firstRef(String text) {
+        Matcher m = REF.matcher(text);
+        while (m.find()) if (m.group("v") != null) return m.group();
+        return null;
+    }
+
+    /** The line is a reference and nothing else. */
+    static boolean onlyRef(String text) {
+        return firstRef(text) != null && REF.matcher(text).replaceAll("").chars().noneMatch(Character::isLetter);
+    }
+
+    /**
+     * The quote is the verse the reference names (most of its words are in the English Bible's verse, and it is
+     * about as long): then the same verse from the Tagalog Bible, word for word as printed. Otherwise null.
+     */
+    static String quotedVerse(String quote, String ref) {
+        Verses src = source;
+        if (src == null || ref == null) return null;
+        Matcher m = REF.matcher(ref);
+        if (!m.find() || m.group("v") == null) return null;
+        int book = bookNumber(m.group("n"), m.group("b"));
+        if (book == 0) return null;
+        int chapter = Integer.parseInt(m.group("c"));
+        String en = passage(src, false, book, chapter, m.group("v")), tl = passage(src, true, book, chapter, m.group("v"));
+        if (en == null || tl == null) return null;
+        Set<String> verse = new HashSet<>();
+        int verseCount = 0;
+        for (String w : en.toLowerCase(Locale.ROOT).split("[^a-z]+")) if (w.length() >= 3) {
+            verse.add(w);
+            verseCount++;
+        }
+        int words = 0, found = 0;
+        for (String w : quote.toLowerCase(Locale.ROOT).split("[^a-z]+")) if (w.length() >= 3) {
+            words++;
+            if (verse.contains(w)) found++;
+        }
+        if (words < 5 || verseCount == 0) return null;
+        double share = found / (double) words, size = words / (double) verseCount;
+        return share >= 0.75 && size >= 0.6 && size <= 1.4 ? tl : null;
     }
 
     private static String passage(Verses src, boolean tl, int book, int chapter, String spec) {

@@ -91,8 +91,9 @@ final class Speaker {
                 if (waitTick != this || gen != generation) return;
                 boolean silent = tts == null || !tts.isSpeaking();
                 if (silent) {
-                    long secs = (System.currentTimeMillis() - since) / 1000;
-                    if (notice != null) notice.show("Translating… " + secs + " s");
+                    // Counts down from how long it has been taking: 5, 4, 3, 2, 1.
+                    long left = Math.max(3, Math.min(15, (usualMs + 999) / 1000)) - (System.currentTimeMillis() - since) / 1000;
+                    if (notice != null) notice.show(left > 0 ? "Translating… " + left : "Translating… almost there");
                     noticeUp = true;
                     if (ticks++ % 3 == 0) tick();
                 } else if (noticeUp) {
@@ -394,24 +395,28 @@ final class Speaker {
         }
     }
 
-    /**
-     * Translates run i, queues it, then goes on with the next one. The voice reads run i while run i+1 is
-     * being translated, so only the very first one is waited for. A run that can't be translated is read
-     * as it is.
-     */
-    private void translateNext(List<TextPrep.Seg> runs, int gen, int i) {
-        if (gen != generation || i >= runs.size()) return;
-        TextPrep.Seg s = runs.get(i);
+    /** A paragraph's translation, asked for ahead of time. */
+    private static final class Asked {
+        String out, by = "";
+        boolean done;
+        long took;
+        Runnable waiter;
+    }
+
+    private final java.util.Map<Integer, Asked> asked = new java.util.HashMap<>();
+    private int askedGen = -1;
+    private long usualMs = 4000; // how long a translation has been taking, for the countdown
+    private static final int AT_ONCE = 3;
+
+    private boolean inTarget(TextPrep.Seg s) {
         String target = "en".equals(Prefs.translateTo(ctx)) ? TextPrep.EN : TextPrep.FIL;
-        if (s.translated || s.lang.equals(target)) { // already in the language asked for
-            queue(runs, gen, i);
-            translateNext(runs, gen, i + 1);
-            return;
-        }
-        // A whole paragraph is translated in one go, so each sentence has its context, then shared out over
-        // the runs it was cut into.
-        int j = i;
-        int chars = s.text.length();
+        return s.translated || s.lang.equals(target);
+    }
+
+    /** The last run of the paragraph that starts at run i: a whole paragraph is translated in one go. */
+    private int groupEnd(List<TextPrep.Seg> runs, int i) {
+        TextPrep.Seg s = runs.get(i);
+        int j = i, chars = s.text.length();
         while (j + 1 < runs.size()) {
             TextPrep.Seg n = runs.get(j + 1);
             if (n.translated || n.line != s.line || n.lastLine != s.lastLine || !n.lang.equals(s.lang) || n.heading != s.heading
@@ -419,17 +424,85 @@ final class Speaker {
             chars += n.text.length() + 1;
             j++;
         }
-        final int last = j;
+        return j;
+    }
+
+    /** Starts translating the paragraph at runs i..last, unless that was started already. Main thread. */
+    private Asked ask(List<TextPrep.Seg> runs, int gen, int i, int last) {
+        if (askedGen != gen) {
+            asked.clear();
+            askedGen = gen;
+        }
+        Asked a = asked.get(i);
+        if (a != null) return a;
+        final Asked p = new Asked();
+        asked.put(i, p);
+        TextPrep.Seg s = runs.get(i);
         StringBuilder all = new StringBuilder();
         for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
-        final long asked = System.currentTimeMillis();
         final String source = all.toString();
-        startWait(gen);
-        Translate.text(ctx, source, s.lang, out -> main.post(() -> {
-            endWait();
+        // A quoted verse with its reference after it: the Tagalog Bible's own words, not a new translation.
+        String ref = runs.get(last).ref;
+        if (ref != null && s.lang.equals(TextPrep.EN)) {
+            String verse = Bible.quotedVerse(source, ref);
+            if (verse != null) {
+                p.out = verse.trim().replaceAll("[\\s,;:]+$", "") + ".";
+                p.by = "the Tagalog Bible (" + ref + ")";
+                p.done = true;
+                Logs.d(ctx, "translated by " + p.by + ", lines " + s.line + "-" + runs.get(last).lastLine + ": " + Logs.snip(source));
+                return p;
+            }
+        }
+        String context = i > 0 ? runs.get(i - 1).text : "";
+        final long began = System.currentTimeMillis();
+        Translate.text(ctx, source, s.lang, context, out -> main.post(() -> {
+            p.out = out;
+            p.by = out == null ? "nobody" : Translate.lastBy;
+            p.took = System.currentTimeMillis() - began;
+            p.done = true;
             if (gen != generation) return;
-            Logs.d(ctx, "translated by " + (out == null ? "nobody" : Translate.lastBy) + " in " + (System.currentTimeMillis() - asked)
-                    + " ms, lines " + s.line + "-" + s.lastLine + ": " + (source.length() > 700 ? source.substring(0, 700) + "…" : source));
+            usualMs = (usualMs + p.took) / 2;
+            Logs.d(ctx, "translated by " + p.by + " in " + p.took + " ms, lines " + s.line + "-" + runs.get(last).lastLine + ": "
+                    + (source.length() > 700 ? source.substring(0, 700) + "…" : source));
+            if (p.waiter != null) {
+                Runnable w = p.waiter;
+                p.waiter = null;
+                w.run();
+            }
+        }));
+        return p;
+    }
+
+    /**
+     * Queues run i in the asked-for language and goes on with the next. A few paragraphs are translated at
+     * once, ahead of the voice, so it is only the very first one that is waited for. A paragraph that can't be
+     * translated is read as it is.
+     */
+    private void translateNext(List<TextPrep.Seg> runs, int gen, int i) {
+        if (gen != generation || i >= runs.size()) return;
+        TextPrep.Seg s = runs.get(i);
+        if (inTarget(s)) { // already in the language asked for
+            queue(runs, gen, i);
+            translateNext(runs, gen, i + 1);
+            return;
+        }
+        final int last = groupEnd(runs, i);
+        final Asked p = ask(runs, gen, i, last);
+        // The next paragraphs too, at the same time.
+        int n = last + 1;
+        for (int more = 1; more < AT_ONCE && n < runs.size(); ) {
+            if (inTarget(runs.get(n))) {
+                n++;
+                continue;
+            }
+            int e = groupEnd(runs, n);
+            ask(runs, gen, n, e);
+            n = e + 1;
+            more++;
+        }
+        Runnable apply = () -> {
+            if (gen != generation) return;
+            String out = p.out;
             if (out != null && !out.trim().isEmpty()) {
                 String to = Translate.other(s.lang);
                 List<String> parts = TextPrep.shareOut(out, last - i + 1);
@@ -444,7 +517,16 @@ final class Speaker {
             }
             for (int k = i; k <= last; k++) queue(runs, gen, k);
             translateNext(runs, gen, last + 1);
-        }));
+        };
+        if (p.done) {
+            apply.run();
+        } else {
+            startWait(gen);
+            p.waiter = () -> {
+                endWait();
+                apply.run();
+            };
+        }
     }
 
     /** Puts run i in the voice's queue, with a breath before it when a new paragraph starts. */

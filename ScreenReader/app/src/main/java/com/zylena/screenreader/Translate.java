@@ -35,7 +35,7 @@ final class Translate {
 
     private static int onlineFails, waitMinutes;
     private static long onlineOffUntil;
-    private static final java.util.concurrent.ExecutorService net = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private static final java.util.concurrent.ExecutorService net = java.util.concurrent.Executors.newFixedThreadPool(3); // a few paragraphs at once
 
     /** Names a translator would translate as words ("White" becomes "puti"): kept as they are. */
     private static final java.util.regex.Pattern KEEP = java.util.regex.Pattern.compile(
@@ -68,9 +68,6 @@ final class Translate {
 
     /** Who gave the last translation, for the log. */
     static volatile String lastBy = "";
-    /** The paragraph before the one being translated, so the AI knows what the talk is about. */
-    private static volatile String before = "";
-    private static volatile long beforeAt;
     private static volatile boolean listed;
     private static volatile long aiOffUntil;
     private static volatile boolean toldAi;
@@ -80,6 +77,11 @@ final class Translate {
      * Without it, or when it does not answer: the word-by-word translators below.
      */
     static void text(Context c, String text, String fromLang, Done out) {
+        text(c, text, fromLang, "", out);
+    }
+
+    /** context: the paragraph before this one (not translated), so the AI knows what the talk is about. */
+    static void text(Context c, String text, String fromLang, String context, Done out) {
         String key = Prefs.aiKey(c);
         // A name, a place or a date on its own line needs no storyteller, and the quick translator answers at once.
         if (key.isEmpty() || !Net.online(c) || System.currentTimeMillis() < aiOffUntil || text.trim().length() < 40) {
@@ -91,7 +93,7 @@ final class Translate {
             String got = null;
             try {
                 String src = original(text, fromLang);
-                got = ai(c, key, TextPrep.FIL.equals(fromLang) ? src : sense(src), fromLang);
+                got = ai(c, key, TextPrep.FIL.equals(fromLang) ? src : sense(src), fromLang, context);
                 if (got != null && !toldAi) {
                     toldAi = true;
                     Logs.d(c, "translate: the AI storyteller is translating (" + Prefs.aiModel(c) + ")");
@@ -99,7 +101,7 @@ final class Translate {
             } catch (Exception e) {
                 String m = String.valueOf(e.getMessage());
                 boolean busy = m.contains("HTTP 429");
-                aiOffUntil = System.currentTimeMillis() + (busy ? 120_000L : 20_000L);
+                aiOffUntil = System.currentTimeMillis() + 5_000L;
                 Logs.d(c, "translate with AI failed: " + m + (busy ? " (the free allowance is used up for now)" : "")
                         + ", using the usual translator for a moment");
             }
@@ -112,7 +114,7 @@ final class Translate {
     }
 
     /** What the AI is told: who it is, who listens, and the words to use. */
-    static String persona(Context c, boolean toFil) {
+    static String persona(Context c, boolean toFil, String before) {
         StringBuilder p = new StringBuilder();
         p.append("You are a warm Filipino storyteller and a careful translator. A screen reader will read your words aloud to ")
                 .append("Seventh-day Adventist listeners of all ages. Translate the text you are given from ")
@@ -147,7 +149,7 @@ final class Translate {
             p.append("The listener asked for these words: ");
             for (String[] t : taught) p.append('"').append(t[0]).append("\" = \"").append(t[1]).append("\"; ");
         }
-        if (!before.isEmpty() && System.currentTimeMillis() - beforeAt < 180_000L) {
+        if (before != null && !before.isEmpty()) {
             String b = before.length() > 500 ? before.substring(before.length() - 500) : before;
             p.append("For context only, do not translate it: the paragraph just before this one was: <<").append(b).append(">> ");
         }
@@ -156,60 +158,48 @@ final class Translate {
     }
 
     /** Gemini (Google AI Studio), with the user's own free key. Runs off the main thread. */
-    private static String ai(Context c, String key, String text, String fromLang) throws Exception {
+    private static String ai(Context c, String key, String text, String fromLang, String context) throws Exception {
         boolean toFil = !TextPrep.FIL.equals(fromLang);
         org.json.JSONObject body = new org.json.JSONObject()
                 .put("systemInstruction", new org.json.JSONObject().put("parts", new org.json.JSONArray()
-                        .put(new org.json.JSONObject().put("text", persona(c, toFil)))))
+                        .put(new org.json.JSONObject().put("text", persona(c, toFil, context)))))
                 .put("contents", new org.json.JSONArray().put(new org.json.JSONObject().put("role", "user")
                         .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text", text)))))
                 .put("generationConfig", new org.json.JSONObject().put("temperature", 0.4));
-        // The main model kept failing: straight to the lighter one for a while, so nobody waits on it again.
-        String model = System.currentTimeMillis() < mainOffUntil ? LITE : Prefs.aiModel(c);
-        String got;
-        try {
-            got = aiTry(c, key, model, body);
-            if (!model.equals(LITE)) mainFails = 0;
-        } catch (java.io.FileNotFoundException gone) {
-            // The model's name changed: ask which ones this key has, and remember the pick.
-            model = aiPick(key);
-            if (model == null) throw new java.io.IOException("no AI model for this key");
-            Prefs.setAiModel(c, model);
-            Logs.d(c, "translate: AI model is now " + model);
-            got = aiTry(c, key, model, body);
-        } catch (java.io.IOException slow) {
-            // Busy or slow (HTTP 503, a timeout): the lighter model usually answers.
-            String m = String.valueOf(slow.getMessage());
-            if (model.equals(LITE) || m.contains("HTTP 4")) throw slow;
-            if (++mainFails >= 2) {
-                mainFails = 0;
-                mainOffUntil = System.currentTimeMillis() + 30 * 60_000L;
-                Logs.d(c, "translate: " + model + " keeps failing (" + m + "), using " + LITE + " for half an hour");
-            } else {
-                Logs.d(c, "translate: " + model + " did not answer (" + m + "), asking " + LITE);
+        // Google's AI is often busy on the free plan: several models are asked in turn, and one that failed
+        // is left alone for a few minutes so nobody waits on it again.
+        String model = null, got = null;
+        java.io.IOException lastError = null;
+        long began = System.currentTimeMillis();
+        for (String m : chain(c, key)) {
+            Long off = modelOff.get(m);
+            if (off != null && System.currentTimeMillis() < off) continue;
+            if (System.currentTimeMillis() - began > 20_000L) break;
+            try {
+                got = aiTry(c, key, m, new org.json.JSONObject(body.toString()));
+                model = m;
+                if (!m.equals(good)) Logs.d(c, "translate: AI model " + m + " answers");
+                good = m;
+                break;
+            } catch (java.io.IOException e) {
+                String why = String.valueOf(e.getMessage());
+                if (why.contains("HTTP 400") || why.contains("HTTP 401") || why.contains("HTTP 403")) throw e; // the key, not the model
+                lastError = e;
+                modelOff.put(m, System.currentTimeMillis() + (why.contains("404") ? 24 * 3600_000L : 3 * 60_000L));
+                Logs.d(c, "translate: AI model " + m + " did not answer (" + why + ")");
             }
-            got = aiTry(c, key, LITE, body);
-            model = LITE;
         }
+        if (model == null) throw lastError != null ? lastError : new java.io.IOException("every AI model is busy");
         // English left inside the Tagalog ("…ay shall see visions"): ask once more, naming it.
         String left = got == null || !toFil || Prefs.taglish(c) || Prefs.tagStyle(c).equals("modern") ? null : leftover(text, got);
         if (left != null) {
             Logs.d(c, "translate: \"" + left + "\" was left in English, asking again");
             body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0)
                     .put("text", text + "\n\n(Translate everything. Last time \"" + left + "\" was left in English.)");
-            String again = aiTry(c, key, LITE, body);
+            String again = aiTry(c, key, model, body);
             if (again != null && !again.trim().isEmpty()) got = again;
         }
-        before = text;
-        beforeAt = System.currentTimeMillis();
         lastBy = "AI " + model;
-        if (!listed) {
-            listed = true;
-            try {
-                Logs.d(c, "translate: AI models this key can use: " + aiNames(key));
-            } catch (Exception ignored) {
-            }
-        }
         if (got == null) return null;
         got = got.trim().replaceAll("\\bDios\\b", "Diyos");
         // A model that answers with far too little or far too much did something other than translate.
@@ -218,8 +208,42 @@ final class Translate {
     }
 
     private static final String LITE = "gemini-flash-lite-latest";
-    private static volatile int mainFails;
-    private static volatile long mainOffUntil;
+    private static volatile String good = "";
+    private static final java.util.Map<String, Long> modelOff = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final java.util.Set<String> noThink = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static volatile java.util.List<String> known;
+
+    /** The models to ask, best first: the one that answered last, the saved one, then the newest "flash" ones this key has. */
+    private static java.util.List<String> chain(Context c, String key) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        if (!good.isEmpty()) out.add(good);
+        out.add(Prefs.aiModel(c));
+        java.util.List<String> k = known;
+        if (k == null) {
+            k = new java.util.ArrayList<>();
+            try {
+                String names = aiNames(key);
+                Logs.d(c, "translate: AI models this key can use: " + names);
+                java.util.List<String> full = new java.util.ArrayList<>(), lite = new java.util.ArrayList<>();
+                for (String n : names.split(", ")) {
+                    if (n.matches("gemini-\\d+(?:\\.\\d+)?-flash")) full.add(n);
+                    else if (n.matches("gemini-\\d+(?:\\.\\d+)?-flash-lite")) lite.add(n);
+                }
+                java.util.Comparator<String> newest = (x, y) -> Double.compare(rank(y), rank(x));
+                full.sort(newest);
+                lite.sort(newest);
+                if (!full.isEmpty()) k.add(full.get(0));
+                if (!lite.isEmpty()) k.add(lite.get(0));
+                if (full.size() > 1) k.add(full.get(1));
+                if (full.size() > 2) k.add(full.get(full.size() - 1)); // an old one is often the least busy
+            } catch (Exception ignored) {
+            }
+            known = k;
+        }
+        out.addAll(k);
+        out.add(LITE);
+        return new java.util.ArrayList<>(out);
+    }
 
     /** Two or more small English words in a row from the page that are still there, word for word, in the Tagalog. */
     static String leftover(String en, String fil) {
@@ -236,13 +260,13 @@ final class Translate {
 
     /** Without the model's long thinking first, where it lets us: a translation should come in a second or two. */
     private static String aiTry(Context c, String key, String model, org.json.JSONObject body) throws Exception {
-        if (!noThinkRefused) {
+        if (!noThink.contains(model)) {
             try {
                 body.getJSONObject("generationConfig").put("thinkingConfig", new org.json.JSONObject().put("thinkingBudget", 0));
                 return aiCall(c, key, model, body.toString().getBytes("UTF-8"));
             } catch (java.io.IOException e) {
                 if (!String.valueOf(e.getMessage()).contains("HTTP 400")) throw e;
-                noThinkRefused = true; // this model does not take the setting
+                noThink.add(model); // this model does not take the setting
             }
         }
         body.getJSONObject("generationConfig").remove("thinkingConfig");
@@ -253,7 +277,7 @@ final class Translate {
         java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
                 "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent").openConnection();
         h.setConnectTimeout(5000);
-        h.setReadTimeout(15000);
+        h.setReadTimeout(10000);
         h.setRequestMethod("POST");
         h.setDoOutput(true);
         h.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
@@ -261,7 +285,7 @@ final class Translate {
         try {
             h.getOutputStream().write(send);
             int code = h.getResponseCode();
-            if (code == 404) throw new java.io.FileNotFoundException("HTTP 404");
+            if (code == 404) throw new java.io.IOException("HTTP 404");
             if (code != 200) throw new java.io.IOException("HTTP " + code);
             String all = read(h.getInputStream());
             Net.translated(c, send.length + all.length() + 900);
@@ -347,8 +371,6 @@ final class Translate {
     }
 
     private static void classic(Context c, String text, String fromLang, Done out) {
-        before = text;
-        beforeAt = System.currentTimeMillis();
         text = original(text, fromLang);
         boolean toFil = !TextPrep.FIL.equals(fromLang);
         final String style = Prefs.tagStyle(c);

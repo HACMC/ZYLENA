@@ -26,6 +26,8 @@ final class TextPrep {
         final boolean heading;
         /** Already translated (Translate on): read as it is, never translated back. */
         final boolean translated;
+        /** The Bible reference printed right after this text ("Acts 2:17"), when the text is a quoted verse. */
+        String ref;
 
         Seg(String text, String lang, int line, int lastLine) {
             this(text, lang, line, lastLine, false);
@@ -530,6 +532,10 @@ final class TextPrep {
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
         for (int li = 0; li < lines.size(); li++) {
+            // A reference alone on its line belongs to the quote before it.
+            if (lines.get(li).length() <= 40 && !out.isEmpty() && out.get(out.size() - 1).ref == null && Bible.onlyRef(lines.get(li))) {
+                out.get(out.size() - 1).ref = Bible.firstRef(lines.get(li));
+            }
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
             String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
@@ -606,7 +612,7 @@ final class TextPrep {
         String lang = null;
         int first = 0, last = 0;
         boolean head = true, done = false;
-        String prev = "";
+        String prev = "", ref = null;
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
             boolean newLang = !anyLang && lang != null && !lang.equals(s.lang);
@@ -618,6 +624,8 @@ final class TextPrep {
             boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
             if (lang != null && (newLang || newLine || newKind || sb.length() + s.text.length() > max)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
+                out.get(out.size() - 1).ref = ref;
+                ref = null;
                 sb.setLength(0);
                 lang = null;
                 head = true;
@@ -630,8 +638,12 @@ final class TextPrep {
             if (sb.length() > 0 && !(goesOn && ",;:".indexOf(s.text.charAt(0)) >= 0)) sb.append(' ');
             sb.append(endWithStop(s.text));
             prev = s.text;
+            if (s.ref != null) ref = s.ref;
         }
-        if (lang != null && sb.length() > 0) out.add(new Seg(sb.toString(), lang, first, last, head, done));
+        if (lang != null && sb.length() > 0) {
+            out.add(new Seg(sb.toString(), lang, first, last, head, done));
+            out.get(out.size() - 1).ref = ref;
+        }
         return out;
     }
 
