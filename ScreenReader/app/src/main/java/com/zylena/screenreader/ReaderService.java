@@ -1429,6 +1429,8 @@ public class ReaderService extends AccessibilityService {
         toTop(gen, n, 0, then);
     }
 
+    private String topSig = "";
+
     private void toTop(int gen, int n, int refused, Runnable then) {
         if (gen != scanGen) return;
         // 0: can't scroll up (or no page), 1: scrolled up, 2: the app refused this one
@@ -1441,6 +1443,22 @@ public class ReaderService extends AccessibilityService {
             if (list != null && (n == 0 || n % 20 == 0)) Logs.d(this, "whole page: going up in " + describe(list));
             // (An app that always says it can go further up would keep this going: 80 is plenty for a long page.)
             if (list == null || !canScroll(list, false) || n >= 80) return 0;
+            // Every few scroll-ups: the same paragraph in the same place means the page stopped moving (EGW
+            // Writings kept saying "scroll up" at the top, and 80 scroll-ups held up reading for seconds).
+            if (n % 6 == 0 && root != null) {
+                AccessibilityNodeInfo para = paragraphOnScreen(root, 60);
+                String sig = "";
+                if (para != null) {
+                    Rect b = new Rect();
+                    para.getBoundsInScreen(b);
+                    sig = b.top + "|" + ScreenText.ownText(para);
+                }
+                if (n > 0 && !sig.isEmpty() && sig.equals(topSig)) {
+                    Logs.d(this, "whole page: the page stopped moving, that is the top");
+                    return 0;
+                }
+                topSig = sig;
+            }
             return scrollUp(list) ? 1 : 2;
         }, r -> toTopNext(gen, n, refused, r == null ? 0 : r, then));
     }

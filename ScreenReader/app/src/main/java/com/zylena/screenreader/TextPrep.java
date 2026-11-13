@@ -145,7 +145,7 @@ final class TextPrep {
      */
     static String sayName(String s, String lang) {
         // A translation can bring back "Ellen G. White": the voice would stop at "G." as at a sentence end.
-        s = titles(s, FIL.equals(lang));
+        s = eraDots(titles(s, FIL.equals(lang))); // "A.D." first, or "A." would be taken for an initial
         s = INITIAL.matcher(s).replaceAll("$1 ").replace("  ", " ");
         return sayDates(NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena"), lang);
     }
@@ -331,7 +331,8 @@ final class TextPrep {
 
     private static String dropCodes0(String line) {
         String t = line.trim();
-        if (t.length() <= 16 && SHORT_CODE.matcher(t).matches()) return "";
+        // "Daniel 8:14" looks like a book code ("EW 15.1") but is a Bible reference: the reference rules decide.
+        if (t.length() <= 16 && SHORT_CODE.matcher(t).matches() && !Bible.onlyRef(t)) return "";
         if (CODE_LINE.matcher(t).matches()) return "";
         t = CODE_STUCK.matcher(t).replaceAll("");
         t = CODE_PAREN.matcher(t).replaceAll("");
@@ -379,7 +380,7 @@ final class TextPrep {
 
     private static final String MONTHS = "(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\\.?";
     private static final Pattern YEAR_ERA_AFTER = Pattern.compile("\\b(\\d{1,4})\\s?(AD|BCE|BC)\\b");
-    private static final Pattern YEAR_ERA_BEFORE = Pattern.compile("\\b(AD)\\s?(\\d{1,4})\\b");
+    private static final Pattern YEAR_ERA_BEFORE = Pattern.compile("\\b(AD|BCE|BC)\\s?(\\d{1,4})\\b");
     private static final Pattern YEAR_CUE = Pattern.compile("\\b(in|since|until|till|by|before|after|from|during|year|circa|noong|nang|taong|taon)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)", Pattern.CASE_INSENSITIVE);
     private static final Pattern YEAR_DATE = Pattern.compile("\\b(" + MONTHS + "\\s\\d{1,2},?\\s)(1[0-9]{3}|20[0-9]{2})\\b");
     /** Tagalog: "noong 1844", "dekada ng 1850", "Oktubre 22, 1844" — said as English years, the way people say them. */
@@ -412,9 +413,12 @@ final class TextPrep {
      */
     static String sayDates(String s, String lang) {
         boolean fil = FIL.equals(lang);
+        // Eras in both languages (a translation brings back "B.C. 457"): "four fifty-seven B.C.", "A.D. thirty-four".
+        s = eraDots(s);
+        s = replaceAll(YEAR_ERA_AFTER, s, m -> yearWords(Integer.parseInt(m.group(1))) + " " + era(m.group(2), false));
+        s = replaceAll(YEAR_ERA_BEFORE, s, m -> m.group(1).equals("AD") ? "A.D. " + yearWords(Integer.parseInt(m.group(2)))
+                : yearWords(Integer.parseInt(m.group(2))) + " " + era(m.group(1), false));
         if (!fil) {
-            s = replaceAll(YEAR_ERA_AFTER, s, m -> yearWords(Integer.parseInt(m.group(1))) + " " + era(m.group(2), false));
-            s = replaceAll(YEAR_ERA_BEFORE, s, m -> "A.D. " + yearWords(Integer.parseInt(m.group(2))));
             s = replaceAll(YEAR_CUE, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
             s = replaceAll(YEAR_DATE, s, m -> m.group(1) + yearWords(Integer.parseInt(m.group(2))));
         } else {
@@ -591,6 +595,19 @@ final class TextPrep {
         return false;
     }
 
+    private static final Pattern PAGE_ONLY = Pattern.compile("(?i)\\s*(?:pages?|pp?\\.?|pahina)\\s?\\d{1,4}(?:\\s?[-\u2013]\\s?\\d{1,4})?\\s*[.,;:]?\\s*");
+
+    /** The line before ends on a word the sentence can't stop at ("of", "in", "on"): this line goes on with it. */
+    private static boolean inSentence(List<String> lines, int li) {
+        for (int j = li - 1; j >= 0 && j >= li - 3; j--) {
+            String l = lines.get(j).trim();
+            if (l.isEmpty()) continue;
+            java.util.regex.Matcher w = LAST_WORD.matcher(l);
+            return w.find() && HANGING.contains(w.group(1).toLowerCase(Locale.ROOT));
+        }
+        return false;
+    }
+
     /** readVerses: read the words of each cited verse (takes the place of skipRefs). */
     static List<Seg> prepare(List<String> lines, boolean skipTimes, boolean skipRefs, boolean readVerses) {
         List<Seg> out = new ArrayList<>();
@@ -607,6 +624,9 @@ final class TextPrep {
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
             String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
+            // A link inside a sentence ("In this volume, on | page 13 | , Mrs. White states…") is part of it.
+            boolean inSentence = inSentence(lines, li);
+            if (cleaned.isEmpty() && inSentence && PAGE_ONLY.matcher(lines.get(li)).matches()) cleaned = applyUserLists(clean(lines.get(li)));
             // "See pages 232-240 ; 254-258": the second range is a link of its own with no word before it.
             if (BARE_RANGE.matcher(lines.get(li)).matches() && afterPages(lines, li)) {
                 cleaned = "and pages " + lines.get(li).replaceAll("[^\\d\u2013-]", "");
@@ -618,7 +638,10 @@ final class TextPrep {
                 cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
             } else if (skipRefs) {
                 // A reference shown as its own link leaves "Apostol (" and "). Matapos" behind; tidy those ends.
-                cleaned = Bible.stripRefs(cleaned).replaceAll("\\s*[(\\[]\\s*$", "")
+                // A reference the sentence goes through ("foretold in | Daniel 8:14 | represented") is read.
+                String stripped = Bible.stripRefs(cleaned);
+                if (stripped.isEmpty() && inSentence) stripped = cleaned;
+                cleaned = stripped.replaceAll("\\s*[(\\[]\\s*$", "")
                         .replaceAll("\\s*(?:[(\\[]\\s*(?:[Cc]f\\.?|[Ss]ee(?: also)?|[Cc]ompare)|[Cc]f\\.)\\s*$", "") // "(Cf." left by a skipped reference
                         .replaceAll("^[\\s)\\].]+", ""); // a comma stays: ", Ellen White deals…" goes on from the line before
                 if (cleaned.chars().noneMatch(Character::isLetter)) continue;
