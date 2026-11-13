@@ -1485,12 +1485,17 @@ public class ReaderService extends AccessibilityService {
         // short title led to a list of chapter names. Then the page's biggest scrolling area is used instead.
         AccessibilityNodeInfo para = paragraphOnScreen(root, 60);
         if (para == null) return null;
-        AccessibilityNodeInfo p = para.getParent();
+        AccessibilityNodeInfo p = para.getParent(), upOnly = null;
         for (int i = 0; p != null && i < 30; i++) {
-            if (ScreenText.scrollsVertically(p) && (up ? canScroll(p, false) : canScroll(p, false) || canScroll(p, true))) return p;
+            if (ScreenText.scrollsVertically(p)) {
+                if (canScroll(p, !up)) return p;
+                // EGW Writings: the chapter's WebView inside the screen's scroller can say it goes only up. Taking
+                // it made the scan think the page ended after one step, leaving the last paragraphs out.
+                if (upOnly == null && !up && canScroll(p, false)) upOnly = p;
+            }
             p = p.getParent();
         }
-        return null;
+        return upOnly;
     }
 
     /** The first text on screen at least this long, fully within the screen's width. */
