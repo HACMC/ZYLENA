@@ -121,7 +121,9 @@ final class TextPrep {
             {"Jesus|Jesús", "Hesus"}, {"Cristo", "Kristo"}, {"Juan", "Huwan"}, {"Jose|José", "Hose"},
             {"Jerusalem|Jerusalen", "Herusalem"}, {"Jeremias|Jeremías", "Heremias"}, {"Josue|Josué", "Hosue"},
             {"Juda", "Huda"}, {"Judas", "Hudas"}, {"Judea", "Hudea"}, {"Jordan|Jordán", "Hordan"},
-            {"Jehova|Jehová", "Hehoba"}, {"Santiago", "Santiyago"}};
+            {"Jehova|Jehová", "Hehoba"}, {"Santiago", "Santiyago"},
+            // The voice slurs "siya" into "sha": the accent keeps it pro-pe-SI-ya.
+            {"propesiya", "propesíya"}, {"propesiyang", "propesíyang"}, {"mga propesiya", "mga propesíya"}};
     private static final Pattern[] TAGALOG_SAY_P = new Pattern[TAGALOG_SAY.length];
 
     static {

@@ -75,7 +75,8 @@ final class Translate {
      */
     static void text(Context c, String text, String fromLang, Done out) {
         String key = Prefs.aiKey(c);
-        if (key.isEmpty() || !Net.online(c) || System.currentTimeMillis() < aiOffUntil) {
+        // A name, a place or a date on its own line needs no storyteller, and the quick translator answers at once.
+        if (key.isEmpty() || !Net.online(c) || System.currentTimeMillis() < aiOffUntil || text.trim().length() < 40) {
             classic(c, text, fromLang, out);
             return;
         }
@@ -120,6 +121,12 @@ final class Translate {
                     : style.equals("modern") ? "Use modern everyday Tagalog; common English words may stay English. "
                     : style.equals("formal") ? "Use formal, dignified Tagalog, as in a printed book. "
                     : "Use everyday Tagalog anyone can follow; Spanish-rooted words people really use (pero, libro, problema) are welcome, deep or rare words are not. ");
+            if (!Prefs.taglish(c) && !Prefs.tagStyle(c).equals("modern")) {
+                p.append("Put every phrase into Tagalog: leave no English words or phrases untranslated, quoted phrases and book ")
+                        .append("titles included (\"mysterious rapping\" is \"mahiwagang pagkatok\", \"Experience and Views\" is ")
+                        .append("\"Karanasan at mga Pananaw\"). Only names of people and places stay as they are. ");
+            }
+            p.append("'Design' meaning purpose is 'layunin'. ");
             p.append("Church words: Diyos, propeta, propesiya; 'to prophesy' is 'magpahayag ng propesiya', never any form of 'hula'. ")
                     .append("Old English (thou, saith, wrought, calculated to) is to be understood, then said plainly. ");
         }
@@ -141,10 +148,12 @@ final class Translate {
                 .put("contents", new org.json.JSONArray().put(new org.json.JSONObject().put("role", "user")
                         .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text", text)))))
                 .put("generationConfig", new org.json.JSONObject().put("temperature", 0.4));
-        String model = Prefs.aiModel(c);
+        // The main model kept failing: straight to the lighter one for a while, so nobody waits on it again.
+        String model = System.currentTimeMillis() < mainOffUntil ? LITE : Prefs.aiModel(c);
         String got;
         try {
             got = aiTry(c, key, model, body);
+            if (!model.equals(LITE)) mainFails = 0;
         } catch (java.io.FileNotFoundException gone) {
             // The model's name changed: ask which ones this key has, and remember the pick.
             model = aiPick(key);
@@ -156,8 +165,23 @@ final class Translate {
             // Busy or slow (HTTP 503, a timeout): the lighter model usually answers.
             String m = String.valueOf(slow.getMessage());
             if (model.equals(LITE) || m.contains("HTTP 4")) throw slow;
-            Logs.d(c, "translate: " + model + " did not answer (" + m + "), asking " + LITE);
+            if (++mainFails >= 2) {
+                mainFails = 0;
+                mainOffUntil = System.currentTimeMillis() + 30 * 60_000L;
+                Logs.d(c, "translate: " + model + " keeps failing (" + m + "), using " + LITE + " for half an hour");
+            } else {
+                Logs.d(c, "translate: " + model + " did not answer (" + m + "), asking " + LITE);
+            }
             got = aiTry(c, key, LITE, body);
+        }
+        // English left inside the Tagalog ("…ay shall see visions"): ask once more, naming it.
+        String left = got == null || !toFil || Prefs.taglish(c) || Prefs.tagStyle(c).equals("modern") ? null : leftover(text, got);
+        if (left != null) {
+            Logs.d(c, "translate: \"" + left + "\" was left in English, asking again");
+            body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0)
+                    .put("text", text + "\n\n(Translate everything. Last time \"" + left + "\" was left in English.)");
+            String again = aiTry(c, key, LITE, body);
+            if (again != null && !again.trim().isEmpty()) got = again;
         }
         if (got == null) return null;
         got = got.trim().replaceAll("\\bDios\\b", "Diyos");
@@ -167,6 +191,20 @@ final class Translate {
     }
 
     private static final String LITE = "gemini-flash-lite-latest";
+    private static volatile int mainFails;
+    private static volatile long mainOffUntil;
+
+    /** Two or more small English words in a row from the page that are still there, word for word, in the Tagalog. */
+    static String leftover(String en, String fil) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("(?=\\b([a-z]{3,} [a-z]{3,})\\b)").matcher(en);
+        String low = fil.toLowerCase(java.util.Locale.ROOT);
+        while (m.find()) {
+            String two = m.group(1);
+            if (two.length() >= 10 && java.util.regex.Pattern.compile("(?<![a-z])" + two + "(?![a-z])").matcher(low).find()) return two;
+        }
+        return null;
+    }
+
     private static volatile boolean noThinkRefused;
 
     /** Without the model's long thinking first, where it lets us: a translation should come in a second or two. */
