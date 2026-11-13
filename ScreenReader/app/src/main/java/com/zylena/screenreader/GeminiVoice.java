@@ -89,6 +89,7 @@ final class GeminiVoice {
         if (Prefs.aiKey(c).isEmpty()) return "Set the AI key first";
         if (!Net.online(c)) return "No internet";
         long rest = offUntil - System.currentTimeMillis();
+        if (rest > 60 * 60_000L) return "Gemini voice's free allowance for today is used up. It comes back in about " + (rest / 3_600_000 + 1) + " hours.";
         if (rest > 0) return "Gemini voice is resting for " + (rest / 60_000 + 1) + " min (busy, or its free allowance is used up)";
         return null;
     }
@@ -240,14 +241,16 @@ final class GeminiVoice {
         boolean day = why != null && why.contains("429") && why.contains("day");
         long rest = 3 * 60_000L;
         if (day) {
-            rest = 3 * 60 * 60_000L;
+            // Google says when the day's allowance comes back ("wait 61031 s"): rest until then.
+            java.util.regex.Matcher w = java.util.regex.Pattern.compile("wait (\\d+)").matcher(why);
+            rest = w.find() ? Math.min(24 * 3600L, Long.parseLong(w.group(1))) * 1000L + 60_000L : 3 * 60 * 60_000L;
         } else if (why != null && why.contains("429")) {
             java.util.regex.Matcher w = java.util.regex.Pattern.compile("wait (\\d+)").matcher(why);
             rest = (w.find() ? Math.min(600, Integer.parseInt(w.group(1))) : 60) * 1000L + 3000L;
         }
         offUntil = System.currentTimeMillis() + rest;
         Logs.d(ctx, "Gemini voice: " + (why == null ? "no sound came" : why) + ", the phone's voice reads for "
-                + (rest >= 60_000 ? rest / 60_000 + " min" : rest / 1000 + " s"));
+                + (rest >= 3_600_000 ? rest / 3_600_000 + " h" : rest >= 60_000 ? rest / 60_000 + " min" : rest / 1000 + " s"));
         java.util.List<Item> items = new java.util.ArrayList<>();
         synchronized (queue) {
             handing = true;

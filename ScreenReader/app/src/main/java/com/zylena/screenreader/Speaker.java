@@ -760,6 +760,12 @@ final class Speaker {
     }
 
     /** Installed voices for "en" or "fil", most likely female and best quality first. */
+    /** A voice for this language that works without internet is on the phone. */
+    boolean hasOfflineVoice(String lang) {
+        for (Voice v : voicesFor(lang)) if (!v.isNetworkConnectionRequired()) return true;
+        return false;
+    }
+
     List<Voice> voicesFor(String lang) {
         List<Voice> out = new ArrayList<>();
         if (tts == null || !ttsReady) return out;

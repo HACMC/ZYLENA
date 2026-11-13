@@ -6,6 +6,8 @@ import android.os.Looper;
 import android.widget.Toast;
 
 import com.google.mlkit.common.model.DownloadConditions;
+import com.google.mlkit.common.model.RemoteModelManager;
+import com.google.mlkit.nl.translate.TranslateRemoteModel;
 import com.google.mlkit.nl.translate.TranslateLanguage;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
@@ -963,6 +965,36 @@ final class Translate {
                     Logs.d(c, "translate: language pack not available: " + e.getMessage());
                     out.done(null);
                 });
+    }
+
+    /** Is the offline translation pack (Tagalog; English comes with the app) on the phone? */
+    static void packReady(java.util.function.Consumer<Boolean> out) {
+        try {
+            RemoteModelManager.getInstance()
+                    .isModelDownloaded(new TranslateRemoteModel.Builder(TranslateLanguage.TAGALOG).build())
+                    .addOnSuccessListener(out::accept)
+                    .addOnFailureListener(e -> out.accept(false));
+        } catch (Exception e) {
+            out.accept(false);
+        }
+    }
+
+    /** Downloads the offline translation pack now (Wi-Fi or mobile data). done: null when it is on the phone, else why not. */
+    static void downloadPack(Context c, java.util.function.Consumer<String> done) {
+        Logs.d(c, "translate: downloading the language pack (asked in Settings)");
+        try {
+            translator(false).downloadModelIfNeeded(new DownloadConditions.Builder().build())
+                    .addOnSuccessListener(v -> {
+                        Logs.d(c, "translate: the language pack is on the phone");
+                        done.accept(null);
+                    })
+                    .addOnFailureListener(e -> {
+                        Logs.d(c, "translate: language pack not available: " + e.getMessage());
+                        done.accept(String.valueOf(e.getMessage()));
+                    });
+        } catch (Exception e) {
+            done.accept(String.valueOf(e.getMessage()));
+        }
     }
 
     private static synchronized Translator translator(boolean fromFil) {

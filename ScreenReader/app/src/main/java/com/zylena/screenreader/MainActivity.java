@@ -41,7 +41,8 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row geminiVoiceRow, geminiNameRow;
+    private Ui.Row geminiVoiceRow, geminiNameRow, offlineRow;
+    private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
@@ -454,6 +455,8 @@ public class MainActivity extends Activity {
 
         col.addView(Ui.section(this, "Internet"));
         LinearLayout n = Ui.group(this);
+        offlineRow = Ui.nav(this, R.drawable.ic_download, "Download for offline use", "", this::offlineDownloads);
+        Ui.add(n, offlineRow.view);
         netRow = Ui.toggle(this, R.drawable.ic_download, "Use internet when connected",
                 "Better online voice and Translate online. Off, or no internet: everything stays on the phone.",
                 on -> {
@@ -608,6 +611,12 @@ public class MainActivity extends Activity {
                 : "Set: an AI translates by meaning, like a storyteller");
         int gl = TextPrep.parseSay(Prefs.glossary(this)).size();
         glossRow.setSub(gl == 0 ? "Teach Translate which word to use" : gl + (gl == 1 ? " word" : " words"));
+        offlineRow.setSub(offlineSummary());
+        Translate.packReady(ok -> {
+            if (ok == packOnPhone) return;
+            packOnPhone = ok;
+            offlineRow.setSub(offlineSummary());
+        });
         set(onlineVoiceRow, Prefs.onlineVoice(this));
         set(geminiVoiceRow, Prefs.geminiVoice(this) && !Prefs.aiKey(this).isEmpty());
         geminiNameRow.setSub(geminiVoiceSub(Prefs.geminiVoiceName(this)));
@@ -951,6 +960,40 @@ public class MainActivity extends Activity {
                     refresh();
                 })
                 .show();
+    }
+
+    private String offlineSummary() {
+        Speaker sp = Speaker.get(this);
+        boolean fil = sp.hasOfflineVoice(TextPrep.FIL), en = sp.hasOfflineVoice(TextPrep.EN);
+        if (packOnPhone && fil && en) return "Ready: reading and Translate work without internet";
+        return "Translation pack and voices, so reading and Translate work without internet or on little data";
+    }
+
+    /** What ZYLENA needs on the phone to work without internet, what is there already, and buttons to get the rest. */
+    private void offlineDownloads() {
+        Speaker sp = Speaker.get(this);
+        boolean fil = sp.hasOfflineVoice(TextPrep.FIL), en = sp.hasOfflineVoice(TextPrep.EN);
+        String yes = "\u2713 on the phone", no = "\u2717 not yet";
+        String msg = "Translation pack (about 30 MB): " + (packOnPhone ? yes : no)
+                + "\nTagalog voice: " + (fil ? yes : no)
+                + "\nEnglish voice: " + (en ? yes : no)
+                + "\nBibles (English and Tagalog): " + yes + ", they come with ZYLENA"
+                + "\n\nWith these on the phone, reading and Translate work with no internet, and use almost no mobile data. "
+                + "The AI translation, the online voice and the Gemini voice still need internet; without it ZYLENA uses the ones on the phone."
+                + (fil && en ? "" : "\n\nVoices are downloaded in the phone's voice app: tap Get voices, then download Filipino and English (United States).");
+        AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle("Download for offline use").setMessage(msg)
+                .setNegativeButton("Close", null)
+                .setNeutralButton(fil && en ? "More voices" : "Get voices", (d, w) -> openVoiceDownloads());
+        if (!packOnPhone) b.setPositiveButton("Download pack", (d, w) -> {
+            android.widget.Toast.makeText(this, "Downloading the translation pack (about 30 MB)…", android.widget.Toast.LENGTH_LONG).show();
+            Translate.downloadPack(getApplicationContext(), err -> {
+                packOnPhone = err == null;
+                android.widget.Toast.makeText(getApplicationContext(), err == null ? "The translation pack is on the phone. Translate now works offline."
+                        : "Couldn't download the translation pack. Check the internet and try again.", android.widget.Toast.LENGTH_LONG).show();
+                if (!isFinishing()) offlineRow.setSub(offlineSummary());
+            });
+        });
+        b.show();
     }
 
     /** Opens the voice-data download page of the phone voice app (Google's high-quality voices live there). */
