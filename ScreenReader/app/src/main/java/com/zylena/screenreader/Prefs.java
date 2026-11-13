@@ -57,11 +57,15 @@ final class Prefs {
         sp(c).edit().putString("tts_pkg", v).apply();
     }
 
-    /** What Translate turns the reading into: "" off, "fil" Tagalog, "taglish", "en" English. */
+    /** What Translate turns the reading into: "" off, "fil" Tagalog, "en" English. */
     static String translateTo(Context c) {
         SharedPreferences p = sp(c);
-        if (p.contains("translateTo")) return p.getString("translateTo", "");
-        return p.getBoolean("translate", false) ? (p.getBoolean("taglish", false) ? "taglish" : "fil") : "";
+        // Taglish was taken out of the choices: whoever had it on gets Tagalog.
+        if (p.contains("translateTo")) {
+            String v = p.getString("translateTo", "");
+            return v.equals("taglish") ? "fil" : v;
+        }
+        return p.getBoolean("translate", false) ? "fil" : "";
     }
 
     static void setTranslateTo(Context c, String v) {

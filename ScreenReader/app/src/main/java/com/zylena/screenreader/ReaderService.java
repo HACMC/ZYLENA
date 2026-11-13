@@ -2581,8 +2581,6 @@ public class ReaderService extends AccessibilityService {
         switch (Prefs.translateTo(this)) {
             case "fil":
                 return "Translate: Tagalog";
-            case "taglish":
-                return "Translate: Taglish";
             case "en":
                 return "Translate: English";
             default:
@@ -2593,8 +2591,7 @@ public class ReaderService extends AccessibilityService {
     private android.widget.FrameLayout chooser;
 
     /**
-     * A card in the middle of the screen: what to turn the reading into. Off, Tagalog, Taglish (Tagalog with
-     * English names and everyday words) or English. The chosen one is green, and the floating button turns
+     * A card in the middle of the screen: what to turn the reading into. Off, Tagalog or English. The chosen one is green, and the floating button turns
      * green while one is on.
      */
     @SuppressLint("ClickableViewAccessibility")
@@ -2604,7 +2601,6 @@ public class ReaderService extends AccessibilityService {
         String[][] opts = {
                 {"", "Off", "Read as it is"},
                 {"fil", "Tagalog", "English read in Tagalog"},
-                {"taglish", "Taglish", "Tagalog with English names and everyday words"},
                 {"en", "English", "Tagalog read in English"}};
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
         f.setBackgroundColor(0x99000000);

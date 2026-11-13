@@ -356,6 +356,16 @@ final class TextPrep {
     private static final Pattern YEAR_CUE_FIL = Pattern.compile("\\b(noong|nang|taong|taon|ng|mula|hanggang|bago|pagkatapos|simula|"
             + "(?:Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\\s\\d{1,2},?)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)",
             Pattern.CASE_INSENSITIVE);
+    /** Tagalog "mga pahina 232 hanggang 240": page numbers said in English, the way a reader says them. */
+    private static final Pattern PAGES_FIL = Pattern.compile("\\b([Pp]ahina(?:ng)?)\\s(\\d{1,4})(?:(\\s?(?:hanggang|at|-|\u2013)\\s?)(\\d{1,4}))?\\b(?![.,]?\\d)");
+
+    /** 232 "two hundred thirty-two", 1200 "one thousand two hundred". */
+    static String numberWords(int n) {
+        if (n < 100) return below100(n);
+        if (n < 1000) return ONES[n / 100] + " hundred" + (n % 100 == 0 ? "" : " " + below100(n % 100));
+        return below100(n / 1000) + " thousand" + (n % 1000 == 0 ? "" : " " + numberWords(n % 1000));
+    }
+
     /** "the 1850's", "1840s": "eighteen fifties". */
     private static final Pattern DECADE = Pattern.compile("\\b(1[0-9]|20)([2-9])0(?:['\u2019]?s)\\b");
     private static final Pattern ERA_WORD = Pattern.compile("(?<![\\p{L}])(AD|BCE|BC)(?![\\p{L}])");
@@ -367,8 +377,8 @@ final class TextPrep {
     /**
      * What a voice should be given for eras and years, just before it speaks (so a translation sees the
      * original "A.D. 31"): the eras as letters, and in English the years as years, not as "one thousand
-     * eight hundred forty-four". In Tagalog too, years are said that way, as people say them; other
-     * Tagalog numbers are left to the Tagalog voice.
+     * eight hundred forty-four". In Tagalog too, years are said that way, as people say them, and page
+     * numbers in English ("pahina two hundred thirty-two"); other Tagalog numbers are left to the Tagalog voice.
      */
     static String sayDates(String s, String lang) {
         boolean fil = FIL.equals(lang);
@@ -379,6 +389,8 @@ final class TextPrep {
             s = replaceAll(YEAR_DATE, s, m -> m.group(1) + yearWords(Integer.parseInt(m.group(2))));
         } else {
             s = replaceAll(YEAR_CUE_FIL, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
+            s = replaceAll(PAGES_FIL, s, m -> m.group(1) + " " + numberWords(Integer.parseInt(m.group(2)))
+                    + (m.group(4) == null ? "" : (m.group(3).trim().matches("[-\u2013]") ? " hanggang " : m.group(3)) + numberWords(Integer.parseInt(m.group(4)))));
         }
         s = replaceAll(DECADE, s, m -> below100(Integer.parseInt(m.group(1))) + " " + TENS[Integer.parseInt(m.group(2))].replaceAll("y$", "ies"));
         return replaceAll(ERA_WORD, s, m -> era(m.group(1), fil)).replaceAll("(A\\.D\\.|B\\.C\\.(?:E\\.)?)\\.", "$1");
