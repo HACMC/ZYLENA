@@ -145,7 +145,8 @@ final class Translate {
                     .append("'everywhere' just means almost everywhere; 'mesmerism' is mesmerismo, 'a mesmeric sleep' is ")
                     .append("'pagkakatulog sa ilalim ng mesmerismo'; 'manifestations' are pagpapakita; 'probation' is panahon ng ")
                     .append("palugit; 'the remnant' is ang nalabi; 'sanctuary' is santuwaryo. Check your spelling. ");
-            p.append("Church words: Diyos, propeta, propesiya; 'to prophesy' is 'magpahayag ng propesiya', never any form of 'hula'. ")
+            p.append("Church words as in the Tagalog Bible (Ang Biblia): Diyos, propeta; 'prophecy' is 'hula' ('the prophecies' is ")
+                    .append("'ang mga hula'), 'to prophesy' is 'manghula' ('shall prophesy' is 'manghuhula'); never 'propesiya'. ")
                     .append("Old English (thou, saith, wrought, calculated to) is to be understood, then said plainly. ");
         }
         java.util.List<String[]> taught = TextPrep.parseSay(Prefs.glossary(c));
@@ -237,7 +238,7 @@ final class Translate {
         }
         lastBy = "AI " + model;
         if (got == null) return null;
-        got = got.trim().replaceAll("\\bDios\\b", "Diyos")
+        got = (toFil ? bibleWords(got.trim()) : got.trim()).replaceAll("\\bDios\\b", "Diyos")
                 .replaceAll("\\b([Uu]pang)(?=[a-z]{4,})", "$1 "); // the light model sometimes glues words: "upangantigin"
         // A model that answers with far too little or far too much did something other than translate.
         if (got.isEmpty() || got.length() < text.length() / 4 || got.length() > text.length() * 4 + 80) return null;
@@ -532,15 +533,11 @@ final class Translate {
     }
 
     /**
-     * The words an Adventist reader expects: to prophesy is magpropesiya, never manghula (fortune telling);
+     * The words of the Tagalog Bible (Ang Biblia), which the listener knows: prophecy is hula, to prophesy is manghula;
      * one spelling of Diyos; mesmerismo.
      */
     static String churchWords(String s, boolean prophesy, String style) {
-        if (prophesy) {
-            s = s.replaceAll("\\b[Mm]anganghuhula\\b|\\b[Mm]anghuhula\\b|\\b[Mm]agpopropesiya\\b", "magpapahayag ng propesiya")
-                    .replaceAll("\\b[Mm]anghula(?: ka)?\\b|\\b[Mm]agpropesiya\\b", "magpahayag ng propesiya")
-                    .replaceAll("\\b[Nn]anghula\\b", "nagpahayag ng propesiya").replaceAll("\\b[Nn]anghuhula\\b", "nagpapahayag ng propesiya");
-        }
+        s = bibleWords(s);
         s = s.replaceAll("\\bDios\\b", "Diyos").replaceAll("\\b([Mm])esmerism\\b", "$1esmerismo");
         // "The purpose … is to imitate": ang layunin … ay gayahin, without a second "para".
         s = s.replaceAll("\\b((?:[Ll]ayunin|[Ll]ayon|[Tt]ungkulin)\\b[^.!?;]{0,80}? ay) (?:para|upang) (?!sa\\b|kay\\b|ng\\b)", "$1 ")
@@ -548,6 +545,16 @@ final class Translate {
         if (style.equals("formal")) return s;
         s = swap(swap(s, PLAIN), SPANISH);
         return style.equals("casual") ? swap(s, CASUAL) : s;
+    }
+
+    /** Prophecy as the Tagalog Bible says it: hula, manghula. */
+    static String bibleWords(String s) {
+        return s.replaceAll("\\b[Mm]agpapahayag ng propes(?:i)?ya\\b|\\b[Mm]agpopropes(?:i)?ya\\b", "manghuhula")
+                .replaceAll("\\b[Mm]agpahayag ng propes(?:i)?ya\\b|\\b[Mm]agpropes(?:i)?ya\\b", "manghula")
+                .replaceAll("\\b[Nn]agpapahayag ng propes(?:i)?ya\\b", "nanghuhula")
+                .replaceAll("\\b[Nn]agpahayag ng propes(?:i)?ya\\b|\\b[Nn]agpropes(?:i)?ya\\b", "nanghula")
+                .replaceAll("\\bpropes(?:i)?yang\\b", "hulang").replaceAll("\\bPropes(?:i)?yang\\b", "Hulang").replaceAll("\\bPropes(?:i)?ya\\b", "Hula")
+                .replaceAll("\\bpropes(?:i)?ya\\b", "hula");
     }
 
     /** Deep Tagalog words in the Spanish-rooted ones everybody uses. */
