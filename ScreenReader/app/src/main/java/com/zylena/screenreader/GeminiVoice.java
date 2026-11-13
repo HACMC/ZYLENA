@@ -33,6 +33,7 @@ final class GeminiVoice {
         final boolean last;
         final long breathMs;
         final float rate;
+        String voice;     // a voice to try (the voice picker's Test); null: the chosen one
         Future<byte[]> audio;
 
         Item(int gen, int run, String text, boolean last, long breathMs, float rate) {
@@ -54,7 +55,7 @@ final class GeminiVoice {
     private final Events events;
     private final java.util.function.IntSupplier currentGen;
     private final ArrayDeque<Item> queue = new ArrayDeque<>();
-    private final ExecutorService fetch = Executors.newFixedThreadPool(2);
+    private final ExecutorService fetch = Executors.newFixedThreadPool(3);
     private final java.util.LinkedHashMap<String, byte[]> saved = new java.util.LinkedHashMap<String, byte[]>(8, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(java.util.Map.Entry<String, byte[]> e) {
@@ -70,6 +71,15 @@ final class GeminiVoice {
         ctx = c.getApplicationContext();
         events = e;
         currentGen = gen;
+    }
+
+    /** Why it can't speak now (no key, offline, resting), or null when it can. */
+    static String whyNot(Context c) {
+        if (Prefs.aiKey(c).isEmpty()) return "Set the AI key first";
+        if (!Net.online(c)) return "No internet";
+        long rest = offUntil - System.currentTimeMillis();
+        if (rest > 0) return "Gemini is resting for " + (rest / 60_000 + 1) + " min (busy or the free allowance is used up)";
+        return null;
     }
 
     /** On, with a key, online, and not resting after a failure. */
@@ -123,8 +133,8 @@ final class GeminiVoice {
         for (Item it : queue) {
             if (n++ >= AHEAD + 1) break;
             if (it.audio == null) {
-                final String text = it.text;
-                it.audio = fetch.submit(() -> audioFor(text));
+                final String text = it.text, voice = it.voice != null ? it.voice : Prefs.geminiVoiceName(ctx);
+                it.audio = fetch.submit(() -> audioFor(text, voice));
             }
         }
     }
@@ -245,8 +255,7 @@ final class GeminiVoice {
 
     // ------------------------------------------------------------------ Gemini
 
-    private byte[] audioFor(String text) throws Exception {
-        String voice = Prefs.geminiVoiceName(ctx);
+    private byte[] audioFor(String text, String voice) throws Exception {
         String key0 = voice + "|" + text;
         synchronized (saved) {
             byte[] b = saved.get(key0);
@@ -258,9 +267,8 @@ final class GeminiVoice {
         long t0 = System.currentTimeMillis();
         org.json.JSONObject body = new org.json.JSONObject()
                 .put("contents", new org.json.JSONArray().put(new org.json.JSONObject()
-                        .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text",
-                                "Read this aloud in a warm, calm voice, like reading a good book to a friend, at an easy steady pace "
-                                        + "without long pauses (Tagalog read as a Filipino reads it, English as it is):\n\n" + text)))))
+                        // Only the words to say: an instruction in front was read aloud too.
+                        .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text", text)))))
                 .put("generationConfig", new org.json.JSONObject()
                         .put("responseModalities", new org.json.JSONArray().put("AUDIO"))
                         .put("speechConfig", new org.json.JSONObject().put("voiceConfig", new org.json.JSONObject()

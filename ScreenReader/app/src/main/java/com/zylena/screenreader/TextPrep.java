@@ -622,9 +622,11 @@ final class TextPrep {
         return false;
     }
 
-    private static final Pattern REFS_LINE = Pattern.compile("(?=.*\\d:\\d)\\s*(?:(?:[1-3]\\s?)?(?:Mga\\s)?\\p{L}[\\p{L}.]*"
-            + "(?:\\s(?:ng|ni|sa|of)\\s\\p{L}+)?\\.?\\s\\d{1,3}(?::\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3}(?::\\d{1,3})?)?"
-            + "(?:,\\s?\\d{1,3}(?:\\s?[-\u2013]\\s?\\d{1,3})?)*)?[\\s;,.]*)+");
+    // A reference is a book and chapter:verses, or chapter:verses alone after one ("Jeremias 1:4–10; 26:1–15"),
+    // joined by ; , and "at" / "and".
+    private static final Pattern REFS_LINE = Pattern.compile("(?=.*\\d:\\d)\\s*(?:(?:(?:[1-3]\\s?)?(?:Mga\\s)?\\p{L}[\\p{L}.]*"
+            + "(?:\\s(?:ng|ni|sa|of)\\s\\p{L}+)?\\.?\\s)?\\d{1,3}(?::\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3}(?::\\d{1,3})?)?"
+            + "(?:,\\s?\\d{1,3}(?:\\s?[-\u2013]\\s?\\d{1,3})?)*)?(?:[\\s;,.]|\\b(?:at|and)\\b)*)+");
 
     private static final Pattern QUOTE_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
 

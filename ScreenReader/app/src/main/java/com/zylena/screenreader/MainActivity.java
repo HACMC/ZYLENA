@@ -772,14 +772,23 @@ public class MainActivity extends Activity {
         String[] labels = new String[GEMINI_VOICES.length];
         for (int i = 0; i < labels.length; i++) labels[i] = GEMINI_VOICES[i] + ": " + GEMINI_VOICE_SUBS[i];
         int now = java.util.Arrays.asList(GEMINI_VOICES).indexOf(Prefs.geminiVoiceName(this));
-        new AlertDialog.Builder(this)
+        final int[] picked = {Math.max(0, now)};
+        AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("Gemini voice")
-                .setSingleChoiceItems(labels, now, (d, which) -> {
-                    Prefs.setGeminiVoiceName(this, GEMINI_VOICES[which]);
-                    d.dismiss();
+                .setSingleChoiceItems(labels, now, (dd, which) -> picked[0] = which)
+                .setNeutralButton("Test", null) // set below, so the list stays open while testing
+                .setPositiveButton("Use this voice", (dd, w) -> {
+                    Speaker.get(this).stop();
+                    Prefs.setGeminiVoiceName(this, GEMINI_VOICES[picked[0]]);
                     refresh();
                 })
-                .show();
+                .setNegativeButton("Cancel", (dd, w) -> Speaker.get(this).stop())
+                .create();
+        d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            android.widget.Toast.makeText(this, "Getting " + GEMINI_VOICES[picked[0]] + "'s voice… a few seconds", android.widget.Toast.LENGTH_SHORT).show();
+            Speaker.get(this).previewGemini(GEMINI_VOICES[picked[0]]);
+        }));
+        d.show();
     }
 
     private void pickRefMode() {

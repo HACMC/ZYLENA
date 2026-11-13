@@ -152,8 +152,9 @@ final class Bible {
     private static final Pattern REF_PAREN = Pattern.compile(
             "\\s*\\(\\s*(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—]|\\b(?:at|and|cf|tingnan|ihambing)\\b)*\u0001\\d+\u0002"
                     + "(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—]|\\b(?:at|and)\\b)*\\)");
+    // ":" too: "Jeremias 1:4–10; 26:1–15" goes on with a chapter and verses of the same book.
     private static final Pattern ONLY_REFS = Pattern.compile(
-            "[\\s(]*(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—()]|\\b(?:at|and)\\b)*\u0001\\d+\u0002(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—()]|\\b(?:at|and)\\b)*");
+            "[\\s(]*(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—()]|\\b(?:at|and|ihambing|tingnan|cf|see)\\b)*\u0001\\d+\u0002(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—()]|\\b(?:at|and|ihambing|tingnan|cf|see)\\b)*");
     private static final Pattern SPACE_BEFORE_PUNCT = Pattern.compile("\\s+([.,;:!?])");
 
     /**

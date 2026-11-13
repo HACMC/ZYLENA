@@ -189,6 +189,25 @@ final class Speaker {
         speakSystem(runs, gen);
     }
 
+    /** Plays a sample in one of Gemini's voices, for the Gemini voice picker. */
+    void previewGemini(String voice) {
+        stop();
+        String why = GeminiVoice.whyNot(ctx);
+        if (why != null) {
+            toast(why);
+            return;
+        }
+        final int gen = ++generation;
+        tracking = false;
+        currentRuns = new ArrayList<>();
+        setSpeaking(true);
+        GeminiVoice.Item it = new GeminiVoice.Item(gen, 0, "Magandang araw! Ako si Zelina. Babasahin ko nang malinaw ang inyong aralin. "
+                + "Hello! I will read your lesson to you in English too.", true, 0, Prefs.rate(ctx));
+        it.voice = voice;
+        Logs.d(ctx, "Gemini voice test: " + voice);
+        gemini().add(it);
+    }
+
     /** Plays a sample in one specific phone voice, for the voice picker. */
     void preview(Voice v, String text) {
         stop();
@@ -549,6 +568,11 @@ final class Speaker {
 
                 @Override
                 public void toPhone(GeminiVoice.Item item) {
+                    if (item.voice != null) { // a test of a voice: nothing else to read
+                        toast("Gemini voice didn't answer this time. Try again in a few minutes.");
+                        main.post(() -> setSpeaking(false));
+                        return;
+                    }
                     main.post(() -> {
                         List<TextPrep.Seg> runs = currentRuns;
                         if (item.gen == generation && item.run < runs.size()) queuePhone(runs, item.gen, item.run);
