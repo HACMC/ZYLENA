@@ -377,7 +377,7 @@ final class Translate {
         }
     }
 
-    private static String aiNames(String key) throws Exception {
+    static String aiNames(String key) throws Exception {
         java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
                 "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200").openConnection();
         h.setConnectTimeout(5000);

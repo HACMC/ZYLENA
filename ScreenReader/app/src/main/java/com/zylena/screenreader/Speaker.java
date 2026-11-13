@@ -90,7 +90,7 @@ final class Speaker {
             @Override
             public void run() {
                 if (waitTick != this || gen != generation) return;
-                boolean silent = tts == null || !tts.isSpeaking();
+                boolean silent = (tts == null || !tts.isSpeaking()) && (gemini == null || !gemini.isPlaying());
                 if (silent) {
                     // Counts down all the way, from the most it can take: 20, 19 … 3, 2, 1.
                     long left = (until - System.currentTimeMillis() + 999) / 1000;
@@ -226,6 +226,7 @@ final class Speaker {
         endWait();
         paused = false;
         if (tts != null) tts.stop();
+        if (gemini != null) gemini.stop();
         setSpeaking(false);
     }
 
@@ -531,8 +532,51 @@ final class Speaker {
         }
     }
 
-    /** Puts run i in the voice's queue, with a breath before it when a new paragraph starts. */
+    private GeminiVoice gemini;
+
+    private GeminiVoice gemini() {
+        if (gemini == null) {
+            gemini = new GeminiVoice(ctx, new GeminiVoice.Events() {
+                @Override
+                public void started(int gen, int run) {
+                    runStarted(run, gen);
+                }
+
+                @Override
+                public void finished(int gen) {
+                    allDone(gen);
+                }
+
+                @Override
+                public void toPhone(GeminiVoice.Item item) {
+                    main.post(() -> {
+                        List<TextPrep.Seg> runs = currentRuns;
+                        if (item.gen == generation && item.run < runs.size()) queuePhone(runs, item.gen, item.run);
+                    });
+                }
+            }, () -> generation);
+        }
+        return gemini;
+    }
+
+    /** Puts run i in the voice's queue: Gemini's voice when it is on and can, else the phone's voice. */
     private void queue(List<TextPrep.Seg> runs, int gen, int i) {
+        if (GeminiVoice.usable(ctx) && !Prefs.testMode(ctx)) {
+            TextPrep.Seg s = runs.get(i);
+            boolean newPara = i > 0 && runs.get(i - 1).lastLine != s.line;
+            boolean head = newPara && (s.heading || runs.get(i - 1).heading);
+            // Gemini reads the whole run itself, English verses and all, in its own natural way; the usual
+            // spelling is kept (no respelling for the phone's voice), names and years said in full.
+            String text = s.text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "");
+            gemini().add(new GeminiVoice.Item(gen, i, TextPrep.sayName(text, s.lang), i == runs.size() - 1,
+                    head ? HEADING_PAUSE_MS : newPara ? PARAGRAPH_PAUSE_MS : 0, rateFor(s.lang)));
+            return;
+        }
+        queuePhone(runs, gen, i);
+    }
+
+    /** Puts run i in the phone voice's queue, with a breath before it when a new paragraph starts. */
+    private void queuePhone(List<TextPrep.Seg> runs, int gen, int i) {
         TextPrep.Seg s = runs.get(i);
         applyVoice(s.lang);
         Voice used = chosenVoice(s.lang);

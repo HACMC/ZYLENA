@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
+    private Ui.Row geminiVoiceRow, geminiNameRow;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
     private Ui.Row enRow, filRow, appRow, sleepRow, accessRow, sayRow, skipRow, readAppRow;
@@ -468,6 +469,21 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, onlineVoiceRow.view);
+        geminiVoiceRow = Ui.toggle(this, R.drawable.ic_download, "Gemini voice (uses your AI key)",
+                "A natural voice that reads like a person, Tagalog and English. Needs internet and the AI key below; "
+                        + "when Gemini is busy or its free allowance is used up, the phone's voice reads for a while.",
+                on -> {
+                    if (on && Prefs.aiKey(this).isEmpty()) {
+                        android.widget.Toast.makeText(this, "Set the AI key first (AI storyteller translation, below)", android.widget.Toast.LENGTH_LONG).show();
+                        refresh();
+                        return;
+                    }
+                    Prefs.setGeminiVoice(this, on);
+                    refresh();
+                });
+        Ui.add(n, geminiVoiceRow.view);
+        geminiNameRow = Ui.nav(this, R.drawable.ic_download, "Gemini voice to use", "", this::pickGeminiVoice);
+        Ui.add(n, geminiNameRow.view);
         aiRow = Ui.nav(this, R.drawable.ic_translate, "AI storyteller translation (free key)", "", this::editAiKey);
         Ui.add(n, aiRow.view);
         styleRow = Ui.nav(this, R.drawable.ic_translate, "Tagalog translation style", "", this::pickTagStyle);
@@ -593,6 +609,9 @@ public class MainActivity extends Activity {
         int gl = TextPrep.parseSay(Prefs.glossary(this)).size();
         glossRow.setSub(gl == 0 ? "Teach Translate which word to use" : gl + (gl == 1 ? " word" : " words"));
         set(onlineVoiceRow, Prefs.onlineVoice(this));
+        set(geminiVoiceRow, Prefs.geminiVoice(this) && !Prefs.aiKey(this).isEmpty());
+        geminiNameRow.setSub(geminiVoiceSub(Prefs.geminiVoiceName(this)));
+        geminiNameRow.view.setVisibility(Prefs.geminiVoice(this) ? android.view.View.VISIBLE : android.view.View.GONE);
         keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
         set(tuckRow, Prefs.tuck(this));
@@ -734,6 +753,29 @@ public class MainActivity extends Activity {
                 .setTitle("Tagalog translation style")
                 .setSingleChoiceItems(labels, now, (d, which) -> {
                     Prefs.setTagStyle(this, STYLE_IDS[which]);
+                    d.dismiss();
+                    refresh();
+                })
+                .show();
+    }
+
+    private static final String[] GEMINI_VOICES = {"Aoede", "Kore", "Leda", "Zephyr", "Callirrhoe", "Sulafat", "Achird", "Charon"};
+    private static final String[] GEMINI_VOICE_SUBS = {"Woman, light and easy", "Woman, firm and clear", "Woman, young",
+            "Woman, bright", "Woman, gentle", "Woman, warm", "Man, friendly", "Man, calm"};
+
+    private static String geminiVoiceSub(String name) {
+        int i = java.util.Arrays.asList(GEMINI_VOICES).indexOf(name);
+        return name + (i >= 0 ? ": " + GEMINI_VOICE_SUBS[i] : "");
+    }
+
+    private void pickGeminiVoice() {
+        String[] labels = new String[GEMINI_VOICES.length];
+        for (int i = 0; i < labels.length; i++) labels[i] = GEMINI_VOICES[i] + ": " + GEMINI_VOICE_SUBS[i];
+        int now = java.util.Arrays.asList(GEMINI_VOICES).indexOf(Prefs.geminiVoiceName(this));
+        new AlertDialog.Builder(this)
+                .setTitle("Gemini voice")
+                .setSingleChoiceItems(labels, now, (d, which) -> {
+                    Prefs.setGeminiVoiceName(this, GEMINI_VOICES[which]);
                     d.dismiss();
                     refresh();
                 })

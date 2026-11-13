@@ -218,6 +218,24 @@ final class Prefs {
         sp(c).edit().putBoolean("online_voice", v).apply();
     }
 
+    /** Gemini reads aloud with your AI key (natural voice); the phone's voice reads when it can't. */
+    static boolean geminiVoice(Context c) {
+        return sp(c).getBoolean("gemini_voice", false);
+    }
+
+    static void setGeminiVoice(Context c, boolean v) {
+        sp(c).edit().putBoolean("gemini_voice", v).apply();
+    }
+
+    /** Which of Gemini's voices reads. */
+    static String geminiVoiceName(Context c) {
+        return sp(c).getString("gemini_voice_name", "Aoede");
+    }
+
+    static void setGeminiVoiceName(Context c, String v) {
+        sp(c).edit().putString("gemini_voice_name", v).apply();
+    }
+
     /** Data used this month under key ("data_tr", "data_voice"); starts again each month. */
     static long data(Context c, String key) {
         String month = new java.text.SimpleDateFormat("yyyy-MM", java.util.Locale.US).format(new java.util.Date());
