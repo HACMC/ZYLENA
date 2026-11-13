@@ -80,9 +80,10 @@ final class Speaker {
     }
 
     /** While a translation is awaited and the voice has nothing to say: a note and a soft tick, so it's clear it is working. */
-    private void startWait(int gen) {
+    private void startWait(int gen, long askedAt) {
         endWait();
-        final long since = System.currentTimeMillis();
+        // The longest this translation can take: the AI gets a fixed time, then the quick translator answers.
+        final long until = askedAt + Translate.longestMs(ctx);
         waitTick = new Runnable() {
             int ticks;
 
@@ -91,9 +92,9 @@ final class Speaker {
                 if (waitTick != this || gen != generation) return;
                 boolean silent = tts == null || !tts.isSpeaking();
                 if (silent) {
-                    // Counts down from how long it has been taking: 5, 4, 3, 2, 1.
-                    long left = Math.max(3, Math.min(15, (usualMs + 999) / 1000)) - (System.currentTimeMillis() - since) / 1000;
-                    if (notice != null) notice.show(left > 0 ? "Translating… " + left : "Translating… almost there");
+                    // Counts down all the way, from the most it can take: 20, 19 … 3, 2, 1.
+                    long left = (until - System.currentTimeMillis() + 999) / 1000;
+                    if (notice != null) notice.show(left > 0 ? "Translating… " + left : "Translating…");
                     noticeUp = true;
                     if (ticks++ % 3 == 0) tick();
                 } else if (noticeUp) {
@@ -399,7 +400,7 @@ final class Speaker {
     private static final class Asked {
         String out, by = "";
         boolean done;
-        long took;
+        long took, began = System.currentTimeMillis();
         Runnable waiter;
     }
 
@@ -521,7 +522,7 @@ final class Speaker {
         if (p.done) {
             apply.run();
         } else {
-            startWait(gen);
+            startWait(gen, p.began);
             p.waiter = () -> {
                 endWait();
                 apply.run();

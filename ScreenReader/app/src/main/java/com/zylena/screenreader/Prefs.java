@@ -167,7 +167,7 @@ final class Prefs {
     }
 
     static void setAiKey(Context c, String v) {
-        sp(c).edit().putString("ai_key", v.trim()).apply();
+        sp(c).edit().putString("ai_key", v.trim()).putString("ai_good", "").apply(); // a new key may have other models
     }
 
     static String aiModel(Context c) {
@@ -176,6 +176,15 @@ final class Prefs {
 
     static void setAiModel(Context c, String v) {
         sp(c).edit().putString("ai_model", v).apply();
+    }
+
+    /** The AI model that answered last, so the next start asks it first instead of waiting on a busy one. */
+    static String aiGood(Context c) {
+        return sp(c).getString("ai_good", "");
+    }
+
+    static void setAiGood(Context c, String v) {
+        sp(c).edit().putString("ai_good", v).apply();
     }
 
     /** "word = translation" lines the user taught Translate. */

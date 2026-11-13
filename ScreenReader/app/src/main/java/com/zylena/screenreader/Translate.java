@@ -70,7 +70,6 @@ final class Translate {
     static volatile String lastBy = "";
     private static volatile boolean listed;
     private static volatile long aiOffUntil;
-    private static volatile boolean toldAi;
 
     /**
      * With the user's own Gemini key: an AI translates by meaning, the way a storyteller would say it.
@@ -94,10 +93,6 @@ final class Translate {
             try {
                 String src = original(text, fromLang);
                 got = ai(c, key, TextPrep.FIL.equals(fromLang) ? src : sense(src), fromLang, context);
-                if (got != null && !toldAi) {
-                    toldAi = true;
-                    Logs.d(c, "translate: the AI storyteller is translating (" + Prefs.aiModel(c) + ")");
-                }
             } catch (Exception e) {
                 String m = String.valueOf(e.getMessage());
                 boolean busy = m.contains("HTTP 429");
@@ -111,6 +106,15 @@ final class Translate {
                 else classic(c, text, fromLang, out);
             });
         });
+    }
+
+    /** The AI gets this long in all; then the quick translator answers. */
+    private static final long AI_MS = 16_000L;
+
+    /** The most a translation can take, for the countdown on screen. */
+    static long longestMs(Context c) {
+        boolean ai = !Prefs.aiKey(c).isEmpty() && System.currentTimeMillis() >= aiOffUntil;
+        return ai ? AI_MS + 4_000L : 5_000L;
     }
 
     /** What the AI is told: who it is, who listens, and the words to use. */
@@ -170,24 +174,55 @@ final class Translate {
         // is left alone for a few minutes so nobody waits on it again.
         String model = null, got = null;
         java.io.IOException lastError = null;
-        long began = System.currentTimeMillis();
-        for (String m : chain(c, key)) {
-            Long off = modelOff.get(m);
-            if (off != null && System.currentTimeMillis() < off) continue;
-            if (System.currentTimeMillis() - began > 20_000L) break;
-            try {
-                got = aiTry(c, key, m, new org.json.JSONObject(body.toString()));
-                model = m;
-                if (!m.equals(good)) Logs.d(c, "translate: AI model " + m + " answers");
-                good = m;
-                break;
-            } catch (java.io.IOException e) {
-                String why = String.valueOf(e.getMessage());
-                if (why.contains("HTTP 400") || why.contains("HTTP 401") || why.contains("HTTP 403")) throw e; // the key, not the model
-                lastError = e;
-                modelOff.put(m, System.currentTimeMillis() + (why.contains("404") ? 24 * 3600_000L : 3 * 60_000L));
-                Logs.d(c, "translate: AI model " + m + " did not answer (" + why + ")");
+        long deadline = System.currentTimeMillis() + AI_MS;
+        if (good.isEmpty()) good = Prefs.aiGood(c); // the model that answered last time the app ran
+        // While no model is known to answer, one paragraph looks for one and the others wait for its finding,
+        // instead of all three knocking on the same busy model.
+        boolean scouting = false;
+        if (good.isEmpty() || isOff(good)) {
+            scout.lock();
+            scouting = true;
+            deadline = Math.max(deadline, System.currentTimeMillis() + 8_000L); // the wait for the finding doesn't count
+            if (!good.isEmpty() && !isOff(good)) { // another paragraph just found one
+                scout.unlock();
+                scouting = false;
             }
+        }
+        try {
+            java.util.List<String> order = chain(c, key);
+            boolean tried = false;
+            for (int round = 0; round < 2 && model == null; round++) {
+                for (String m : order) {
+                    // Second round: every model was resting, so the one most likely to answer is asked anyway.
+                    if (round == 0 && isOff(m)) continue;
+                    if (round == 1 && (tried || !m.equals(order.get(0)))) continue;
+                    long left = deadline - System.currentTimeMillis();
+                    if (left < 3_000L) break;
+                    tried = true;
+                    try {
+                        got = aiTry(c, key, m, new org.json.JSONObject(body.toString()), (int) Math.min(10_000L, left));
+                        model = m;
+                        if (!m.equals(good)) {
+                            Logs.d(c, "translate: AI model " + m + " answers");
+                            Prefs.setAiGood(c, m);
+                        }
+                        good = m;
+                        modelOff.remove(m);
+                        break;
+                    } catch (java.io.IOException e) {
+                        String why = String.valueOf(e.getMessage());
+                        if (why.contains("HTTP 400") || why.contains("HTTP 401") || why.contains("HTTP 403")) throw e; // the key, not the model
+                        lastError = e;
+                        // A slow answer is often just a moment's rush; a refusal means busy for a while; gone is gone.
+                        long rest = why.contains("404") ? 24 * 3600_000L : why.contains("HTTP") ? 3 * 60_000L : 45_000L;
+                        modelOff.put(m, System.currentTimeMillis() + rest);
+                        if (m.equals(good)) good = "";
+                        Logs.d(c, "translate: AI model " + m + " did not answer (" + why + ")");
+                    }
+                }
+            }
+        } finally {
+            if (scouting) scout.unlock();
         }
         if (model == null) throw lastError != null ? lastError : new java.io.IOException("every AI model is busy");
         // English left inside the Tagalog ("…ay shall see visions"): ask once more, naming it.
@@ -196,7 +231,8 @@ final class Translate {
             Logs.d(c, "translate: \"" + left + "\" was left in English, asking again");
             body.getJSONArray("contents").getJSONObject(0).getJSONArray("parts").getJSONObject(0)
                     .put("text", text + "\n\n(Translate everything. Last time \"" + left + "\" was left in English.)");
-            String again = aiTry(c, key, model, body);
+            long room = deadline + 4_000L - System.currentTimeMillis();
+            String again = room < 3_000L ? null : aiTry(c, key, model, body, (int) Math.min(10_000L, room));
             if (again != null && !again.trim().isEmpty()) got = again;
         }
         lastBy = "AI " + model;
@@ -209,12 +245,18 @@ final class Translate {
 
     private static final String LITE = "gemini-flash-lite-latest";
     private static volatile String good = "";
+    private static final java.util.concurrent.locks.ReentrantLock scout = new java.util.concurrent.locks.ReentrantLock();
+
+    private static boolean isOff(String m) {
+        Long off = modelOff.get(m);
+        return off != null && System.currentTimeMillis() < off;
+    }
     private static final java.util.Map<String, Long> modelOff = new java.util.concurrent.ConcurrentHashMap<>();
     private static final java.util.Set<String> noThink = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static volatile java.util.List<String> known;
 
     /** The models to ask, best first: the one that answered last, the saved one, then the newest "flash" ones this key has. */
-    private static java.util.List<String> chain(Context c, String key) {
+    private static synchronized java.util.List<String> chain(Context c, String key) {
         java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
         if (!good.isEmpty()) out.add(good);
         out.add(Prefs.aiModel(c));
@@ -259,25 +301,25 @@ final class Translate {
     private static volatile boolean noThinkRefused;
 
     /** Without the model's long thinking first, where it lets us: a translation should come in a second or two. */
-    private static String aiTry(Context c, String key, String model, org.json.JSONObject body) throws Exception {
+    private static String aiTry(Context c, String key, String model, org.json.JSONObject body, int readMs) throws Exception {
         if (!noThink.contains(model)) {
             try {
                 body.getJSONObject("generationConfig").put("thinkingConfig", new org.json.JSONObject().put("thinkingBudget", 0));
-                return aiCall(c, key, model, body.toString().getBytes("UTF-8"));
+                return aiCall(c, key, model, body.toString().getBytes("UTF-8"), readMs);
             } catch (java.io.IOException e) {
                 if (!String.valueOf(e.getMessage()).contains("HTTP 400")) throw e;
                 noThink.add(model); // this model does not take the setting
             }
         }
         body.getJSONObject("generationConfig").remove("thinkingConfig");
-        return aiCall(c, key, model, body.toString().getBytes("UTF-8"));
+        return aiCall(c, key, model, body.toString().getBytes("UTF-8"), readMs);
     }
 
-    private static String aiCall(Context c, String key, String model, byte[] send) throws Exception {
+    private static String aiCall(Context c, String key, String model, byte[] send, int readMs) throws Exception {
         java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
                 "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent").openConnection();
-        h.setConnectTimeout(5000);
-        h.setReadTimeout(10000);
+        h.setConnectTimeout(Math.min(5000, readMs));
+        h.setReadTimeout(readMs);
         h.setRequestMethod("POST");
         h.setDoOutput(true);
         h.setRequestProperty("Content-Type", "application/json; charset=UTF-8");

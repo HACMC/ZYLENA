@@ -548,7 +548,7 @@ final class TextPrep {
                 // A reference shown as its own link leaves "Apostol (" and "). Matapos" behind; tidy those ends.
                 cleaned = Bible.stripRefs(cleaned).replaceAll("\\s*[(\\[]\\s*$", "")
                         .replaceAll("\\s*(?:[(\\[]\\s*(?:[Cc]f\\.?|[Ss]ee(?: also)?|[Cc]ompare)|[Cc]f\\.)\\s*$", "") // "(Cf." left by a skipped reference
-                        .replaceAll("^[\\s)\\];,.]+", "");
+                        .replaceAll("^[\\s)\\].]+", ""); // a comma stays: ", Ellen White deals…" goes on from the line before
                 if (cleaned.chars().noneMatch(Character::isLetter)) continue;
             }
             // "(Cf." and the like, left alone on a line when its reference is a separate link.
@@ -619,10 +619,15 @@ final class TextPrep {
             // A link or an italic word inside a sentence comes as its own line ("shall" / "prophesy" / "and your…"):
             // that is still one sentence, read and translated in one go.
             boolean goesOn = perLine && lang != null && s.line != last && continues(prev, s.text);
-            if (goesOn && sb.length() > 0 && sb.charAt(sb.length() - 1) == '.' && !prev.endsWith(".")) sb.setLength(sb.length() - 1);
+            // A long sentence cut in pieces stays in one run, so it is never read or translated in halves
+            // ("…and the early" / "1850's"), unless it is far too long.
+            boolean midSentence = lang != null && s.line == last && !prev.isEmpty()
+                    && ".!?…".indexOf(prev.charAt(prev.length() - 1)) < 0 && sb.length() + s.text.length() <= max * 2;
+            if ((goesOn || midSentence) && sb.length() > 0 && sb.charAt(sb.length() - 1) == '.' && !prev.endsWith(".")) sb.setLength(sb.length() - 1);
             boolean newLine = perLine && lang != null && s.line != last && !goesOn;
             boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
-            if (lang != null && (newLang || newLine || newKind || sb.length() + s.text.length() > max)) {
+            boolean tooLong = sb.length() + s.text.length() > max && !midSentence;
+            if (lang != null && (newLang || newLine || newKind || tooLong)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 ref = null;
@@ -656,8 +661,18 @@ final class TextPrep {
         int i = 0;
         while (i < b.length() - 1 && "\"“‘'([ ".indexOf(b.charAt(i)) >= 0) i++;
         char c = b.charAt(i);
-        return Character.isLowerCase(c) || ",;:".indexOf(c) >= 0;
+        if (Character.isLowerCase(c) || ",;:".indexOf(c) >= 0) return true;
+        // "…the three angels of" / "Revelation 14": a sentence never ends on "of" or "the", so a link that
+        // starts with a capital still belongs to it.
+        java.util.regex.Matcher w = LAST_WORD.matcher(a.substring(0, e + 1));
+        return w.find() && HANGING.contains(w.group(1).toLowerCase(Locale.ROOT));
     }
+
+    private static final java.util.regex.Pattern LAST_WORD = java.util.regex.Pattern.compile("([A-Za-z]+)$");
+    private static final java.util.Set<String> HANGING = new java.util.HashSet<>(java.util.Arrays.asList(
+            "of", "the", "a", "an", "and", "or", "to", "in", "on", "at", "by", "for", "with", "from", "into", "upon",
+            "unto", "than", "that", "as", "his", "her", "their", "our", "your", "my", "its", "whose", "which",
+            "ang", "ng", "sa", "mga", "ni", "kay", "nina", "kina", "si", "sina"));
 
     /** A closing full stop gives the voice its sentence-final fall and a natural pause. */
     private static String endWithStop(String t) {
