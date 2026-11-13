@@ -439,7 +439,21 @@ final class TextPrep {
     }
 
     /** A translated paragraph shared out over n runs again, in order, cut at sentence ends (else commas, else spaces). */
+    /** A Bible verse kept in English inside Tagalog: read with the English voice (see Translate.VERSE_ON). */
+    static final Pattern VERSE_SPAN = Pattern.compile("\u000E[^\u000F]*\u000F");
+
     static List<String> shareOut(String text, int n) {
+        // A verse kept whole (marked \u000E…\u000F) is never cut: its spaces are hidden while cutting.
+        java.util.regex.Matcher vm = VERSE_SPAN.matcher(text);
+        StringBuffer vb = new StringBuffer();
+        while (vm.find()) vm.appendReplacement(vb, java.util.regex.Matcher.quoteReplacement(vm.group().replace(' ', '\u0005')));
+        vm.appendTail(vb);
+        List<String> cut = shareOut0(vb.toString(), n);
+        for (int i = 0; i < cut.size(); i++) cut.set(i, cut.get(i).replace('\u0005', ' '));
+        return cut;
+    }
+
+    private static List<String> shareOut0(String text, int n) {
         List<String> pieces = new ArrayList<>(Arrays.asList(text.trim().split("(?<=[.!?…])\\s+")));
         while (pieces.size() < n) {
             int at = 0;
@@ -608,6 +622,52 @@ final class TextPrep {
         return false;
     }
 
+    private static final Pattern REFS_LINE = Pattern.compile("(?=.*\\d:\\d)\\s*(?:(?:[1-3]\\s?)?(?:Mga\\s)?\\p{L}[\\p{L}.]*"
+            + "(?:\\s(?:ng|ni|sa|of)\\s\\p{L}+)?\\.?\\s\\d{1,3}(?::\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3}(?::\\d{1,3})?)?"
+            + "(?:,\\s?\\d{1,3}(?:\\s?[-\u2013]\\s?\\d{1,3})?)*)?[\\s;,.]*)+");
+
+    private static final Pattern QUOTE_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
+
+    /** Quotes followed by their reference whose verse is found: the English verse, marked for the English voice. */
+    static String englishVerses(String s) {
+        if (s.indexOf('(') < 0) return s;
+        java.util.regex.Matcher m = QUOTE_REF.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        boolean any = false;
+        while (m.find()) {
+            String ref = Bible.firstRef(m.group(5)), en = ref == null ? null : Bible.englishFor(m.group(2), ref);
+            if (en == null || !detect(m.group(2)).equals(FIL)) {
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group()));
+                continue;
+            }
+            any = true;
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + "\u000E" + en + "\u000F" + m.group(3) + m.group(4)));
+        }
+        m.appendTail(sb);
+        return any ? sb.toString() : s;
+    }
+
+    /** Applies f to the text outside kept verses only (a Tagalog respelling must not touch the English verse). */
+    static String outsideVerses(String s, java.util.function.UnaryOperator<String> f) {
+        if (s.indexOf('\u000E') < 0) return f.apply(s);
+        java.util.regex.Matcher m = VERSE_SPAN.matcher(s);
+        StringBuilder sb = new StringBuilder();
+        int at = 0;
+        while (m.find()) {
+            sb.append(f.apply(s.substring(at, m.start()))).append(m.group());
+            at = m.end();
+        }
+        return sb.append(f.apply(s.substring(at))).toString();
+    }
+
+    private static String hideVerseSpaces(String s) {
+        java.util.regex.Matcher m = VERSE_SPAN.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group().replace(' ', '\u0005')));
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
     /** readVerses: read the words of each cited verse (takes the place of skipRefs). */
     static List<Seg> prepare(List<String> lines, boolean skipTimes, boolean skipRefs, boolean readVerses) {
         List<Seg> out = new ArrayList<>();
@@ -632,8 +692,16 @@ final class TextPrep {
                 cleaned = "and pages " + lines.get(li).replaceAll("[^\\d\u2013-]", "");
             }
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
+            // A line of nothing but references ("Bilang 13:26–30; Jer. 1:4–10; …"), even with a book name the
+            // reader doesn't know: with "skip Bible references" it is not read (only the verses' words are worth it).
+            if (skipRefs && !readVerses && !inSentence && REFS_LINE.matcher(lines.get(li)).matches()) {
+                continue;
+            }
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);
+            // A Tagalog quote of a Bible verse with its reference after it ("…halimbawa” (1 Corinto 10:11)):
+            // the verse is read from the English Bible, with the English voice.
+            if (!readVerses && !verse) cleaned = englishVerses(cleaned);
             if (readVerses && !verse) {
                 cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
             } else if (skipRefs) {
@@ -665,12 +733,17 @@ final class TextPrep {
             }
             // A Tagalog or Taglish paragraph keeps one voice throughout, the way one person would read it,
             // instead of flipping to the English voice for each English sentence.
-            boolean para = fil || langOf(cleaned, screenFil).equals(FIL);
-            if (para) cleaned = sayTagalog(cleaned);
+            boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
+            boolean para = fil || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
+            if (para) cleaned = outsideVerses(cleaned, TextPrep::sayTagalog);
+            // A kept verse is never cut into sentences or chunks: its spaces are hidden meanwhile.
+            if (hasVerse) cleaned = hideVerseSpaces(cleaned);
             for (String sentence : SENTENCE_END.split(cleaned)) {
                 sentence = sentence.trim();
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
-                for (String part : chunk(sentence, 220)) out.add(new Seg(part, para ? FIL : langOf(part, screenFil), li, li, heading));
+                for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
+                    out.add(new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading));
+                }
             }
         }
         lastDropped = dropped;

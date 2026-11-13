@@ -102,8 +102,10 @@ final class Translate {
             String got = null;
             try {
                 String src = original(text, fromLang);
-                if (!TextPrep.FIL.equals(fromLang)) src = bibleQuotes(c, sense(src), null);
+                java.util.List<String> verses = new java.util.ArrayList<>();
+                if (!TextPrep.FIL.equals(fromLang)) src = bibleQuotes(c, sense(src), verses);
                 got = ai(c, key, src, fromLang, context);
+                if (got != null) got = putBack(got, verses);
                 if (got != null && !got.isEmpty()) {
                     synchronized (saved) {
                         saved.put(saveAs, got);
@@ -151,8 +153,8 @@ final class Translate {
                 .append("in natural, flowing sentences that are easy to follow by ear. Stay faithful: add nothing, leave nothing out, ")
                 .append("and do not explain. Keep the sentences in the same order, one for one. Keep names of people and places as ")
                 .append("written (Mrs. White, James White, Ellen G. White). ");
-        if (toFil) p.append("A Bible verse the text quotes may already be given in Tagalog, from Ang Biblia: copy those Tagalog ")
-                .append("words exactly as they are, inside the same quotation marks; do not change or translate them again. ");
+        if (toFil) p.append("A Bible verse the text quotes is shown as a code like ZQ1X: keep each code exactly as written, ")
+                .append("in its place inside the same quotation marks (the verse is read in English there). ");
         if (toFil) {
             String style = Prefs.taglish(c) ? "taglish" : Prefs.tagStyle(c);
             p.append(style.equals("taglish") ? "Use Taglish the way Filipinos really mix Tagalog and English in conversation. "
@@ -648,10 +650,13 @@ final class Translate {
     private static final java.util.regex.Pattern QUOTE = java.util.regex.Pattern.compile(
             "([\u2018\u201C\"])([^\u2018\u201C\u201D\"]{25,}?)([\u2019\u201D\"])(?![\\p{L}])");
 
+    /** Where a verse is kept in English inside a Tagalog translation: the reader speaks it with the English voice. */
+    static final char VERSE_ON = '\u000E', VERSE_OFF = '\u000F';
+
     /**
-     * Bible verses quoted in the text (EGW quotes the King James Version) are not translated anew: the words of
-     * Ang Biblia take their place, the way a Filipino reader knows them. kept: markers for the quick translator;
-     * null: the Tagalog words go right in, for the AI to copy.
+     * Bible verses quoted in the text (EGW quotes the King James Version) are not translated: they stay in the
+     * Bible's English and are read with the English voice. Each one becomes a marker (ZQ1X) the translator
+     * leaves alone; kept gets the verse, wrapped so the reader knows to switch voices.
      */
     private static String bibleQuotes(Context c, String text, java.util.List<String> kept) {
         Bible.Verses src = Bible.source;
@@ -659,29 +664,31 @@ final class Translate {
         java.util.regex.Matcher m = QUOTE.matcher(text);
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
-            String inner = m.group(2);
-            String[] found = null;
+            String inner = m.group(2), where = null;
             try {
-                found = src.tagalogFor(inner);
+                where = src.verseOf(inner);
             } catch (Exception e) {
                 Logs.d(c, "bible quote lookup failed: " + e);
             }
-            if (found == null) {
+            if (where == null) {
                 m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group()));
                 continue;
             }
-            String end = inner.replaceAll("^.*?([.,;:!?]*)$", "$1");
-            String tl = found[0].trim().replaceAll("[\\s.,;:!?]+$", "") + (end.isEmpty() ? "" : end.substring(0, 1));
-            Logs.d(c, "a quoted verse (" + found[1] + ") read from the Tagalog Bible: " + Logs.snip(inner));
-            String put = tl;
-            if (kept != null) {
-                kept.add(tl);
-                put = "ZQ" + kept.size() + "X"; // the quick translator gets a marker it leaves alone
-            }
-            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + put + m.group(3)));
+            Logs.d(c, "a quoted verse (" + where + ") stays in English: " + Logs.snip(inner));
+            kept.add(VERSE_ON + inner.trim() + VERSE_OFF);
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + "ZQ" + kept.size() + "X" + m.group(3)));
         }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /** The AI's answer with the kept verses back in place of their markers (a lost marker: the AI's own words stay). */
+    private static String putBack(String got, java.util.List<String> kept) {
+        for (int i = 0; i < kept.size(); i++) {
+            java.util.regex.Matcher ph = java.util.regex.Pattern.compile("ZQ\\s?" + (i + 1) + "\\s?X", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(got);
+            got = ph.find() ? ph.replaceFirst(java.util.regex.Matcher.quoteReplacement(kept.get(i))) : got;
+        }
+        return got;
     }
 
     private static String protect(java.util.regex.Pattern p, String text, java.util.List<String> kept) {

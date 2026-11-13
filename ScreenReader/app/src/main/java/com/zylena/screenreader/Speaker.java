@@ -447,8 +447,9 @@ final class Speaker {
         if (ref != null && s.lang.equals(TextPrep.EN)) {
             String verse = Bible.quotedVerse(source, ref);
             if (verse != null) {
-                p.out = verse.trim().replaceAll("[\\s,;:]+$", "") + ".";
-                p.by = "the Tagalog Bible (" + ref + ")";
+                // The Bible's own words, in English, read with the English voice.
+                p.out = Translate.VERSE_ON + source.trim() + Translate.VERSE_OFF;
+                p.by = "the English Bible, not translated (" + ref + ")";
                 p.done = true;
                 Logs.d(ctx, "translated by " + p.by + ", lines " + s.line + "-" + runs.get(last).lastLine + ": " + Logs.snip(source));
                 return p;
@@ -541,16 +542,50 @@ final class Speaker {
         }
         boolean last = i == runs.size() - 1;
         if (i > 0 && runs.get(i - 1).lastLine != s.line) {
-            // A person takes a breath between paragraphs, and a longer one around a heading.
+            // A short breath between paragraphs, a little longer around a heading. The online voice already
+            // waits a moment before each piece, so it gets no extra breath between paragraphs.
             boolean head = s.heading || runs.get(i - 1).heading;
-            // The online voice already waits a moment before each piece.
-            long breath = head ? HEADING_PAUSE_MS : PARAGRAPH_PAUSE_MS;
-            if (used != null && used.isNetworkConnectionRequired()) breath /= 2;
-            tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            boolean online = used != null && used.isNetworkConnectionRequired();
+            long breath = head ? (online ? HEADING_PAUSE_MS / 3 : HEADING_PAUSE_MS) : (online ? 0 : PARAGRAPH_PAUSE_MS);
+            if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
-        tts.setSpeechRate(rateFor(s.lang));
-        // Voice and language switch between runs, so each run is queued as its own utterance.
-        tts.speak(TextPrep.sayName(spoken(s), s.lang), TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
+        // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
+        // in English inside a Tagalog run is its own utterance too, in the English voice.
+        List<String[]> parts = voiceParts(s);
+        for (int k = 0; k < parts.size(); k++) {
+            String lang = parts.get(k)[1];
+            if (k > 0 || !lang.equals(s.lang)) applyVoice(lang);
+            tts.setSpeechRate(rateFor(lang));
+            String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
+            tts.speak(TextPrep.sayName(parts.get(k)[0], lang), TextToSpeech.QUEUE_ADD, null, id);
+        }
+    }
+
+    /** The run as {text, language} pieces: verses kept in English are pieces of their own. */
+    private static List<String[]> voiceParts(TextPrep.Seg s) {
+        List<String[]> out = new ArrayList<>();
+        String t = s.text;
+        int at = 0;
+        while (at < t.length()) {
+            int on = t.indexOf(Translate.VERSE_ON, at);
+            if (on < 0) break;
+            int off = t.indexOf(Translate.VERSE_OFF, on);
+            if (off < 0) break;
+            addPart(out, t.substring(at, on), s);
+            String verse = t.substring(on + 1, off).trim();
+            if (verse.chars().anyMatch(Character::isLetter)) out.add(new String[]{verse, TextPrep.EN});
+            at = off + 1;
+        }
+        addPart(out, t.substring(at), s);
+        if (out.isEmpty()) out.add(new String[]{spoken(s), s.lang});
+        return out;
+    }
+
+    private static void addPart(List<String[]> out, String piece, TextPrep.Seg s) {
+        // Quotation marks and punctuation left alone around a verse aren't worth a piece of their own.
+        if (!piece.chars().anyMatch(Character::isLetterOrDigit)) return;
+        TextPrep.Seg p = new TextPrep.Seg(piece.trim(), s.lang, s.line, s.lastLine, s.heading, s.translated);
+        out.add(new String[]{spoken(p), s.lang});
     }
 
     /** A translation into Tagalog, respelled for the voice ("Herusalem", "edishon"). */
@@ -558,7 +593,7 @@ final class Speaker {
         return s.translated && s.lang.equals(TextPrep.FIL) ? TextPrep.sayTagalog(s.text) : s.text;
     }
 
-    private static final long PARAGRAPH_PAUSE_MS = 320, HEADING_PAUSE_MS = 650;
+    private static final long PARAGRAPH_PAUSE_MS = 200, HEADING_PAUSE_MS = 450;
 
     /** Emulator test: there is no voice there, so each piece takes about as long as reading it would. */
     private void simulate(List<TextPrep.Seg> runs, int gen, int i) {
@@ -710,7 +745,7 @@ final class Speaker {
                 applyVoice(s.lang);
                 tts.setSpeechRate(rateFor(s.lang));
                 String id = "save:" + i + (i == runs.size() - 1 ? ":last" : "");
-                tts.synthesizeToFile(TextPrep.sayName(spoken(s), s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
+                tts.synthesizeToFile(TextPrep.sayName(spoken(s).replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
             }
             Logs.d(ctx, "saving " + runs.size() + " pieces to audio");
         });

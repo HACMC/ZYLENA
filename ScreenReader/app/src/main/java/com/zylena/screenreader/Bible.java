@@ -187,8 +187,8 @@ final class Bible {
     interface Verses {
         String get(boolean tagalog, int book, int chapter, int verse);
 
-        /** A quote from the King James Version found in it (no reference needed): the same words from Ang Biblia, else null. */
-        default String[] tagalogFor(String quote) {
+        /** The quote is from the King James Version (it may leave words out): where it is, else null. */
+        default String verseOf(String quote) {
             return null;
         }
     }
@@ -234,6 +234,24 @@ final class Bible {
         m.appendTail(sb);
         // The separator after a quoted verse (";" or ")") would only be read as an odd pause.
         return any ? sb.toString().replaceAll("\u0003[\\s;,.)]*", " ").trim() : text;
+    }
+
+    /**
+     * A Tagalog quote of the verse the reference names (about as long as Ang Biblia's verse, so not just a few
+     * words of it): the King James words of that verse, else null.
+     */
+    static String englishFor(String tagalogQuote, String ref) {
+        Verses src = source;
+        if (src == null || ref == null) return null;
+        Matcher m = REF.matcher(ref);
+        if (!m.find() || m.group("v") == null) return null;
+        int book = bookNumber(m.group("n"), m.group("b"));
+        if (book == 0) return null;
+        int chapter = Integer.parseInt(m.group("c"));
+        String en = passage(src, false, book, chapter, m.group("v")), tl = passage(src, true, book, chapter, m.group("v"));
+        if (en == null || tl == null) return null;
+        double size = tagalogQuote.length() / (double) tl.length();
+        return size >= 0.6 && size <= 1.6 ? en.trim() : null;
     }
 
     /** The first reference with a verse in the text ("Acts 2:17"), or null. */
