@@ -66,6 +66,62 @@ final class Speaker {
         ctx = c;
     }
 
+    /** Shows or hides (null) a short note on screen while the reader waits for something. */
+    interface Notice {
+        void show(String text);
+    }
+
+    private Notice notice;
+    private Runnable waitTick;
+    private boolean noticeUp;
+
+    void setNotice(Notice n) {
+        notice = n;
+    }
+
+    /** While a translation is awaited and the voice has nothing to say: a note and a soft tick, so it's clear it is working. */
+    private void startWait(int gen) {
+        endWait();
+        final long since = System.currentTimeMillis();
+        waitTick = new Runnable() {
+            int ticks;
+
+            @Override
+            public void run() {
+                if (waitTick != this || gen != generation) return;
+                boolean silent = tts == null || !tts.isSpeaking();
+                if (silent) {
+                    long secs = (System.currentTimeMillis() - since) / 1000;
+                    if (notice != null) notice.show("Translating… " + secs + " s");
+                    noticeUp = true;
+                    if (ticks++ % 3 == 0) tick();
+                } else if (noticeUp) {
+                    if (notice != null) notice.show(null);
+                    noticeUp = false;
+                }
+                main.postDelayed(this, 1000);
+            }
+        };
+        main.postDelayed(waitTick, 1500);
+    }
+
+    private void endWait() {
+        if (waitTick != null) main.removeCallbacks(waitTick);
+        waitTick = null;
+        if (noticeUp && notice != null) notice.show(null);
+        noticeUp = false;
+    }
+
+    private android.media.ToneGenerator toner;
+
+    private void tick() {
+        try {
+            if (toner == null) toner = new android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 25);
+            toner.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 60);
+        } catch (Exception ignored) {
+        }
+    }
+
     void setListener(Listener l) {
         listener = l;
     }
@@ -165,6 +221,7 @@ final class Speaker {
 
     void stop() {
         generation++;
+        endWait();
         paused = false;
         if (tts != null) tts.stop();
         setSpeaking(false);
@@ -365,8 +422,14 @@ final class Speaker {
         final int last = j;
         StringBuilder all = new StringBuilder();
         for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
-        Translate.text(ctx, all.toString(), s.lang, out -> main.post(() -> {
+        final long asked = System.currentTimeMillis();
+        final String source = all.toString();
+        startWait(gen);
+        Translate.text(ctx, source, s.lang, out -> main.post(() -> {
+            endWait();
             if (gen != generation) return;
+            Logs.d(ctx, "translated by " + (out == null ? "nobody" : Translate.lastBy) + " in " + (System.currentTimeMillis() - asked)
+                    + " ms, lines " + s.line + "-" + s.lastLine + ": " + (source.length() > 700 ? source.substring(0, 700) + "…" : source));
             if (out != null && !out.trim().isEmpty()) {
                 String to = Translate.other(s.lang);
                 List<String> parts = TextPrep.shareOut(out, last - i + 1);

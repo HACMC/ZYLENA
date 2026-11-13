@@ -84,6 +84,10 @@ public class ReaderService extends AccessibilityService {
             registerReceiver(lockWatch, f);
             lockWatching = true;
         }
+        Speaker.get(this).setNotice(text -> {
+            if (text == null) hideBanner();
+            else showBanner(text);
+        });
         Speaker.get(this).setListener(speaking -> {
             updateButtonIcon();
             if (controls != null) controls.update(null);
