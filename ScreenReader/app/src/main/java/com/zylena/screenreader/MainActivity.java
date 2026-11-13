@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row offlineRow;
+    private Ui.Row offlineRow, booksRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -414,6 +414,10 @@ public class MainActivity extends Activity {
         LinearLayout bible = Ui.group(this);
         refsRow = Ui.nav(this, R.drawable.ic_book, "Bible references", "", this::pickRefMode);
         Ui.add(bible, refsRow.view);
+        booksRow = Ui.toggle(this, R.drawable.ic_book, "English book names",
+                "A reference is said \"Numbers fourteen verse four\". Off: the name as printed, \"Bilang fourteen verse four\".",
+                on -> Prefs.setEnglishBooks(this, on));
+        Ui.add(bible, booksRow.view);
         col.addView(bible);
 
         col.addView(Ui.section(this, "Leave out"));
@@ -619,6 +623,7 @@ public class MainActivity extends Activity {
         String mode = Prefs.refMode(this);
         refsRow.setSub(mode.equals("skip") ? "Skip them: \u2026Apostol (Lucas 8:51). Matapos\u2026 is read \u2026Apostol. Matapos\u2026"
                 : mode.equals("verses") ? "Read the verse text (Ang Biblia 1905 / KJV)" : "Read the reference: Lucas kabanata 8, talata 51");
+        set(booksRow, Prefs.englishBooks(this));
         refsRow.setValue(mode.equals("skip") ? "Skip" : mode.equals("verses") ? "Verse text" : "Read");
         set(timeRow, Prefs.skipTimestamps(this));
         set(buttonsRow, Prefs.skipButtons(this));

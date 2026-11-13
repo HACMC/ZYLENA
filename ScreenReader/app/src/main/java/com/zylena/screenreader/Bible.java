@@ -124,6 +124,7 @@ final class Bible {
     private static final Pattern SUPER = Pattern.compile("[\\u00B9\\u00B2\\u00B3\\u2070-\\u2079]+");
     private static final Pattern CHAPTER_HEAD;
     private static final Pattern BOOK_CHAPTER;
+    private static final Pattern BOOK_SAID;
     private static final Pattern SPACED_DASH = Pattern.compile("\\s[-–—]+\\s");
 
     static {
@@ -143,6 +144,7 @@ final class Bible {
         full.sort((x, y) -> y.length() - x.length());
         StringBuilder fullAlt = new StringBuilder();
         for (String f : full) fullAlt.append(fullAlt.length() > 0 ? "|" : "").append(Pattern.quote(f));
+        BOOK_SAID = Pattern.compile("(?<![\\p{L}\\d])(?:(?<o>Unang|Ikalawang|Ikatlong)\\s)?(?<b>" + fullAlt + ")(?=\\s(?:kabanata|chapters?)\\s\\d)");
         BOOK_CHAPTER = Pattern.compile("(?<![\\p{L}\\d])(?:(?<n>[1-3])\\s)?(?<b>" + fullAlt + ")\\s(?<c>\\d{1,3}(?:\\s(?:at|and|hanggang|to)\\s\\d{1,3})*)"
                 + "(?![\\d:]|\\s?[-–—]\\s?\\d|\\s?(?:%|percent|porsiyento))");
         String dash = "[-–—]";
@@ -386,6 +388,14 @@ final class Bible {
             + "(\\d{1,3}(?:(?:\\s(?:hanggang|to)\\s(?:(?:kabanata|chapter)\\s\\d{1,3}\\s(?:talata|verse)\\s)?|,\\s|\\s(?:at|and)\\s)\\d{1,3})*)"
             + "|\\s(?:hanggang|to)\\s(\\d{1,3}))");
     private static final Pattern NUM = Pattern.compile("\\d{1,3}");
+    /** Book names in references are said in English ("Numbers", "Hebrews"), whatever language the page is in. */
+    static volatile boolean englishNames = true;
+    /**
+     * A verse or chapter pointed to without its book ("sa talata 13", "mga talata 4-11", "kabanata 8", "v. 5",
+     * "verses 3 and 4"): the word stays, the numbers are said in English like the rest of a reference.
+     */
+    private static final Pattern BARE = Pattern.compile("(?<![\\p{L}])((?:mga\\s)?(?:talata(?:ng)?|bersikulo|kabanata(?:ng)?)|verses?|chapters?|vv?\\.|vss?\\.|kab\\.|tal\\.)"
+            + "\\s?(\\d{1,3}(?:(?:\\s?[-–—]\\s?|\\s(?:hanggang|to|at|and)\\s|,\\s?)\\d{1,3}(?![\\d:]))*)(?![\\d:])", Pattern.CASE_INSENSITIVE);
 
     private static String words(String s) {
         Matcher m = NUM.matcher(s);
@@ -411,6 +421,18 @@ final class Bible {
             m.appendReplacement(sb, Matcher.quoteReplacement(book(m.group("n"), m.group("b"), fil || TAGALOG_NAMES.contains(m.group("b"))) + " " + c));
         }
         m.appendTail(sb);
+        if (englishNames) {
+            // A reference already spelled out ("Mateo kabanata 23", as a translation writes it) gets the English name too.
+            m = BOOK_SAID.matcher(sb.toString());
+            sb = new StringBuffer();
+            while (m.find()) {
+                String b = m.group("b"), o = m.group("o");
+                String name = SAME_MAP.containsKey(b) ? SAME_MAP.get(b) : b;
+                String ord = o == null ? "" : (o.equals("Unang") ? "First " : o.equals("Ikalawang") ? "Second " : "Third ");
+                m.appendReplacement(sb, Matcher.quoteReplacement(ord + name));
+            }
+            m.appendTail(sb);
+        }
         m = SAID.matcher(sb.toString());
         sb = new StringBuffer();
         while (m.find()) {
@@ -424,6 +446,18 @@ final class Bible {
                 out = "chapters " + words(m.group(1)) + " to " + words(m.group(3));
             }
             m.appendReplacement(sb, Matcher.quoteReplacement(out));
+        }
+        m.appendTail(sb);
+        m = BARE.matcher(sb.toString());
+        sb = new StringBuffer();
+        while (m.find()) {
+            String w = m.group(1), l = w.toLowerCase(Locale.ROOT);
+            boolean many = m.group(2).matches(".*\\D.*");
+            if (l.startsWith("v")  && l.endsWith(".")) w = many ? "verses" : "verse";
+            else if (l.equals("kab.")) w = "kabanata";
+            else if (l.equals("tal.")) w = "talata";
+            String nums = words(m.group(2).replaceAll("\\s?[-–—]\\s?", " to ").replace(" hanggang ", " to ").replace(" at ", " and "));
+            m.appendReplacement(sb, Matcher.quoteReplacement(w + " " + nums));
         }
         m.appendTail(sb);
         return sb.toString();
@@ -521,6 +555,11 @@ final class Bible {
 
     private static String book(String n, String b, boolean fil) {
         String name = EXPAND.containsKey(b) ? EXPAND.get(b) : b;
+        if (englishNames) {
+            // "Bilang" is said "Numbers", "2 Cronica" "Second Chronicles": the English name of the book.
+            name = SAME_MAP.containsKey(name) ? SAME_MAP.get(name) : name;
+            fil = false;
+        }
         if (n == null) return name;
         if (fil) name = name.replaceFirst("^Kay ", ""); // "II Kay Timoteo" is said "Ikalawang Timoteo"
         int k = n.equals("1") || n.equals("I") ? 1 : n.equals("2") || n.equals("II") ? 2 : 3;

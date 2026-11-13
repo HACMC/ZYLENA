@@ -384,6 +384,17 @@ final class Prefs {
     static void applyLists(Context c) {
         TextPrep.userSay = TextPrep.parseSay(sayList(c));
         TextPrep.userSkip = TextPrep.parseSkip(skipList(c));
+        Bible.englishNames = englishBooks(c);
+    }
+
+    /** Book names in references said in English ("Numbers fourteen"); off: as printed ("Bilang fourteen"). */
+    static boolean englishBooks(Context c) {
+        return sp(c).getBoolean("english_books", true);
+    }
+
+    static void setEnglishBooks(Context c, boolean v) {
+        sp(c).edit().putBoolean("english_books", v).apply();
+        Bible.englishNames = v;
     }
 
     /**
