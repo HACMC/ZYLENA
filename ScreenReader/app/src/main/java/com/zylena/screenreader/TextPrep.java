@@ -352,6 +352,12 @@ final class TextPrep {
     private static final Pattern YEAR_ERA_BEFORE = Pattern.compile("\\b(AD)\\s?(\\d{1,4})\\b");
     private static final Pattern YEAR_CUE = Pattern.compile("\\b(in|since|until|till|by|before|after|from|during|year|circa|noong|nang|taong|taon)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)", Pattern.CASE_INSENSITIVE);
     private static final Pattern YEAR_DATE = Pattern.compile("\\b(" + MONTHS + "\\s\\d{1,2},?\\s)(1[0-9]{3}|20[0-9]{2})\\b");
+    /** Tagalog: "noong 1844", "dekada ng 1850", "Oktubre 22, 1844" — said as English years, the way people say them. */
+    private static final Pattern YEAR_CUE_FIL = Pattern.compile("\\b(noong|nang|taong|taon|ng|mula|hanggang|bago|pagkatapos|simula|"
+            + "(?:Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\\s\\d{1,2},?)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)",
+            Pattern.CASE_INSENSITIVE);
+    /** "the 1850's", "1840s": "eighteen fifties". */
+    private static final Pattern DECADE = Pattern.compile("\\b(1[0-9]|20)([2-9])0(?:['\u2019]?s)\\b");
     private static final Pattern ERA_WORD = Pattern.compile("(?<![\\p{L}])(AD|BCE|BC)(?![\\p{L}])");
 
     private static String era(String e, boolean fil) {
@@ -361,7 +367,8 @@ final class TextPrep {
     /**
      * What a voice should be given for eras and years, just before it speaks (so a translation sees the
      * original "A.D. 31"): the eras as letters, and in English the years as years, not as "one thousand
-     * eight hundred forty-four". Tagalog numbers are left to the Tagalog voice.
+     * eight hundred forty-four". In Tagalog too, years are said that way, as people say them; other
+     * Tagalog numbers are left to the Tagalog voice.
      */
     static String sayDates(String s, String lang) {
         boolean fil = FIL.equals(lang);
@@ -370,7 +377,10 @@ final class TextPrep {
             s = replaceAll(YEAR_ERA_BEFORE, s, m -> "A.D. " + yearWords(Integer.parseInt(m.group(2))));
             s = replaceAll(YEAR_CUE, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
             s = replaceAll(YEAR_DATE, s, m -> m.group(1) + yearWords(Integer.parseInt(m.group(2))));
+        } else {
+            s = replaceAll(YEAR_CUE_FIL, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
         }
+        s = replaceAll(DECADE, s, m -> below100(Integer.parseInt(m.group(1))) + " " + TENS[Integer.parseInt(m.group(2))].replaceAll("y$", "ies"));
         return replaceAll(ERA_WORD, s, m -> era(m.group(1), fil)).replaceAll("(A\\.D\\.|B\\.C\\.(?:E\\.)?)\\.", "$1");
     }
 
