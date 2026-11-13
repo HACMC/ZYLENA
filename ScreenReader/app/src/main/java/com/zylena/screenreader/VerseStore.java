@@ -121,6 +121,129 @@ final class VerseStore implements Bible.Verses {
         return null;
     }
 
+    /**
+     * The quote's words are nearly all those of one verse, or of two to four verses in a row, and the quote is about
+     * as long as them: those verses from Ang Biblia, and where they are ("27:8:14"). A quote may leave out how the
+     * first verse starts ("And he said unto me, Unto two thousand…"): the Tagalog then starts after as many commas.
+     * A quote that leaves out parts in the middle or at the end is not matched (it is translated as usual).
+     */
+    @Override
+    public String[] tagalogFor(String quote) {
+        String[] q = wordsOf(quote);
+        if (q.length < 6) return null;
+        buildIndex();
+        java.util.Set<String> qs = new java.util.HashSet<>(java.util.Arrays.asList(q));
+        Map<Integer, Integer> hits = new HashMap<>();
+        for (String w : qs) {
+            int[] p = index.get(w);
+            if (p == null || p.length > 2500) continue;
+            for (int i : p) hits.merge(i, 1, Integer::sum);
+        }
+        if (hits.isEmpty()) return null;
+        java.util.List<Map.Entry<Integer, Integer>> top = new java.util.ArrayList<>(hits.entrySet());
+        top.sort((x, y) -> y.getValue() - x.getValue());
+        int bestFrom = -1, bestLen = 0, bestLead = 0;
+        double bestScore = 0;
+        java.util.Set<Long> tried = new java.util.HashSet<>();
+        for (int t = 0; t < Math.min(8, top.size()); t++) {
+            int c = top.get(t).getKey();
+            for (int from = Math.max(0, c - 3); from <= c; from++) {
+                for (int len = c - from + 1; len <= 4 && from + len <= order.length; len++) {
+                    if (!tried.add(from * 10L + len)) continue;
+                    if (order[from] / 1_000_000L != order[from + len - 1] / 1_000_000L) break; // one book
+                    int lead = leadOf(words[from], q);
+                    java.util.Set<String> span = new java.util.HashSet<>();
+                    int spanCount = 0;
+                    boolean each = true;
+                    for (int k = from; k < from + len; k++) {
+                        int start = k == from ? lead : 0, inQuote = 0;
+                        for (int i = start; i < words[k].length; i++) {
+                            if (qs.contains(words[k][i])) inQuote++;
+                            span.add(words[k][i]);
+                        }
+                        int n = words[k].length - start;
+                        if (n <= 0 || inQuote < n * 0.8) each = false; // every verse (from where the quote starts) nearly all in it
+                        spanCount += Math.max(0, n);
+                    }
+                    if (!each || spanCount == 0) continue;
+                    int found = 0;
+                    for (String w : q) if (span.contains(w)) found++;
+                    double share = found / (double) q.length, size = q.length / (double) spanCount;
+                    if (share < 0.85 || size < 0.8 || size > 1.25) continue;
+                    double score = share - Math.abs(1 - size) * 0.3;
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestFrom = from;
+                        bestLen = len;
+                        bestLead = lead;
+                    }
+                }
+            }
+        }
+        if (bestFrom < 0) return null;
+        StringBuilder tlText = new StringBuilder();
+        for (int k = bestFrom; k < bestFrom + bestLen; k++) {
+            long key = order[k];
+            int b = (int) (key / 1_000_000L), ch = (int) (key / 1000 % 1000), v = (int) (key % 1000);
+            String t = get(true, b, ch, v);
+            if (t == null) return null;
+            if (k == bestFrom && bestLead > 1) {
+                t = afterLead(get(false, b, ch, v), bestLead, t);
+                if (t == null) return null; // can't tell where the quoted part starts in the Tagalog
+            }
+            if (tlText.length() > 0) tlText.append(' ');
+            tlText.append(t);
+        }
+        long key = order[bestFrom];
+        return new String[]{tlText.toString(), (key / 1_000_000L) + ":" + (key / 1000 % 1000) + ":" + (key % 1000) + (bestLen > 1 ? "+" + (bestLen - 1) : "")};
+    }
+
+    /** How many of the verse's words come before the quote's first two words (0 if they aren't found). */
+    private static int leadOf(String[] verse, String[] q) {
+        for (int i = 0; i + 1 < verse.length && i < verse.length / 2 + 1; i++) {
+            if (verse[i].equals(q[0]) && verse[i + 1].equals(q[1])) return i;
+        }
+        return 0;
+    }
+
+    /**
+     * The Tagalog verse from where the quote starts: the English words before it end at a comma, colon or
+     * semicolon; the Tagalog is cut after as many of those. Null when they don't line up.
+     */
+    private static String afterLead(String en, int lead, String tl) {
+        if (en == null) return null;
+        java.util.regex.Matcher w = java.util.regex.Pattern.compile("[A-Za-z\u2019']+").matcher(en);
+        int seen = 0, at = -1;
+        while (w.find()) {
+            if (w.group().replaceAll("[^A-Za-z]", "").length() < 3) continue;
+            if (seen++ == lead) {
+                at = w.start();
+                break;
+            }
+        }
+        if (at < 0) return null;
+        String before = en.substring(0, at).trim();
+        // Short words just before it ("…and said, O Daniel, I am now come") belong to the quote too.
+        java.util.regex.Matcher tail = java.util.regex.Pattern.compile("[,;:](\\s+[A-Za-z]{1,2})+$").matcher(before);
+        if (tail.find()) before = before.substring(0, tail.start() + 1);
+        if (before.isEmpty() || ",;:".indexOf(before.charAt(before.length() - 1)) < 0) return null;
+        at = before.length();
+        int marks = before.replaceAll("[^,;:]", "").length();
+        int cut = -1;
+        for (int i = 0, n = 0; i < tl.length(); i++) {
+            if (",;:".indexOf(tl.charAt(i)) >= 0 && ++n == marks) {
+                cut = i;
+                break;
+            }
+        }
+        if (cut < 0) return null;
+        // About the same share of the verse is left out in both.
+        double enShare = at / (double) en.length(), tlShare = cut / (double) tl.length();
+        if (Math.abs(enShare - tlShare) > 0.2) return null;
+        String rest = tl.substring(cut + 1).trim();
+        return rest.isEmpty() ? null : Character.toUpperCase(rest.charAt(0)) + rest.substring(1);
+    }
+
     /** Loads both Bibles in the background so the first reference doesn't hold up reading. */
     void warmUp() {
         new Thread(() -> {

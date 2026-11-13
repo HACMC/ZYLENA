@@ -139,7 +139,8 @@ final class Speaker {
         if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
         Logs.d(ctx, "speaking run " + i + "/" + runs.size() + " [" + r.lang + "] lines " + r.line + "-" + r.lastLine
-                + ": " + (r.translated ? (r.text.length() > 600 ? r.text.substring(0, 600) + "…" : r.text) : Logs.snip(r.text)));
+                + ": " + (r.translated ? (r.text.length() > 600 ? r.text.substring(0, 600) + "…" : r.text)
+                : Logs.snip(Bible.sayRefs(r.text, r.lang.equals(TextPrep.FIL)))));
         Progress p = progress;
         int before = 0, total = 0;
         for (int k = 0; k < runs.size(); k++) {
@@ -246,6 +247,7 @@ final class Speaker {
         paused = false;
         if (tts != null) tts.stop();
         if (gemini != null) gemini.stop();
+        handLate.clear();
         setSpeaking(false);
     }
 
@@ -337,6 +339,8 @@ final class Speaker {
                     public void onStart(String id) {
                         try {
                             String[] p = id.split(":");
+                            // A run spoken in several pieces (two voices) starts once, with its first piece.
+                            if (p.length > 2 && p[2].startsWith("p") && !p[2].equals("p0")) return;
                             runStarted(Integer.parseInt(p[1]), Integer.parseInt(p[0]));
                         } catch (Exception ignored) {
                         }
@@ -409,7 +413,8 @@ final class Speaker {
      */
     private void queueAhead(List<TextPrep.Seg> runs, int gen, int speaking) {
         if (gen != generation || runs != currentRuns || tts == null) return;
-        int upTo = Math.min(runs.size() - 1, speaking + AHEAD);
+        // Gemini's voice gets more at a time: it asks for several paragraphs in one request.
+        int upTo = Math.min(runs.size() - 1, speaking + (GeminiVoice.usable(ctx) ? 8 : AHEAD));
         while (queuedTo < upTo) {
             queuedTo++;
             queue(runs, gen, queuedTo);
@@ -467,9 +472,8 @@ final class Speaker {
         if (ref != null && s.lang.equals(TextPrep.EN)) {
             String verse = Bible.quotedVerse(source, ref);
             if (verse != null) {
-                // The Bible's own words, in English, read with the English voice.
-                p.out = Translate.VERSE_ON + source.trim() + Translate.VERSE_OFF;
-                p.by = "the English Bible, not translated (" + ref + ")";
+                p.out = verse.trim().replaceAll("[\\s,;:]+$", "") + ".";
+                p.by = "the Tagalog Bible (" + ref + ")";
                 p.done = true;
                 Logs.d(ctx, "translated by " + p.by + ", lines " + s.line + "-" + runs.get(last).lastLine + ": " + Logs.snip(source));
                 return p;
@@ -552,6 +556,7 @@ final class Speaker {
     }
 
     private GeminiVoice gemini;
+    private final List<int[]> handLate = new ArrayList<>(); // {gen, run}, main thread only
 
     private GeminiVoice gemini() {
         if (gemini == null) {
@@ -567,15 +572,27 @@ final class Speaker {
                 }
 
                 @Override
-                public void toPhone(GeminiVoice.Item item) {
-                    if (item.voice != null) { // a test of a voice: nothing else to read
-                        toast("Gemini voice didn't answer this time. Try again in a few minutes.");
-                        main.post(() -> setSpeaking(false));
-                        return;
-                    }
+                public void toPhone(List<GeminiVoice.Item> items, String note) {
                     main.post(() -> {
-                        List<TextPrep.Seg> runs = currentRuns;
-                        if (item.gen == generation && item.run < runs.size()) queuePhone(runs, item.gen, item.run);
+                        try {
+                            if (!items.isEmpty() && items.get(0).voice != null) { // a test of a voice: nothing else to read
+                                toast("Gemini voice didn't answer this time. Try again in a few minutes.");
+                                if (items.get(0).gen == generation) setSpeaking(false);
+                                return;
+                            }
+                            if (note != null) toast(note);
+                            List<TextPrep.Seg> runs = currentRuns;
+                            for (GeminiVoice.Item it : items) {
+                                if (it.gen == generation && it.run < runs.size()) queuePhone(runs, it.gen, it.run);
+                            }
+                            // Paragraphs that came meanwhile go behind them.
+                            for (int[] late : handLate) {
+                                if (late[0] == generation && late[1] < runs.size()) queuePhone(runs, late[0], late[1]);
+                            }
+                        } finally {
+                            handLate.clear();
+                            gemini.handing = false;
+                        }
                     });
                 }
             }, () -> generation);
@@ -585,6 +602,10 @@ final class Speaker {
 
     /** Puts run i in the voice's queue: Gemini's voice when it is on and can, else the phone's voice. */
     private void queue(List<TextPrep.Seg> runs, int gen, int i) {
+        if (gemini != null && gemini.handing) { // its paragraphs are going to the phone's voice: this one follows them
+            handLate.add(new int[]{gen, i});
+            return;
+        }
         if (GeminiVoice.usable(ctx) && !Prefs.testMode(ctx)) {
             TextPrep.Seg s = runs.get(i);
             boolean newPara = i > 0 && runs.get(i - 1).lastLine != s.line;

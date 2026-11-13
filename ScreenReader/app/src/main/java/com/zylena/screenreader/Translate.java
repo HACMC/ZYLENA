@@ -154,7 +154,7 @@ final class Translate {
                 .append("and do not explain. Keep the sentences in the same order, one for one. Keep names of people and places as ")
                 .append("written (Mrs. White, James White, Ellen G. White). ");
         if (toFil) p.append("A Bible verse the text quotes is shown as a code like ZQ1X: keep each code exactly as written, ")
-                .append("in its place inside the same quotation marks (the verse is read in English there). ");
+                .append("in its place inside the same quotation marks. ");
         if (toFil) {
             String style = Prefs.taglish(c) ? "taglish" : Prefs.tagStyle(c);
             p.append(style.equals("taglish") ? "Use Taglish the way Filipinos really mix Tagalog and English in conversation. "
@@ -650,13 +650,13 @@ final class Translate {
     private static final java.util.regex.Pattern QUOTE = java.util.regex.Pattern.compile(
             "([\u2018\u201C\"])([^\u2018\u201C\u201D\"]{25,}?)([\u2019\u201D\"])(?![\\p{L}])");
 
-    /** Where a verse is kept in English inside a Tagalog translation: the reader speaks it with the English voice. */
+    /** Marks a stretch read with the English voice inside Tagalog (not used for verses any more; kept for the reader). */
     static final char VERSE_ON = '\u000E', VERSE_OFF = '\u000F';
 
     /**
-     * Bible verses quoted in the text (EGW quotes the King James Version) are not translated: they stay in the
-     * Bible's English and are read with the English voice. Each one becomes a marker (ZQ1X) the translator
-     * leaves alone; kept gets the verse, wrapped so the reader knows to switch voices.
+     * A whole Bible verse quoted in the text (EGW quotes the King James Version) is not translated anew: the
+     * words of Ang Biblia take its place, as printed. Each becomes a marker (ZQ1X) the translator leaves alone;
+     * kept gets the Tagalog verse. A quote of only part of a verse is translated like the rest.
      */
     private static String bibleQuotes(Context c, String text, java.util.List<String> kept) {
         Bible.Verses src = Bible.source;
@@ -664,18 +664,21 @@ final class Translate {
         java.util.regex.Matcher m = QUOTE.matcher(text);
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
-            String inner = m.group(2), where = null;
+            String inner = m.group(2);
+            String[] found = null;
             try {
-                where = src.verseOf(inner);
+                found = src.tagalogFor(inner);
             } catch (Exception e) {
                 Logs.d(c, "bible quote lookup failed: " + e);
             }
-            if (where == null) {
+            if (found == null) {
                 m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group()));
                 continue;
             }
-            Logs.d(c, "a quoted verse (" + where + ") stays in English: " + Logs.snip(inner));
-            kept.add(VERSE_ON + inner.trim() + VERSE_OFF);
+            String end = inner.replaceAll("^.*?([.,;:!?]*)$", "$1");
+            String tl = found[0].trim().replaceAll("[\\s.,;:!?]+$", "") + (end.isEmpty() ? "" : end.substring(0, 1));
+            Logs.d(c, "a quoted verse (" + found[1] + ") read from the Tagalog Bible: " + Logs.snip(inner));
+            kept.add(tl);
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + "ZQ" + kept.size() + "X" + m.group(3)));
         }
         m.appendTail(sb);

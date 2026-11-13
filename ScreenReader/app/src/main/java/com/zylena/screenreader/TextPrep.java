@@ -318,6 +318,8 @@ final class TextPrep {
 
     /** The line without page numbers and book codes; empty when the whole line was one. */
     static volatile String lastCodes = "";
+    /** A line with several references that was read all the same (for the log). */
+    static volatile String lastRefLine = "";
     private static final Pattern ODD_SPACE = Pattern.compile("[\\p{Z}\\u200B-\\u200D\\u2060\\uFEFF]+");
     /** A short line that is only letters, a number (or roman numeral), a full stop and a number: "EW vi.1". */
     private static final Pattern SHORT_CODE = Pattern.compile("^[\\s(\\[—–-]*\\d?\\p{L}{1,6}\\s?(?:\\d{1,4}|[ivxlcdmIVXLCDM]{1,7})\\s?[.,:·]\\s?\\d{1,3}[\\s)\\].,;:—–-]*$");
@@ -413,6 +415,7 @@ final class TextPrep {
      */
     static String sayDates(String s, String lang) {
         boolean fil = FIL.equals(lang);
+        s = Bible.sayRefs(s, fil); // "Juan three verse sixteen"
         // Eras in both languages (a translation brings back "B.C. 457"): "four fifty-seven B.C.", "A.D. thirty-four".
         s = eraDots(s);
         s = replaceAll(YEAR_ERA_AFTER, s, m -> yearWords(Integer.parseInt(m.group(1))) + " " + era(m.group(2), false));
@@ -624,9 +627,10 @@ final class TextPrep {
 
     // A reference is a book and chapter:verses, or chapter:verses alone after one ("Jeremias 1:4–10; 26:1–15"),
     // joined by ; , and "at" / "and".
-    private static final Pattern REFS_LINE = Pattern.compile("(?=.*\\d:\\d)\\s*(?:(?:(?:[1-3]\\s?)?(?:Mga\\s)?\\p{L}[\\p{L}.]*"
-            + "(?:\\s(?:ng|ni|sa|of)\\s\\p{L}+)?\\.?\\s)?\\d{1,3}(?::\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3}(?::\\d{1,3})?)?"
-            + "(?:,\\s?\\d{1,3}(?:\\s?[-\u2013]\\s?\\d{1,3})?)*)?(?:[\\s;,.]|\\b(?:at|and)\\b)*)+");
+    private static final Pattern REFS_LINE = Pattern.compile("\\s*(?:(?:(?:(?:[1-3]|I{1,3})\\.?\\s?)?\\p{Lu}[\\p{L}.\\-]*\\.?\\s"
+            + "(?:(?:(?:ng|mga|ni|of|kay)\\s)?\\p{Lu}[\\p{L}.\\-]*\\.?\\s){0,3})?"
+            + "\\d{1,3}:\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3}(?::\\d{1,3})?)?"
+            + "(?:,\\s?\\d{1,3}(?:\\s?[-\u2013\u2014]\\s?\\d{1,3})?(?![\\d:]))*(?:[\\s;,.]|\\b(?:at|and)\\b)*)+");
 
     private static final Pattern QUOTE_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
 
@@ -675,6 +679,7 @@ final class TextPrep {
         List<Seg> out = new ArrayList<>();
         int dropped = 0;
         lastCodes = "";
+        lastRefLine = "";
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
@@ -696,14 +701,15 @@ final class TextPrep {
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
             // A line of nothing but references ("Bilang 13:26–30; Jer. 1:4–10; …"), even with a book name the
             // reader doesn't know: with "skip Bible references" it is not read (only the verses' words are worth it).
-            if (skipRefs && !readVerses && !inSentence && REFS_LINE.matcher(lines.get(li)).matches()) {
-                continue;
+            if (skipRefs && !readVerses && !inSentence) {
+                String flat = SPACES.matcher(Bible.normalize(lines.get(li))).replaceAll(" ").trim();
+                int[] share = Bible.refShare(flat);
+                // Only references, or a list of three or more with hardly a word between them.
+                if (REFS_LINE.matcher(flat).matches() || share[0] >= 3 && share[1] <= 12) continue;
+                if (share[0] >= 2 && share[1] <= 40 && lastRefLine.isEmpty()) lastRefLine = flat; // for the log: why it was read
             }
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);
-            // A Tagalog quote of a Bible verse with its reference after it ("…halimbawa” (1 Corinto 10:11)):
-            // the verse is read from the English Bible, with the English voice.
-            if (!readVerses && !verse) cleaned = englishVerses(cleaned);
             if (readVerses && !verse) {
                 cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
             } else if (skipRefs) {

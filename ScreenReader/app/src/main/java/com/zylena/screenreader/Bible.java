@@ -35,7 +35,10 @@ final class Bible {
             "Colosas", "Tesalonica", "Timoteo", "Tito", "Filemon", "Hebreo", "Santiago", "Pedro", "Judas",
             "Pahayag", "Apocalipsis", "Ezequiel", "Isaias", "Hebreos", "Romanos", "Mga Hebreo", "Mga Gawa", "Mga Taga-Roma", "Mga Taga-Corinto", "Mga Taga-Galacia",
             "Mga Taga-Efeso", "Mga Taga-Filipos", "Mga Taga-Colosas", "Mga Taga-Tesalonica", "Kay Timoteo", "Kay Tito",
-            "Kay Filemon"};
+            "Kay Filemon",
+            // As the Sabbath School lesson prints them.
+            "Cronica", "Hari", "Hukom", "Ester", "Mangangaral", "Ang Mangangaral", "Habakuk", "Hagai", "Hageo", "Sofonias",
+            "Abdias", "Mga Bilang", "Mga Kawikaan", "Mga Panaghoy"};
 
     private static final String[][] ABBR = {
             {"Gen", "Genesis"}, {"Ge", "Genesis"}, {"Gn", "Genesis"}, {"Ex", "Exodus"}, {"Exod", "Exodus"},
@@ -100,7 +103,11 @@ final class Bible {
             {"Timoteo", "Timothy"}, {"Kay Timoteo", "Timothy"}, {"Tito", "Titus"}, {"Kay Tito", "Titus"},
             {"Filemon", "Philemon"}, {"Kay Filemon", "Philemon"}, {"Hebreo", "Hebrews"}, {"Hebreos", "Hebrews"},
             {"Mga Hebreo", "Hebrews"}, {"Santiago", "James"}, {"Pedro", "Peter"}, {"Judas", "Jude"},
-            {"Pahayag", "Revelation"}, {"Apocalipsis", "Revelation"}};
+            {"Pahayag", "Revelation"}, {"Apocalipsis", "Revelation"},
+            {"Cronica", "Chronicles"}, {"Hari", "Kings"}, {"Hukom", "Judges"}, {"Ester", "Esther"},
+            {"Mangangaral", "Ecclesiastes"}, {"Ang Mangangaral", "Ecclesiastes"}, {"Habakuk", "Habakkuk"},
+            {"Hagai", "Haggai"}, {"Hageo", "Haggai"}, {"Sofonias", "Zephaniah"}, {"Abdias", "Obadiah"},
+            {"Mga Bilang", "Numbers"}, {"Mga Kawikaan", "Proverbs"}, {"Mga Panaghoy", "Lamentations"}};
     private static final Map<String, String> SAME_MAP = new HashMap<>();
 
     private static final Map<String, String> EXPAND = new HashMap<>();
@@ -116,6 +123,7 @@ final class Bible {
     private static final Pattern INLINE = Pattern.compile("(?<=[.!?;:,”’\"')])\\s+(\\d{1,3})\\s+(?=[\\p{Lu}“\"‘'(])");
     private static final Pattern SUPER = Pattern.compile("[\\u00B9\\u00B2\\u00B3\\u2070-\\u2079]+");
     private static final Pattern CHAPTER_HEAD;
+    private static final Pattern BOOK_CHAPTER;
     private static final Pattern SPACED_DASH = Pattern.compile("\\s[-–—]+\\s");
 
     static {
@@ -130,6 +138,13 @@ final class Bible {
             if (alt.length() > 0) alt.append('|');
             alt.append(Pattern.quote(n));
         }
+        List<String> full = new ArrayList<>(Arrays.asList(ENGLISH));
+        full.addAll(Arrays.asList(TAGALOG));
+        full.sort((x, y) -> y.length() - x.length());
+        StringBuilder fullAlt = new StringBuilder();
+        for (String f : full) fullAlt.append(fullAlt.length() > 0 ? "|" : "").append(Pattern.quote(f));
+        BOOK_CHAPTER = Pattern.compile("(?<![\\p{L}\\d])(?:(?<n>[1-3])\\s)?(?<b>" + fullAlt + ")\\s(?<c>\\d{1,3}(?:\\s(?:at|and|hanggang|to)\\s\\d{1,3})*)"
+                + "(?![\\d:]|\\s?[-–—]\\s?\\d|\\s?(?:%|percent|porsiyento))");
         String dash = "[-–—]";
         String spec = "\\d{1,3}(?:\\s?" + dash + "\\s?\\d{1,3}(?::\\d{1,3})?)?"
                 + "(?:\\s?,\\s?\\d{1,3}(?:\\s?" + dash + "\\s?\\d{1,3})?(?![\\d:]))*";
@@ -149,9 +164,15 @@ final class Bible {
     }
 
     private static final Pattern MARK = Pattern.compile("\u0001(\\d+)\u0002");
+    /** Words that only point to a reference inside brackets: "(tingnan ang Mateo 23:14, 15)", "(see also John 3:16)". */
+    private static final String PAREN_WORDS = "at|and|cf|tingnan|ihambing|basahin|ang|sa|mga|rin|din|see|also|compare|read|in|sa";
     private static final Pattern REF_PAREN = Pattern.compile(
-            "\\s*\\(\\s*(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—]|\\b(?:at|and|cf|tingnan|ihambing)\\b)*\u0001\\d+\u0002"
-                    + "(?:\u0001\\d+\u0002|[\\s;,.\\d\\-–—]|\\b(?:at|and)\\b)*\\)");
+            "\\s*\\(\\s*(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—]|\\b(?:" + PAREN_WORDS + ")\\b)*\u0001\\d+\u0002"
+                    + "(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—]|\\b(?:" + PAREN_WORDS + ")\\b)*\\)");
+    /** "(talata 5)", "(mga talata 3-5)", "(verses 3, 4)", "(v. 5)": a pointer to verses, with no book. */
+    private static final Pattern VERSE_PAREN = Pattern.compile(
+            "\\s*\\(\\s*(?:(?:tingnan|basahin|see|read)\\s(?:ang\\s)?)?(?:mga\\s)?(?:talata|tal\\.|verses?|vv?\\.|vss?\\.|kabanata|kab\\.|chapters?|chap\\.|ch\\.)\\s?"
+                    + "\\d{1,3}(?:[\\s,;:\\-–—]|\\d|\\b(?:at|and|hanggang|to)\\b)*\\)", Pattern.CASE_INSENSITIVE);
     // ":" too: "Jeremias 1:4–10; 26:1–15" goes on with a chapter and verses of the same book.
     private static final Pattern ONLY_REFS = Pattern.compile(
             "[\\s(]*(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—()]|\\b(?:at|and|ihambing|tingnan|cf|see)\\b)*\u0001\\d+\u0002(?:\u0001\\d+\u0002|[\\s;:,.\\d\\-–—()]|\\b(?:at|and|ihambing|tingnan|cf|see)\\b)*");
@@ -170,11 +191,11 @@ final class Bible {
             m.appendReplacement(sb, "\u0001" + found.size() + "\u0002");
             found.add(m.group());
         }
-        if (found.isEmpty()) return text;
+        if (found.isEmpty()) return VERSE_PAREN.matcher(text).replaceAll("");
         m.appendTail(sb);
         String t = sb.toString();
         if (ONLY_REFS.matcher(t).matches()) return "";
-        t = REF_PAREN.matcher(t).replaceAll("");
+        t = VERSE_PAREN.matcher(REF_PAREN.matcher(t).replaceAll("")).replaceAll("");
         Matcher back = MARK.matcher(t);
         StringBuffer out = new StringBuffer();
         while (back.find()) back.appendReplacement(out, Matcher.quoteReplacement(found.get(Integer.parseInt(back.group(1)))));
@@ -187,6 +208,11 @@ final class Bible {
     /** Gives the words of one verse (book 1-66), from the Tagalog or the English Bible; null if missing. */
     interface Verses {
         String get(boolean tagalog, int book, int chapter, int verse);
+
+        /** A whole verse (or verses in a row) quoted from the King James Version: {the same from Ang Biblia, where}, else null. */
+        default String[] tagalogFor(String quote) {
+            return null;
+        }
 
         /** The quote is from the King James Version (it may leave words out): where it is, else null. */
         default String verseOf(String quote) {
@@ -354,6 +380,66 @@ final class Bible {
         }
         m.appendTail(sb);
         return ranges(sb.toString(), fil);
+    }
+
+    private static final Pattern SAID = Pattern.compile("\\b(?:kabanata|chapters?)\\s(\\d{1,3})(?:,\\s(?:mga\\s)?(?:talata|verses?)\\s"
+            + "(\\d{1,3}(?:(?:\\s(?:hanggang|to)\\s(?:(?:kabanata|chapter)\\s\\d{1,3}\\s(?:talata|verse)\\s)?|,\\s|\\s(?:at|and)\\s)\\d{1,3})*)"
+            + "|\\s(?:hanggang|to)\\s(\\d{1,3}))");
+    private static final Pattern NUM = Pattern.compile("\\d{1,3}");
+
+    private static String words(String s) {
+        Matcher m = NUM.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) m.appendReplacement(sb, TextPrep.numberWords(Integer.parseInt(m.group())));
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    /**
+     * A reference the way people say it aloud, numbers in English in both languages: "Juan three verse sixteen",
+     * "Bilang thirteen verses twenty-six to thirty", "Apocalipsis fourteen". Done just before speaking, so a
+     * translation still sees the usual "kabanata 3, talata 16".
+     */
+    static String sayRefs(String text, boolean fil) {
+        if (text.chars().noneMatch(Character::isDigit)) return text;
+        // A book and its chapter alone first ("Apocalipsis 14", "Daniel 8 and 9", "1 Hari 18"), so the "1" of
+        // "…3:16 at 1 Hari 18" isn't taken for one more verse.
+        Matcher m = BOOK_CHAPTER.matcher(expand(text, fil));
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String c = words(m.group("c").replace(" hanggang ", " to ").replace(" at ", " and "));
+            m.appendReplacement(sb, Matcher.quoteReplacement(book(m.group("n"), m.group("b"), fil || TAGALOG_NAMES.contains(m.group("b"))) + " " + c));
+        }
+        m.appendTail(sb);
+        m = SAID.matcher(sb.toString());
+        sb = new StringBuffer();
+        while (m.find()) {
+            String out;
+            if (m.group(2) != null) {
+                String tail = m.group(2);
+                boolean plural = tail.matches(".*\\D.*");
+                out = words(m.group(1)) + (plural ? " verses " : " verse ") + words(tail.replace(" hanggang ", " to ")
+                        .replace(" at ", " and ").replace("kabanata", "chapter").replace("talata", "verse"));
+            } else {
+                out = "chapters " + words(m.group(1)) + " to " + words(m.group(3));
+            }
+            m.appendReplacement(sb, Matcher.quoteReplacement(out));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    /** How many references are in the text, and how many letters are outside them. */
+    static int[] refShare(String text) {
+        Matcher m = REF.matcher(text);
+        int n = 0;
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            n++;
+            m.appendReplacement(sb, " ");
+        }
+        m.appendTail(sb);
+        return new int[]{n, (int) sb.toString().replaceAll("\\b(?:at|and)\\b", "").chars().filter(Character::isLetter).count()};
     }
 
     /**
