@@ -87,12 +87,28 @@ final class Translate {
             classic(c, text, fromLang, out);
             return;
         }
+        final String saveAs = fromLang + "|" + Prefs.tagStyle(c) + "|" + text;
+        String before;
+        synchronized (saved) {
+            before = saved.get(saveAs);
+        }
+        if (before != null) {
+            lastBy = "AI (translated before)";
+            out.done(before);
+            return;
+        }
         Handler main = new Handler(Looper.getMainLooper());
         net.execute(() -> {
             String got = null;
             try {
                 String src = original(text, fromLang);
-                got = ai(c, key, TextPrep.FIL.equals(fromLang) ? src : sense(src), fromLang, context);
+                if (!TextPrep.FIL.equals(fromLang)) src = bibleQuotes(c, sense(src), null);
+                got = ai(c, key, src, fromLang, context);
+                if (got != null && !got.isEmpty()) {
+                    synchronized (saved) {
+                        saved.put(saveAs, got);
+                    }
+                }
             } catch (Exception e) {
                 String m = String.valueOf(e.getMessage());
                 boolean busy = m.contains("HTTP 429");
@@ -107,6 +123,14 @@ final class Translate {
             });
         });
     }
+
+    /** The AI's last translations: reading the page again (after a stop, say) doesn't ask for them again. */
+    private static final java.util.LinkedHashMap<String, String> saved = new java.util.LinkedHashMap<String, String>(64, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
+            return size() > 150;
+        }
+    };
 
     /** The AI gets this long in all; then the quick translator answers. */
     private static final long AI_MS = 16_000L;
@@ -127,6 +151,8 @@ final class Translate {
                 .append("in natural, flowing sentences that are easy to follow by ear. Stay faithful: add nothing, leave nothing out, ")
                 .append("and do not explain. Keep the sentences in the same order, one for one. Keep names of people and places as ")
                 .append("written (Mrs. White, James White, Ellen G. White). ");
+        if (toFil) p.append("A Bible verse the text quotes may already be given in Tagalog, from Ang Biblia: copy those Tagalog ")
+                .append("words exactly as they are, inside the same quotation marks; do not change or translate them again. ");
         if (toFil) {
             String style = Prefs.taglish(c) ? "taglish" : Prefs.tagStyle(c);
             p.append(style.equals("taglish") ? "Use Taglish the way Filipinos really mix Tagalog and English in conversation. "
@@ -425,6 +451,7 @@ final class Translate {
         String sent = text;
         if (toFil) {
             sent = protect(KEEP, sent, kept);
+            sent = bibleQuotes(c, sent, kept);
             strict = kept.size();
         }
         // The words the user taught: on the page they are swapped for a marker that comes back as the taught word.
@@ -612,6 +639,46 @@ final class Translate {
             String r = l.equals("ang") ? "si" : l.equals("ng") ? "ni" : "kay";
             if (Character.isUpperCase(w.charAt(0))) r = Character.toUpperCase(r.charAt(0)) + r.substring(1);
             m.appendReplacement(sb, r + " ");
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    /** A quote in quotation marks: ‘…’, “…” or "…" (an apostrophe in "God’s" doesn't end it). */
+    private static final java.util.regex.Pattern QUOTE = java.util.regex.Pattern.compile(
+            "([\u2018\u201C\"])([^\u2018\u201C\u201D\"]{25,}?)([\u2019\u201D\"])(?![\\p{L}])");
+
+    /**
+     * Bible verses quoted in the text (EGW quotes the King James Version) are not translated anew: the words of
+     * Ang Biblia take their place, the way a Filipino reader knows them. kept: markers for the quick translator;
+     * null: the Tagalog words go right in, for the AI to copy.
+     */
+    private static String bibleQuotes(Context c, String text, java.util.List<String> kept) {
+        Bible.Verses src = Bible.source;
+        if (src == null || text.indexOf('\u2018') < 0 && text.indexOf('\u201C') < 0 && text.indexOf('"') < 0) return text;
+        java.util.regex.Matcher m = QUOTE.matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String inner = m.group(2);
+            String[] found = null;
+            try {
+                found = src.tagalogFor(inner);
+            } catch (Exception e) {
+                Logs.d(c, "bible quote lookup failed: " + e);
+            }
+            if (found == null) {
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group()));
+                continue;
+            }
+            String end = inner.replaceAll("^.*?([.,;:!?]*)$", "$1");
+            String tl = found[0].trim().replaceAll("[\\s.,;:!?]+$", "") + (end.isEmpty() ? "" : end.substring(0, 1));
+            Logs.d(c, "a quoted verse (" + found[1] + ") read from the Tagalog Bible: " + Logs.snip(inner));
+            String put = tl;
+            if (kept != null) {
+                kept.add(tl);
+                put = "ZQ" + kept.size() + "X"; // the quick translator gets a marker it leaves alone
+            }
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + put + m.group(3)));
         }
         m.appendTail(sb);
         return sb.toString();

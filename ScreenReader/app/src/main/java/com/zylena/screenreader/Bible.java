@@ -186,6 +186,11 @@ final class Bible {
     /** Gives the words of one verse (book 1-66), from the Tagalog or the English Bible; null if missing. */
     interface Verses {
         String get(boolean tagalog, int book, int chapter, int verse);
+
+        /** A quote from the King James Version found in it (no reference needed): the same words from Ang Biblia, else null. */
+        default String[] tagalogFor(String quote) {
+            return null;
+        }
     }
 
     static volatile Verses source;

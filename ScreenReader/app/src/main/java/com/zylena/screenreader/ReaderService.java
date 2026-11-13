@@ -73,7 +73,7 @@ public class ReaderService extends AccessibilityService {
         }
         if (verses == null) verses = new VerseStore(this);
         Bible.source = verses;
-        if (Prefs.readVerses(this)) verses.warmUp();
+        if (Prefs.readVerses(this) || Prefs.translate(this)) verses.warmUp();
         Prefs.applyLists(this);
         controls = new Controls(this);
         if (!lockWatching) {
@@ -2647,6 +2647,7 @@ public class ReaderService extends AccessibilityService {
             row.setOnClickListener(v -> {
                 Prefs.setTranslateTo(this, o[0]);
                 Logs.d(this, "translate: " + translateName());
+                if (Prefs.translate(this) && verses != null) verses.warmUp(); // quoted verses come from Ang Biblia
                 hideChooser();
                 updateButtonIcon();
                 android.widget.Toast.makeText(this, translateName(), android.widget.Toast.LENGTH_SHORT).show();

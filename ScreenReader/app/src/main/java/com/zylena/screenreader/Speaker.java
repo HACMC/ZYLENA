@@ -509,9 +509,9 @@ final class Speaker {
                 List<String> parts = TextPrep.shareOut(out, last - i + 1);
                 for (int k = i; k <= last; k++) {
                     String part = parts.get(k - i);
-                    String said = to.equals(TextPrep.FIL) ? TextPrep.sayTagalog(part) : part;
                     TextPrep.Seg o = runs.get(k);
-                    runs.set(k, new TextPrep.Seg(said, to, o.line, o.lastLine, o.heading, true));
+                    // Kept in the usual spelling (the log shows it so); respelled for the voice only when spoken.
+                    runs.set(k, new TextPrep.Seg(part, to, o.line, o.lastLine, o.heading, true));
                 }
             } else if (i == 0) {
                 toast("Couldn't translate. Reading as it is. The translation pack needs internet the first time.");
@@ -550,7 +550,12 @@ final class Speaker {
         }
         tts.setSpeechRate(rateFor(s.lang));
         // Voice and language switch between runs, so each run is queued as its own utterance.
-        tts.speak(TextPrep.sayName(s.text, s.lang), TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
+        tts.speak(TextPrep.sayName(spoken(s), s.lang), TextToSpeech.QUEUE_ADD, null, gen + ":" + i + (last ? ":last" : ""));
+    }
+
+    /** A translation into Tagalog, respelled for the voice ("Herusalem", "edishon"). */
+    private static String spoken(TextPrep.Seg s) {
+        return s.translated && s.lang.equals(TextPrep.FIL) ? TextPrep.sayTagalog(s.text) : s.text;
     }
 
     private static final long PARAGRAPH_PAUSE_MS = 320, HEADING_PAUSE_MS = 650;
@@ -705,7 +710,7 @@ final class Speaker {
                 applyVoice(s.lang);
                 tts.setSpeechRate(rateFor(s.lang));
                 String id = "save:" + i + (i == runs.size() - 1 ? ":last" : "");
-                tts.synthesizeToFile(TextPrep.sayName(s.text, s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
+                tts.synthesizeToFile(TextPrep.sayName(spoken(s), s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
             }
             Logs.d(ctx, "saving " + runs.size() + " pieces to audio");
         });

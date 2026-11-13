@@ -145,8 +145,38 @@ final class TextPrep {
      */
     static String sayName(String s, String lang) {
         // A translation can bring back "Ellen G. White": the voice would stop at "G." as at a sentence end.
+        s = titles(s, FIL.equals(lang));
         s = INITIAL.matcher(s).replaceAll("$1 ").replace("  ", " ");
         return sayDates(NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena"), lang);
+    }
+
+    /**
+     * A title or a shortened first name before a name is said in full: "Mrs. White" would stop at "Mrs." as at
+     * a sentence end. A translation brings these back even when the page said "Missus".
+     */
+    private static final String[][] TITLES = {
+            {"Mrs", "Missus", "Misis"}, {"Mr", "Mister", "Mister"}, {"Ms", "Miz", "Miz"}, {"Dr", "Doctor", "Doktor"}, // first four
+            {"Rev", "Reverend", "Reberendo"}, {"Eld", "Elder", "Elder"}, {"Pr", "Pastor", "Pastor"}, {"Ptr", "Pastor", "Pastor"},
+            {"Gng", "Ginang", "Ginang"}, {"Bb", "Binibini", "Binibini"}, {"Sto", "Santo", "Santo"}, {"Sta", "Santa", "Santa"},
+            {"St", "Saint", "Saint"}, {"Mt", "Mount", "Bundok"}, {"Prof", "Professor", "Propesor"}, {"Gen", "General", "Heneral"},
+            {"Capt", "Captain", "Kapitan"}, {"Col", "Colonel", "Koronel"}, {"Gov", "Governor", "Gobernador"}, {"Pres", "President", "Pangulong"},
+            {"Wm", "William", "William"}, {"Geo", "George", "George"}, {"Chas", "Charles", "Charles"}, {"Thos", "Thomas", "Thomas"},
+            {"Jas", "James", "James"}, {"Jno", "John", "John"}, {"Jos", "Joseph", "Joseph"}, {"Benj", "Benjamin", "Benjamin"},
+            {"Robt", "Robert", "Robert"}, {"Saml", "Samuel", "Samuel"}, {"Edw", "Edward", "Edward"}, {"Hy", "Henry", "Henry"}};
+    private static final Pattern[] TITLE_P = new Pattern[TITLES.length];
+
+    static {
+        // Only before a capitalized name: "Gen. 1:1" (Genesis) has a number after it.
+        for (int i = 0; i < TITLES.length; i++) TITLE_P[i] = Pattern.compile("\\b" + TITLES[i][0]
+                + (i < 4 ? "\\.?" : "\\.") + "(?=\\s+\\p{Lu}\\p{Ll})"); // "Mr", "Mrs", "Ms", "Dr" without a full stop too
+    }
+
+    static String titles(String s, boolean fil) {
+        for (int i = 0; i < TITLES.length; i++) {
+            if (s.indexOf(TITLES[i][0]) < 0) continue;
+            s = TITLE_P[i].matcher(s).replaceAll(TITLES[i][fil ? 2 : 1]);
+        }
+        return s;
     }
 
     static String sayTagalog(String s) {
