@@ -81,7 +81,7 @@ final class Speaker {
         if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
         Logs.d(ctx, "speaking run " + i + "/" + runs.size() + " [" + r.lang + "] lines " + r.line + "-" + r.lastLine
-                + ": " + Logs.snip(r.text));
+                + ": " + (r.translated ? (r.text.length() > 600 ? r.text.substring(0, 600) + "…" : r.text) : Logs.snip(r.text)));
         Progress p = progress;
         int before = 0, total = 0;
         for (int k = 0; k < runs.size(); k++) {

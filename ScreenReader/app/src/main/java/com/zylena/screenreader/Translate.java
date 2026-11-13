@@ -91,7 +91,7 @@ final class Translate {
             } catch (Exception e) {
                 String m = String.valueOf(e.getMessage());
                 boolean busy = m.contains("HTTP 429");
-                aiOffUntil = System.currentTimeMillis() + (busy ? 2 : 1) * 60_000L;
+                aiOffUntil = System.currentTimeMillis() + (busy ? 120_000L : 20_000L);
                 Logs.d(c, "translate with AI failed: " + m + (busy ? " (the free allowance is used up for now)" : "")
                         + ", using the usual translator for a moment");
             }
@@ -141,18 +141,23 @@ final class Translate {
                 .put("contents", new org.json.JSONArray().put(new org.json.JSONObject().put("role", "user")
                         .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text", text)))))
                 .put("generationConfig", new org.json.JSONObject().put("temperature", 0.4));
-        byte[] send = body.toString().getBytes("UTF-8");
         String model = Prefs.aiModel(c);
         String got;
         try {
-            got = aiCall(c, key, model, send);
+            got = aiTry(c, key, model, body);
         } catch (java.io.FileNotFoundException gone) {
             // The model's name changed: ask which ones this key has, and remember the pick.
             model = aiPick(key);
             if (model == null) throw new java.io.IOException("no AI model for this key");
             Prefs.setAiModel(c, model);
             Logs.d(c, "translate: AI model is now " + model);
-            got = aiCall(c, key, model, send);
+            got = aiTry(c, key, model, body);
+        } catch (java.io.IOException slow) {
+            // Busy or slow (HTTP 503, a timeout): the lighter model usually answers.
+            String m = String.valueOf(slow.getMessage());
+            if (model.equals(LITE) || m.contains("HTTP 4")) throw slow;
+            Logs.d(c, "translate: " + model + " did not answer (" + m + "), asking " + LITE);
+            got = aiTry(c, key, LITE, body);
         }
         if (got == null) return null;
         got = got.trim().replaceAll("\\bDios\\b", "Diyos");
@@ -161,11 +166,29 @@ final class Translate {
         return got;
     }
 
+    private static final String LITE = "gemini-flash-lite-latest";
+    private static volatile boolean noThinkRefused;
+
+    /** Without the model's long thinking first, where it lets us: a translation should come in a second or two. */
+    private static String aiTry(Context c, String key, String model, org.json.JSONObject body) throws Exception {
+        if (!noThinkRefused) {
+            try {
+                body.getJSONObject("generationConfig").put("thinkingConfig", new org.json.JSONObject().put("thinkingBudget", 0));
+                return aiCall(c, key, model, body.toString().getBytes("UTF-8"));
+            } catch (java.io.IOException e) {
+                if (!String.valueOf(e.getMessage()).contains("HTTP 400")) throw e;
+                noThinkRefused = true; // this model does not take the setting
+            }
+        }
+        body.getJSONObject("generationConfig").remove("thinkingConfig");
+        return aiCall(c, key, model, body.toString().getBytes("UTF-8"));
+    }
+
     private static String aiCall(Context c, String key, String model, byte[] send) throws Exception {
         java.net.HttpURLConnection h = (java.net.HttpURLConnection) new java.net.URL(
                 "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent").openConnection();
         h.setConnectTimeout(5000);
-        h.setReadTimeout(25000);
+        h.setReadTimeout(15000);
         h.setRequestMethod("POST");
         h.setDoOutput(true);
         h.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
