@@ -144,6 +144,8 @@ final class TextPrep {
      * voice so it comes out that way: English "Zeleena", Tagalog "Zelina".
      */
     static String sayName(String s, String lang) {
+        // A translation can bring back "Ellen G. White": the voice would stop at "G." as at a sentence end.
+        s = INITIAL.matcher(s).replaceAll("$1 ").replace("  ", " ");
         return sayDates(NAME.matcher(s).replaceAll(FIL.equals(lang) ? "Zelina" : "Zeleena"), lang);
     }
 
