@@ -220,7 +220,8 @@ final class Prefs {
 
     /** Gemini reads aloud with your AI key (natural voice); the phone's voice reads when it can't. */
     static boolean geminiVoice(Context c) {
-        return sp(c).getBoolean("gemini_voice", false);
+        // Taken out of Settings: the free key allows only about a dozen requests a day, a few paragraphs.
+        return false;
     }
 
     static void setGeminiVoice(Context c, boolean v) {

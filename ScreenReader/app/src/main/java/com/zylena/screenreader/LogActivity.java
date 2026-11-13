@@ -90,7 +90,6 @@ public class LogActivity extends Activity {
         }
         return "ZYLENA Screen Reader " + ver + " · " + Build.MANUFACTURER + " " + Build.MODEL + " · Android "
                 + Build.VERSION.RELEASE + "\nphoneVoiceApp=" + (Prefs.ttsPackage(this).isEmpty() ? "default" : Prefs.ttsPackage(this))
-                + " geminiVoice=" + (Prefs.geminiVoice(this) ? Prefs.geminiVoiceName(this) : "off")
                 + " rate=" + Prefs.rate(this) + " pitch=" + Prefs.pitch(this)
                 + " skipTimes=" + Prefs.skipTimestamps(this) + " resume=" + Prefs.resume(this)
                 + " bibleRefs=" + Prefs.refMode(this)

@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row geminiVoiceRow, geminiNameRow, offlineRow;
+    private Ui.Row offlineRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -472,21 +472,6 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         Ui.add(n, onlineVoiceRow.view);
-        geminiVoiceRow = Ui.toggle(this, R.drawable.ic_download, "Gemini voice (uses your AI key)",
-                "A natural voice that reads like a person, Tagalog and English. Needs internet and the AI key below; "
-                        + "when Gemini is busy or its free allowance is used up, the phone's voice reads for a while.",
-                on -> {
-                    if (on && Prefs.aiKey(this).isEmpty()) {
-                        android.widget.Toast.makeText(this, "Set the AI key first (AI storyteller translation, below)", android.widget.Toast.LENGTH_LONG).show();
-                        refresh();
-                        return;
-                    }
-                    Prefs.setGeminiVoice(this, on);
-                    refresh();
-                });
-        Ui.add(n, geminiVoiceRow.view);
-        geminiNameRow = Ui.nav(this, R.drawable.ic_download, "Gemini voice to use", "", this::pickGeminiVoice);
-        Ui.add(n, geminiNameRow.view);
         aiRow = Ui.nav(this, R.drawable.ic_translate, "AI storyteller translation (free key)", "", this::editAiKey);
         Ui.add(n, aiRow.view);
         styleRow = Ui.nav(this, R.drawable.ic_translate, "Tagalog translation style", "", this::pickTagStyle);
@@ -618,9 +603,6 @@ public class MainActivity extends Activity {
             offlineRow.setSub(offlineSummary());
         });
         set(onlineVoiceRow, Prefs.onlineVoice(this));
-        set(geminiVoiceRow, Prefs.geminiVoice(this) && !Prefs.aiKey(this).isEmpty());
-        geminiNameRow.setSub(geminiVoiceSub(Prefs.geminiVoiceName(this)));
-        geminiNameRow.view.setVisibility(Prefs.geminiVoice(this) ? android.view.View.VISIBLE : android.view.View.GONE);
         keyRow.setSub(Prefs.translateKey(this).isEmpty() ? "Not set: the free translators are used (Google, then MyMemory)" : "Set: Translate uses your Google key");
         set(aliveRow, Prefs.keepAlive(this));
         set(tuckRow, Prefs.tuck(this));
@@ -766,38 +748,6 @@ public class MainActivity extends Activity {
                     refresh();
                 })
                 .show();
-    }
-
-    private static final String[] GEMINI_VOICES = {"Aoede", "Kore", "Leda", "Zephyr", "Callirrhoe", "Sulafat", "Achird", "Charon"};
-    private static final String[] GEMINI_VOICE_SUBS = {"Woman, light and easy", "Woman, firm and clear", "Woman, young",
-            "Woman, bright", "Woman, gentle", "Woman, warm", "Man, friendly", "Man, calm"};
-
-    private static String geminiVoiceSub(String name) {
-        int i = java.util.Arrays.asList(GEMINI_VOICES).indexOf(name);
-        return name + (i >= 0 ? ": " + GEMINI_VOICE_SUBS[i] : "");
-    }
-
-    private void pickGeminiVoice() {
-        String[] labels = new String[GEMINI_VOICES.length];
-        for (int i = 0; i < labels.length; i++) labels[i] = GEMINI_VOICES[i] + ": " + GEMINI_VOICE_SUBS[i];
-        int now = java.util.Arrays.asList(GEMINI_VOICES).indexOf(Prefs.geminiVoiceName(this));
-        final int[] picked = {Math.max(0, now)};
-        AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("Gemini voice")
-                .setSingleChoiceItems(labels, now, (dd, which) -> picked[0] = which)
-                .setNeutralButton("Test", null) // set below, so the list stays open while testing
-                .setPositiveButton("Use this voice", (dd, w) -> {
-                    Speaker.get(this).stop();
-                    Prefs.setGeminiVoiceName(this, GEMINI_VOICES[picked[0]]);
-                    refresh();
-                })
-                .setNegativeButton("Cancel", (dd, w) -> Speaker.get(this).stop())
-                .create();
-        d.setOnShowListener(x -> d.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            android.widget.Toast.makeText(this, "Getting " + GEMINI_VOICES[picked[0]] + "'s voice… a few seconds", android.widget.Toast.LENGTH_SHORT).show();
-            Speaker.get(this).previewGemini(GEMINI_VOICES[picked[0]]);
-        }));
-        d.show();
     }
 
     private void pickRefMode() {
@@ -979,7 +929,7 @@ public class MainActivity extends Activity {
                 + "\nEnglish voice: " + (en ? yes : no)
                 + "\nBibles (English and Tagalog): " + yes + ", they come with ZYLENA"
                 + "\n\nWith these on the phone, reading and Translate work with no internet, and use almost no mobile data. "
-                + "The AI translation, the online voice and the Gemini voice still need internet; without it ZYLENA uses the ones on the phone."
+                + "The AI translation and the online voice still need internet; without it ZYLENA uses the ones on the phone."
                 + (fil && en ? "" : "\n\nVoices are downloaded in the phone's voice app: tap Get voices, then download Filipino and English (United States).");
         AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle("Download for offline use").setMessage(msg)
                 .setNegativeButton("Close", null)
