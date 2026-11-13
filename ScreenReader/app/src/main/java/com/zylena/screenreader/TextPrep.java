@@ -547,6 +547,20 @@ final class TextPrep {
         return prepare(lines, skipTimes, skipRefs, false);
     }
 
+    private static final Pattern BARE_RANGE = Pattern.compile("[;,\\s]*\\d{1,4}\\s?[-\u2013]\\s?\\d{1,4}[\\s.;,]*");
+    private static final Pattern PAGES_END = Pattern.compile("(?i)\\bpages?\\s?\\d{1,4}(?:\\s?[-\u2013]\\s?\\d{1,4})?[\\s.;,]*$");
+
+    /** The lines before (punctuation alone aside) end in "pages 232-240", or in another such bare range. */
+    private static boolean afterPages(List<String> lines, int li) {
+        for (int j = li - 1; j >= 0 && j >= li - 6; j--) {
+            String l = lines.get(j);
+            if (l.chars().noneMatch(Character::isLetterOrDigit)) continue;
+            if (BARE_RANGE.matcher(l).matches()) continue;
+            return PAGES_END.matcher(l).find();
+        }
+        return false;
+    }
+
     /** readVerses: read the words of each cited verse (takes the place of skipRefs). */
     static List<Seg> prepare(List<String> lines, boolean skipTimes, boolean skipRefs, boolean readVerses) {
         List<Seg> out = new ArrayList<>();
@@ -563,6 +577,10 @@ final class TextPrep {
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
             String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
+            // "See pages 232-240 ; 254-258": the second range is a link of its own with no word before it.
+            if (BARE_RANGE.matcher(lines.get(li)).matches() && afterPages(lines, li)) {
+                cleaned = "and pages " + lines.get(li).replaceAll("[^\\d\u2013-]", "");
+            }
             if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);
