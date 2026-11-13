@@ -165,6 +165,41 @@ final class Speaker {
         return speaking;
     }
 
+    /** The piece being spoken is the last one of what was given to read. */
+    boolean onLastRun() {
+        List<TextPrep.Seg> runs = currentRuns;
+        return speaking && !runs.isEmpty() && curRun >= runs.size() - 1;
+    }
+
+    /** About how long the piece being spoken takes, from its length and the reading speed. */
+    long currentRunMs() {
+        List<TextPrep.Seg> runs = currentRuns;
+        if (runs.isEmpty()) return 0;
+        TextPrep.Seg r = runs.get(Math.max(0, Math.min(curRun, runs.size() - 1)));
+        return (long) (r.text.length() * 1000L / (11f * Math.max(0.3f, rateFor(r.lang))));
+    }
+
+    /** The first paragraphs of what will be read next are translated ahead, so reading can start at once. */
+    void warm(List<TextPrep.Seg> segs) {
+        if (!Prefs.translate(ctx) || segs.isEmpty() || Prefs.testMode(ctx)) return;
+        List<TextPrep.Seg> runs = TextPrep.merge(segs, 350, 900, false, true);
+        int i = 0;
+        for (int n = 0; n < 2 && i < runs.size(); ) {
+            TextPrep.Seg s = runs.get(i);
+            if (inTarget(s) || runs.get(groupEnd(runs, i)).ref != null) {
+                i++;
+                continue;
+            }
+            int last = groupEnd(runs, i);
+            StringBuilder all = new StringBuilder();
+            for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
+            Translate.text(ctx, all.toString(), s.lang, "", out -> {
+            });
+            i = last + 1;
+            n++;
+        }
+    }
+
     private void setSpeaking(boolean s) {
         if (speaking == s) return;
         speaking = s;

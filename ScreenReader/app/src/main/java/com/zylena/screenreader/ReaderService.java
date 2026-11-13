@@ -92,6 +92,12 @@ public class ReaderService extends AccessibilityService {
             updateButtonIcon();
             if (controls != null) controls.update(null);
             if (!speaking) unmarkOnScreen();
+            // Stopped (not finished) while the next page was being got ready: it is not read on its own.
+            if (!speaking && early) {
+                earlyRead = null;
+                main.removeCallbacks(earlyTurn);
+                if (scanning) cancelScan();
+            }
         });
         Speaker.get(this).setProgress(new Speaker.Progress() {
             @Override
@@ -472,6 +478,11 @@ public class ReaderService extends AccessibilityService {
 
     private void readScreen(int tries) {
         int gen = tries == 0 ? ++readGen : readGen;
+        if (tries == 0) {
+            early = false;
+            earlyRead = null;
+            main.removeCallbacks(earlyTurn);
+        }
         pagesTurned = 0;
         lastAutoRead = System.currentTimeMillis();
         Speaker sp = Speaker.get(this);
@@ -1866,7 +1877,9 @@ public class ReaderService extends AccessibilityService {
             if (gen != scanGen) return;
             hideBanner();
             // The first paragraph is already in place, before the voice starts.
-            Speaker.get(this).speak(from, true);
+            held(() -> {
+                if (gen == scanGen) Speaker.get(this).speak(from, true);
+            }, from);
         };
         TextPrep.Seg first = from.get(0);
         Runnable place = () -> {
@@ -2205,19 +2218,8 @@ public class ReaderService extends AccessibilityService {
         pagesTurned++;
         // Let the new page slide in and draw, then scan it and read it from the top.
         main.postDelayed(() -> {
-            if (Speaker.get(this).isSpeaking()) return;
-            hidePanel();
-            Runnable asItIs = () -> snapshot(ok -> {
-                if (!ok || segs.isEmpty()) {
-                    Logs.d(this, "next page: nothing to read");
-                    return;
-                }
-                speakFrom(0);
-            });
-            if (Prefs.wholePage(this)) readWholePage(handled -> {
-                if (!handled) asItIs.run();
-            });
-            else asItIs.run();
+            if (Speaker.get(this).isSpeaking() && !early) return;
+            readTurnedPage();
         }, 1200);
         return true;
     }
@@ -2301,7 +2303,66 @@ public class ReaderService extends AccessibilityService {
         return 0;
     }
 
+    // ---- The next page is turned to and scanned while the last paragraph is still being read ----
+
+    /** The next page is on screen already, while the voice finishes the page before it. */
+    private boolean early;
+    /** The next page, scanned and ready: starts reading it. Run when the voice finishes. */
+    private Runnable earlyRead;
+    /** How long before the voice is expected to finish the page the next one is turned to and scanned. */
+    private static final long EARLY_MS = 9000;
+
+    private final Runnable earlyTurn = () -> {
+        Speaker sp = Speaker.get(this);
+        if (early || !scanned || scanning || !sp.isSpeaking() || !sp.onLastRun() || panel != null) return;
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !String.valueOf(root.getPackageName()).equals(pkg)) return;
+        // This page is as good as read: next time it starts from the top again.
+        LinkedList<String> list = marks.get(pkg);
+        if (list != null) list.removeIf(m -> lines.contains(m));
+        early = true;
+        if (!nextPage(root)) {
+            early = false; // the last page: the voice just finishes
+            return;
+        }
+        Logs.d(this, "next page: turned early, scanning it while the last paragraph is read");
+        unmarkOnScreen();
+    };
+
+    /** Starts reading, or keeps it for when the voice has finished the page before. */
+    private void held(Runnable read, List<TextPrep.Seg> from) {
+        if (early && Speaker.get(this).isSpeaking()) {
+            earlyRead = read;
+            Logs.d(this, "next page: ready, starts when the last paragraph ends");
+            if (from != null) Speaker.get(this).warm(from);
+            return;
+        }
+        // The voice has just finished but its "finished" has not come yet: that one is for the page before.
+        if (early) staleFinishUntil = System.currentTimeMillis() + 1500;
+        early = false;
+        read.run();
+    }
+
+    private long staleFinishUntil;
+
+    /** The page just turned to: scan it and read it from the top. */
+    private void readTurnedPage() {
+        hidePanel();
+        Runnable asItIs = () -> snapshot(ok -> {
+            if (!ok || segs.isEmpty()) {
+                Logs.d(this, "next page: nothing to read");
+                return;
+            }
+            held(() -> speakFrom(0), segs);
+        });
+        if (Prefs.wholePage(this)) readWholePage(handled -> {
+            if (!handled) asItIs.run();
+        });
+        else asItIs.run();
+    }
+
     private void onProgress(int first, int last) {
+        if (early) return; // the page on screen is the next one already
         if (first < 0 || first >= lines.size()) return;
         currentLine = first;
         LinkedList<String> list = marks.get(pkg);
@@ -2327,9 +2388,29 @@ public class ReaderService extends AccessibilityService {
             markOnScreen(first, last);
         }
         if (controls != null) controls.update(Logs.snip(lines.get(first)));
+        // The page's last piece: shortly before it ends, the next page is turned to and scanned.
+        main.removeCallbacks(earlyTurn);
+        Speaker sp = Speaker.get(this);
+        if (scanned && Prefs.nextPage(this) && Prefs.wholePage(this) && !Prefs.testMode(this) && sp.onLastRun()) {
+            main.postDelayed(earlyTurn, Math.max(300, sp.currentRunMs() - EARLY_MS));
+        }
     }
 
     private void onReadingFinished() {
+        main.removeCallbacks(earlyTurn);
+        if (System.currentTimeMillis() < staleFinishUntil) {
+            staleFinishUntil = 0;
+            return;
+        }
+        if (early) {
+            early = false;
+            currentLine = -1;
+            Runnable r = earlyRead;
+            earlyRead = null;
+            if (r != null) r.run();              // scanned and waiting: reads at once
+            else if (!scanning) readTurnedPage(); // the scan was stopped (a pause): scan now
+            return;                              // (still scanning: it reads as soon as it is done)
+        }
         // Read to the end: next time this screen starts from the top again.
         LinkedList<String> list = marks.get(pkg);
         if (list != null) list.removeIf(m -> lines.contains(m));
@@ -3214,8 +3295,10 @@ public class ReaderService extends AccessibilityService {
     private void toggle() {
         Speaker sp = Speaker.get(this);
         Logs.d(this, sp.isSpeaking() || scanning ? "button: stop" : "button: read");
-        if (scanning) cancelScan();
-        else if (sp.isSpeaking()) sp.stop();
+        if (scanning) {
+            cancelScan();
+            if (early) sp.stop(); // the last paragraph was still being read while the next page was scanned
+        } else if (sp.isSpeaking()) sp.stop();
         else if (sp.isPaused()) sp.resume();
         else readScreen();
     }

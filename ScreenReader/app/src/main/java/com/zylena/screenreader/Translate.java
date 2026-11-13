@@ -82,7 +82,26 @@ final class Translate {
     }
 
     /** context: the paragraph before this one (not translated), so the AI knows what the talk is about. */
-    static void text(Context c, String text, String fromLang, String context, Done out) {
+    static void text(Context c, String text, String fromLang, String context, Done out0) {
+        // A paragraph translated a moment ago (the page read again, or asked ahead for the next page) is not asked again.
+        final String saveAs0 = fromLang + "|" + Prefs.tagStyle(c) + "|" + text;
+        String had;
+        synchronized (saved) {
+            had = saved.get(saveAs0);
+        }
+        if (had != null) {
+            lastBy = "an earlier translation";
+            out0.done(had);
+            return;
+        }
+        final Done out = got -> {
+            if (got != null && !got.isEmpty()) {
+                synchronized (saved) {
+                    saved.put(saveAs0, got);
+                }
+            }
+            out0.done(got);
+        };
         String key = Prefs.aiKey(c);
         // A name, a place or a date on its own line needs no storyteller, and the quick translator answers at once.
         if (key.isEmpty() || !Net.online(c) || System.currentTimeMillis() < aiOffUntil || text.trim().length() < 40) {
