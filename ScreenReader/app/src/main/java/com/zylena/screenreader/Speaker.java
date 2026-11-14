@@ -737,8 +737,9 @@ final class Speaker {
             for (String[] pt : parts) if (v.indexOf(pt[3].isEmpty() ? "usual" : pt[3]) < 0) v.append(v.length() > 0 ? ", " : "").append(pt[3].isEmpty() ? "usual" : pt[3]);
             if (v.indexOf(",") > 0 && !castLogged) {
                 castLogged = true;
-                Logs.d(ctx, "story voices for " + s.lang + ": " + castVoices(s.lang) + " (first used in run " + i + ": " + v + ")");
+                Logs.d(ctx, "story voices for " + s.lang + ": " + castVoices(s.lang));
             }
+            if (v.indexOf(",") > 0) Logs.d(ctx, "voices in run " + i + ": " + v);
         }
         long change = (long) (Prefs.num(ctx, "pause_voice", 0f) * 1000);
         float pitch = Prefs.pitch(ctx), strength = Prefs.toneStrength(ctx);
@@ -760,7 +761,9 @@ final class Speaker {
             float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
             p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
             r *= (1f + (kind[1] - 1f) * strength) * (1f + (feel[1] - 1f) * strength);
-            float loud = Math.max(0.3f, Math.min(1f, (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
+            // A story is read a little under full loudness, so that a shout can be louder than the rest.
+            float base = s.cast != null && TextPrep.feelOn ? 0.78f : 1f;
+            float loud = Math.max(0.3f, Math.min(1f, base * (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
             android.os.Bundle how = null;
             if (loud < 0.99f) {
                 how = new android.os.Bundle();

@@ -1897,8 +1897,10 @@ public class ReaderService extends AccessibilityService {
             if (gen == scanGen) putInView(first.line, first.lastLine, 0f, true, read);
         };
         // From the top: the app's quick "scroll up" first. From further down: go straight there.
-        showBanner(back && first.line == 0 ? "Scanned. Going back to the top\u2026" : "Going to where you stopped\u2026");
-        if (back && first.line == 0 && scanSteps >= 4 && !early && Prefs.flag(this, "read_at_once", true) && !Prefs.testMode(this)) {
+        showBanner(back && start == 0 ? "Scanned. Going back to the top\u2026" : "Going to where you stopped\u2026");
+        boolean atOnce = scanSteps >= 4 && !early && Prefs.flag(this, "read_at_once", true) && !Prefs.testMode(this);
+        // (start == 0: from the beginning, even when the page's first lines are not read, like a title that is skipped.)
+        if (back && start == 0 && atOnce) {
             // A long page takes many seconds to scroll back up: the voice starts now, and the page and the
             // outline catch up with it once the top is reached.
             Logs.d(this, "whole page: a long page, reading starts while it goes back to the top");
@@ -1912,7 +1914,13 @@ public class ReaderService extends AccessibilityService {
                 if (gen != scanGen || !Speaker.get(this).isSpeaking()) return;
                 if (upFirst >= 0) showLine(upFirst, upLast);
             });
-        } else if (back && first.line == 0) toTop(gen, 0, place);
+        } else if (atOnce) {
+            // Going on from further down a long page: the voice starts, and the page is brought there meanwhile.
+            Logs.d(this, "whole page: a long page, reading starts while it goes to the paragraph");
+            placing = false;
+            hideBanner();
+            Speaker.get(this).speak(from, true);
+        } else if (back && start == 0) toTop(gen, 0, place);
         else place.run();
     }
 

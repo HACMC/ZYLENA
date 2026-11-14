@@ -95,13 +95,13 @@ final class Mood {
     private static final String[][] FEEL = {
             {"w", "whisper|whispered|whispers|murmur|murmured|murmurs|mutter|muttered|mumbled|breathed|softly|quietly|under (?:his|her|my) breath"
                     + "|bulong|ibinulong|pabulong|bumulong|anas|mahinang|mahina"},
-            {"s", "shout|shouted|shouts|yell|yelled|yells|scream|screamed|screams|roared|bellowed|shrieked|barked|loudly"
+            {"s", "shout|shouted|shouts|yell|yelled|yells|yelling|shouting|screaming|scream|screamed|screams|roared|bellowed|shrieked|screeched|hollered|barked|loudly|exclaimed|exclaims|cried out|burst out"
                     + "|sigaw|sumigaw|isinigaw|pasigaw|hiyaw|humiyaw|bulyaw|binulyawan|tili|tumili|malakas"},
             {"d", "sob|sobbed|sobs|cried|cries|wept|wailed|sniffled|sadly|tearfully|choked|sighed|sighs|weakly"
                     + "|hikbi|humihikbi|umiiyak|umiyak|iyak|daing|malungkot|buntong-hininga|napabuntong-hininga|garalgal"},
             {"j", "laugh|laughed|laughs|giggled|giggles|chuckled|chuckles|joked|jokes|grinned|beamed|cheered|happily|excitedly|teased|squealed"
                     + "|tawa|tumawa|natatawa|natawa|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|natatawang|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
-            {"a", "snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
+            {"a", "argued|argues|protested|retorted|scowled|seethed|gritted|snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
                     + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik"},
             {"f", "stammered|stuttered|gasped|trembled|trembling|nervously|panicked|shakily|whimpered"
                     + "|nauutal|nanginginig|takot|natatakot|kinakabahan|napasinghap|taranta|natataranta"}};
@@ -142,17 +142,17 @@ final class Mood {
     static float[] forFeeling(String feel) {
         switch (feel == null ? "" : feel) {
             case "w":
-                return new float[]{0.95f, 0.92f, 0.55f};
+                return new float[]{0.92f, 0.90f, 0.5f};
             case "s":
-                return new float[]{1.10f, 1.06f, 1f};
+                return new float[]{1.18f, 1.08f, 1.3f};
             case "d":
-                return new float[]{0.93f, 0.90f, 0.9f};
+                return new float[]{0.90f, 0.88f, 0.85f};
             case "j":
-                return new float[]{1.08f, 1.05f, 1f};
+                return new float[]{1.12f, 1.06f, 1.05f};
             case "a":
-                return new float[]{0.94f, 1.07f, 1f};
+                return new float[]{0.90f, 1.08f, 1.25f};
             case "f":
-                return new float[]{1.06f, 1.10f, 0.95f};
+                return new float[]{1.10f, 1.12f, 0.95f};
             default:
                 return new float[]{1f, 1f, 1f};
         }

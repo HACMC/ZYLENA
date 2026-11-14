@@ -539,7 +539,37 @@ final class TextPrep {
     /** Hyphens and dashes that look like "-" or "–" but are other characters (a page's no-break hyphen, a minus sign). */
     private static final Pattern ODD_HYPHEN = Pattern.compile("[\u2010\u2011\u2012\u2212\uFE58\uFE63\uFF0D]");
 
+    private static final Pattern SPACED = Pattern.compile("(?<![\\p{L}])(?:\\p{Lu} {1,6}){3,}\\p{Lu}(?![\\p{L}'\u2019])");
+
+    /** "R I M I  P O V", letters set apart for looks, is "Rimi POV": a voice would spell it out. */
+    static String unspace(String s) {
+        java.util.regex.Matcher m = SPACED.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String letters = m.group().replace(" ", "");
+            if (letters.length() < 5 && !letters.endsWith("POV")) continue; // "A B C D": a list, not a word
+            StringBuilder out = new StringBuilder();
+            // The narrowest gap is between letters; a wider one is between words.
+            int gap = 9;
+            java.util.regex.Matcher sp = Pattern.compile(" +").matcher(m.group());
+            while (sp.find()) gap = Math.min(gap, sp.end() - sp.start());
+            for (String w : m.group().split(" {" + (gap + 1) + ",}")) {
+                String word = w.replace(" ", "");
+                if (word.length() > 3 && word.endsWith("POV")) word = word.substring(0, word.length() - 3) + " POV";
+                for (String part : word.split(" ")) {
+                    if (part.isEmpty()) continue;
+                    out.append(out.length() > 0 ? " " : "").append(part.equals("POV") || part.length() < 3 ? part
+                            : part.charAt(0) + part.substring(1).toLowerCase(Locale.ROOT));
+                }
+            }
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(out.toString()));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
     static String clean(String s) {
+        s = unspace(s);
         s = ODD_HYPHEN.matcher(s).replaceAll("-").replace('\u2015', '\u2014');
         s = Bible.fixNames(s);
         s = eraDots(s);
@@ -872,7 +902,7 @@ final class TextPrep {
             + "sam samuel sean seth simon stephen steven thomas tom timothy tim tristan troy tyler victor vincent vince william will zach zion "
             + "ace kuya tatay papa dad daddy lolo tito sir mister mr king prince boss ramon rodel romeo ruben rey ricardo rolando renz "
             + "jericho joaquin emman emmanuel elias ezekiel dominic dom damian dante dean drake grey hunter kael kai kian knox zane "
-            + "aiden austin blake brandon bradley brad brent brett bruce bryce cameron carter chad chase cody colin connor cooper "
+            + "rohan arjun raj rahul aryan kabir vikram baba abba appa aiden austin blake brandon bradley brad brent brett bruce bryce cameron carter chad chase cody colin connor cooper "
             + "damon darren derek devin diego dustin edward eddie eli elijah evan finn garrett gavin george grant greg hayden "
             + "isaac jace jack jackson jaxon jeremy jimmy joe joey johnny jonah kaden keith ken kenneth kurt landon larry levi "
             + "lorenzo luca mateo micah miles mitchell nolan owen parker preston quinn raymond reid richard rick riley roman ross "
@@ -891,7 +921,7 @@ final class TextPrep {
             + "rachel rain rebecca reese rose rhea ruth sam samantha sandra sara sarah scarlett selena serena shane sophie stella summer "
             + "trisha valerie vanessa victoria vivian yna zoe zylena ate nanay mama mom mommy lola tita maam miss mrs queen princess "
             + "althea aria celeste dahlia freya gwen hazel jillian kyla lexi nova raven sienna thea venus yumi "
-            + "khloe millie kelly addison alice alison allison amber annie april ariana ariel aubrey autumn avery bailey beth "
+            + "khloe millie rimi isha priya anjali pooja neha riya meera amma kelly addison alice alison allison amber annie april ariana ariel aubrey autumn avery bailey beth "
             + "bethany brianna brooke caitlin callie carly caroline carrie casey cecilia charlie cheryl cindy courtney crystal "
             + "dana danielle dawn debbie destiny donna eden eleanor ellie eva evie fiona gemma georgia gina ginny haley hailey "
             + "harriet heather heidi helen holly isla jackie jamie jenna jill jo joanna jocelyn josie judy kaitlyn kara katie "
@@ -907,7 +937,7 @@ final class TextPrep {
 
     /** A line that says whose point of view follows: "m", "f", or "" (a narrator, or a name the reader can't tell). Null: not such a line. */
     static String povOf(String line) {
-        String t = line.trim();
+        String t = unspace(line).trim();
         if (t.length() < 5 || t.length() > 60 || !t.toLowerCase(Locale.ROOT).matches(".*(?:p\\.?o\\.?v|point of view).*")) return null;
         java.util.regex.Matcher m = POV_AFTER.matcher(t);
         String name = m.matches() ? m.group(1) : null;

@@ -293,6 +293,15 @@ final class Cast {
      * a word in quotation marks). Null for a line without quotes, and null altogether when the page is no story.
      */
     static synchronized String[][] speakers(List<String> lines, String scope) {
+        learned = false;
+        String[][] out = speakers0(lines, scope);
+        // "he replied" further down told what a name didn't: the page is gone through again with that known.
+        return learned && out != null ? speakers0(lines, scope) : out;
+    }
+
+    private static boolean learned;
+
+    private static String[][] speakers0(List<String> lines, String scope) {
         int n = lines.size();
         List<List<int[]>> spans = new ArrayList<>();
         int talk = 0, text = 0;
@@ -409,6 +418,7 @@ final class Cast {
                         if (!p.gender.equals(g)) {
                             p.gender = g; // "she asked" tells what the name didn't
                             p.code = null;
+                            learned = true;
                         }
                         p.sure = true;
                         speaker = p.name;
