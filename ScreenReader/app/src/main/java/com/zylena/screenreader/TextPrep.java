@@ -30,6 +30,21 @@ final class TextPrep {
         String ref;
         /** Whose voice reads it: "m" a man's (a Bible verse, a man's point of view), "f" a woman's, "" the usual one. */
         String who = "";
+        /** A story's characters: the voice of each quoted part of this text's paragraph, in order ("" the usual voice). */
+        String[] cast;
+        /** How many of those quoted parts came before this text, and whether it begins inside one. */
+        int castFrom;
+        boolean inQuote;
+
+        /** The same reader, verse and characters as that piece (a translation of it). */
+        Seg like(Seg o) {
+            ref = o.ref;
+            who = o.who;
+            cast = o.cast;
+            castFrom = o.castFrom;
+            inQuote = o.inQuote;
+            return this;
+        }
 
         Seg(String text, String lang, int line, int lastLine) {
             this(text, lang, line, lastLine, false);
@@ -81,6 +96,8 @@ final class TextPrep {
     private static final Pattern DOLLAR = Pattern.compile("\\$\\s?(\\d[\\d,]*(?:\\.\\d+)?)");
     private static final Pattern PERCENT = Pattern.compile("(\\d)\\s?%");
     private static final Pattern JUNK = Pattern.compile("[\\p{So}\\p{Cs}\\p{Cn}\\p{Cf}•·●○◦▪■□▶►◀◄→←↑↓|~^*_#<>{}\\[\\]\\\\]+");
+    private static final Pattern EMOTICON = Pattern.compile(
+            "(?<![\\p{L}\\d])(?:<3+|</3|[:;=][-']?[)(DPp/\\\\|]+|[xX]D+|\\^[_.]*\\^|-_+-|T[_.]+T|>[_.]*<|[oO][_.]+[oO])(?![\\p{L}\\d])");
     private static final Pattern SENTENCE_END = Pattern.compile("(?<=[.!?…])\\s+|\\n+");
     private static final Pattern REPEAT_PUNCT = Pattern.compile("([.!?,])\\1{2,}");
     private static final Pattern SPACES = Pattern.compile("[\\p{Z}\\t]+"); // also thin and no-break spaces
@@ -125,9 +142,7 @@ final class TextPrep {
             {"Jesus|Jesús", "Hesus"}, {"Cristo", "Kristo"}, {"Juan", "Huwan"}, {"Jose|José", "Hose"},
             {"Jerusalem|Jerusalen", "Herusalem"}, {"Jeremias|Jeremías", "Heremias"}, {"Josue|Josué", "Hosue"},
             {"Juda", "Huda"}, {"Judas", "Hudas"}, {"Judea", "Hudea"}, {"Jordan|Jordán", "Hordan"},
-            {"Jehova|Jehová", "Hehoba"}, {"Santiago", "Santiyago"},
-            // The voice slurs "siya" into "sha": the accent keeps it pro-pe-SI-ya.
-            {"propesiya", "propesya"}, {"propesiyang", "propesyang"}, {"mga propesiya", "mga propesya"}}; // said the way people say it: pro-PES-ya
+            {"Jehova|Jehová", "Hehoba"}, {"Santiago", "Santiyago"}};
     private static final Pattern[] TAGALOG_SAY_P = new Pattern[TAGALOG_SAY.length];
 
     static {
@@ -181,13 +196,40 @@ final class TextPrep {
         return s;
     }
 
+    /** Settings: Bible names said the Tagalog way ("Jesus" as "Hesus"), and "-syon" said "-shon". */
+    static volatile boolean respellNames = true, respellSyon = true;
+    /** Settings: a year is said "eighteen forty-four", and page numbers in a Tagalog text are said in English. */
+    static volatile boolean sayYears = true, pagesEnglish = true;
+
     static String sayTagalog(String s) {
-        for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
+        if (respellNames) for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
+        if (!respellSyon) return s;
+        // A word the user has said how to say is left exactly so.
+        java.util.Set<String> mine = new java.util.HashSet<>();
+        for (String[] p : userSay) for (String w : p[1].toLowerCase(Locale.ROOT).split("[^\\p{L}]+")) mine.add(w);
         java.util.regex.Matcher m = SYON.matcher(s);
         StringBuffer sb = new StringBuffer();
-        while (m.find()) m.appendReplacement(sb, m.group(1) + (Character.isUpperCase(m.group(2).charAt(0)) ? "H" : "h") + m.group(3));
+        while (m.find()) {
+            int a = m.start(), z = m.end();
+            while (a > 0 && Character.isLetter(s.charAt(a - 1))) a--;
+            while (z < s.length() && Character.isLetter(s.charAt(z))) z++;
+            if (mine.contains(s.substring(a, z).toLowerCase(Locale.ROOT))) continue;
+            m.appendReplacement(sb, m.group(1) + (Character.isUpperCase(m.group(2).charAt(0)) ? "H" : "h") + m.group(3));
+        }
         m.appendTail(sb);
         return sb.toString();
+    }
+
+    /**
+     * The words exactly as the voice gets them: names and titles in full, references and years said out, the
+     * user's own fixes, and last the respelling for the Tagalog voice. "Fix a word" shows the words before
+     * the fixes and the respelling, so what is tapped there is what is printed.
+     */
+    static String say(String text, String lang) {
+        String s = userFix(sayName(text, lang));
+        if (!FIL.equals(lang)) return s;
+        String r = sayTagalog(s);
+        return r.equals(s) ? s : userFix(r); // an older fix may be for the respelled word ("impreshon")
     }
 
     /** "SABBATH" becomes "Sabbath" so a voice says the word instead of spelling it; short acronyms stay. */
@@ -423,11 +465,13 @@ final class TextPrep {
         s = replaceAll(YEAR_ERA_AFTER, s, m -> yearWords(Integer.parseInt(m.group(1))) + " " + era(m.group(2), false));
         s = replaceAll(YEAR_ERA_BEFORE, s, m -> m.group(1).equals("AD") ? "A.D. " + yearWords(Integer.parseInt(m.group(2)))
                 : yearWords(Integer.parseInt(m.group(2))) + " " + era(m.group(1), false));
-        if (!fil) {
+        if (sayYears && !fil) {
             s = replaceAll(YEAR_CUE, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
             s = replaceAll(YEAR_DATE, s, m -> m.group(1) + yearWords(Integer.parseInt(m.group(2))));
-        } else {
+        } else if (sayYears) {
             s = replaceAll(YEAR_CUE_FIL, s, m -> m.group(1) + " " + yearWords(Integer.parseInt(m.group(2))));
+        }
+        if (fil && pagesEnglish) {
             s = replaceAll(PAGES_FIL, s, m -> m.group(1) + " " + numberWords(Integer.parseInt(m.group(2)))
                     + (m.group(4) == null ? "" : (m.group(3).trim().matches("[-\u2013]") ? " hanggang " : m.group(3)) + numberWords(Integer.parseInt(m.group(4)))));
         }
@@ -502,6 +546,7 @@ final class TextPrep {
         s = tagalogOrdinals(s);
         s = DOLLAR.matcher(s).replaceAll("$1 dollars");
         s = PERCENT.matcher(s).replaceAll("$1 percent");
+        s = EMOTICON.matcher(s).replaceAll(" "); // ";)" and "<3" are not words
         s = JUNK.matcher(s).replaceAll(" ");
         s = REPEAT_PUNCT.matcher(s).replaceAll("$1");
         s = s.replace(" & ", " and ");
@@ -786,6 +831,10 @@ final class TextPrep {
     static volatile boolean bibleVoice = true;
     /** A story's "Liam's POV" / "POV: Mia" lines switch between a man's and a woman's voice. */
     static volatile boolean povOn = true;
+    /** In a story, each character's quoted words are read in a voice of their own. */
+    static volatile boolean castOn = true;
+    /** For the log: the characters found on the page just prepared. */
+    static volatile String lastCast = "";
     /** The user's own "name = male / female" list, for names the reader can't tell. */
     static volatile List<String[]> userPov = new ArrayList<>();
     private static volatile String povScope = "", povCarry = "";
@@ -805,7 +854,7 @@ final class TextPrep {
 
     private static final Pattern POV_AFTER = Pattern.compile("(?i)^[^\\p{L}]*(.{2,40}?)(?:['\u2019]s|['\u2019])?\\s+(?:P\\.?O\\.?V\\.?|point of view)[^\\p{L}]*$");
     private static final Pattern POV_BEFORE = Pattern.compile("(?i)^[^\\p{L}]*(?:P\\.?O\\.?V\\.?|point of view)(?:\\s+(?:ni|of|kay))?\\s*[:\\-\u2013\u2014]?\\s*(.{2,40}?)[^\\p{L}]*$");
-    private static final java.util.Set<String> MEN = new java.util.HashSet<>(Arrays.asList((
+    static final java.util.Set<String> MEN = new java.util.HashSet<>(Arrays.asList((
             "liam noah ethan lucas mason logan james john jon juan jose joseph joshua josh jacob jake daniel dan david dave michael mike "
             + "miguel mark marco marcus matthew matt luke paul peter pedro andrew andres anthony tony antonio carlos carlo charles christian chris "
             + "gabriel rafael angelo adrian alex alexander xander aaron adam ben benjamin brian bryan caleb cedric dylan eric erik enzo felix "
@@ -813,8 +862,17 @@ final class TextPrep {
             + "kyle lance leo leon louis luis manuel martin max nathan nate neil nick nico nicolas oliver oscar patrick rico robert rob ryan "
             + "sam samuel sean seth simon stephen steven thomas tom timothy tim tristan troy tyler victor vincent vince william will zach zion "
             + "ace kuya tatay papa dad daddy lolo tito sir mister mr king prince boss ramon rodel romeo ruben rey ricardo rolando renz "
-            + "jericho joaquin emman emmanuel elias ezekiel dominic dom damian dante dean drake grey hunter kael kai kian knox zane").split(" ")));
-    private static final java.util.Set<String> WOMEN = new java.util.HashSet<>(Arrays.asList((
+            + "jericho joaquin emman emmanuel elias ezekiel dominic dom damian dante dean drake grey hunter kael kai kian knox zane "
+            + "aiden austin blake brandon bradley brad brent brett bruce bryce cameron carter chad chase cody colin connor cooper "
+            + "damon darren derek devin diego dustin edward eddie eli elijah evan finn garrett gavin george grant greg hayden "
+            + "isaac jace jack jackson jaxon jeremy jimmy joe joey johnny jonah kaden keith ken kenneth kurt landon larry levi "
+            + "lorenzo luca mateo micah miles mitchell nolan owen parker preston quinn raymond reid richard rick riley roman ross "
+            + "russell scott shawn spencer stefan theo todd travis trevor wesley wyatt xavier zachary zack "
+            + "alden arnold arvin bong carding crisanto danilo dindo edgar efren ernesto fernando gerald gilbert isidro jaime "
+            + "jomar jun junjun kiko lito mario nestor noel nonoy orlando paolo ramil raul reynaldo rommel ronald ronnie "
+            + "rowell santi totoy vic wilfredo andrei axel calix cairo caspian dash ezra gideon jax kaiden killian nash "
+            + "rhys ryder silas soren zander zayn pablo javier santiago alejandro fernan gio lucian ethan").split(" ")));
+    static final java.util.Set<String> WOMEN = new java.util.HashSet<>(Arrays.asList((
             "emma olivia ava mia sophia sofia isabella bella amelia charlotte harper evelyn abigail abby emily ella elizabeth liza camila luna "
             + "mary maria marie anne ann anna ana angela angel angelica andrea alyssa amanda amy ashley athena audrey bianca camille carla "
             + "carmen cassandra cassie catherine cathy celine chloe claire clara cristina christine daisy danica diana eliza elena erica erika "
@@ -823,7 +881,20 @@ final class TextPrep {
             + "lyn maddie madison maggie margaret maya megan melissa mica michelle mika nadine naomi natalie nicole nina patricia pauline "
             + "rachel rain rebecca reese rose rhea ruth sam samantha sandra sara sarah scarlett selena serena shane sophie stella summer "
             + "trisha valerie vanessa victoria vivian yna zoe zylena ate nanay mama mom mommy lola tita maam miss mrs queen princess "
-            + "althea aria celeste dahlia freya gwen hazel jillian kyla lexi nova raven sienna thea venus yumi").split(" ")));
+            + "althea aria celeste dahlia freya gwen hazel jillian kyla lexi nova raven sienna thea venus yumi "
+            + "khloe millie kelly addison alice alison allison amber annie april ariana ariel aubrey autumn avery bailey beth "
+            + "bethany brianna brooke caitlin callie carly caroline carrie casey cecilia charlie cheryl cindy courtney crystal "
+            + "dana danielle dawn debbie destiny donna eden eleanor ellie eva evie fiona gemma georgia gina ginny haley hailey "
+            + "harriet heather heidi helen holly isla jackie jamie jenna jill jo joanna jocelyn josie judy kaitlyn kara katie "
+            + "kayla kaylee kelsey kendra kiara kira kylie lacey lauren layla leila lena lexie lindsay lola lucia lydia "
+            + "mackenzie mandy mariah marissa martha melanie melody mila miranda molly monica morgan nancy nora olive paige "
+            + "pamela penelope penny phoebe piper quinn riley robin rosie roxanne ruby sadie savannah shannon shelby sierra "
+            + "skylar sydney tara taylor tessa tiffany tina tracy vera violet wendy willow zoey "
+            + "aira aiza alma aurora baby bea carmela charmaine cherry clarisse corazon divina dolores elaine ella estela "
+            + "fe gemma gloria imelda jona jovelyn juliana kath katrina kristel lanie leni liza lourdes luz lyka maricel "
+            + "marites marivic maricris mylene nena nene norma pilar precious remedios rica rosalinda rowena sheila "
+            + "sharon tess teresa trina vilma yolanda ysabel ysa amara astrid calla cleo elise esme juniper lyra maeve "
+            + "margaux mavis ophelia seraphina yvonne julia").split(" ")));
 
     /** A line that says whose point of view follows: "m", "f", or "" (a narrator, or a name the reader can't tell). Null: not such a line. */
     static String povOf(String line) {
@@ -938,6 +1009,9 @@ final class TextPrep {
                 povStart.put(pageKey, who);
             }
         }
+        // A story's characters each get a voice of their own for what they say.
+        String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
+        lastCast = cast == null ? "" : Cast.lastSummary;
         for (int li = 0; li < lines.size(); li++) {
             if (povOn) {
                 String pv = povOf(lines.get(li));
@@ -948,7 +1022,10 @@ final class TextPrep {
                 Seg quoted = out.get(out.size() - 1);
                 quoted.ref = Bible.firstRef(lines.get(li));
                 // The verse it belongs to is read in the Bible voice.
-                if (bibleVoice) for (Seg g : out) if (g.line == quoted.line) g.who = "m";
+                // (A heading above a list of references, "Basahin para sa Aralin…", is no verse.)
+                boolean isQuote = false;
+                for (Seg g : out) if (g.line == quoted.line) isQuote |= g.text.indexOf('\u201C') >= 0 || g.text.indexOf('"') >= 0;
+                if (bibleVoice && isQuote) for (Seg g : out) if (g.line == quoted.line) g.who = "m";
             }
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
@@ -1010,7 +1087,6 @@ final class TextPrep {
             // instead of flipping to the English voice for each English sentence.
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
             boolean para = fil || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
-            if (para) cleaned = outsideVerses(cleaned, TextPrep::sayTagalog);
             // A kept verse is never cut into sentences or chunks: its spaces are hidden meanwhile.
             if (hasVerse) cleaned = hideVerseSpaces(cleaned);
             for (String sentence : SENTENCE_END.split(cleaned)) {
@@ -1019,6 +1095,7 @@ final class TextPrep {
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
                     Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
+                    if (cast != null) g.cast = cast[li];
                     out.add(g);
                 }
             }
@@ -1059,6 +1136,8 @@ final class TextPrep {
         int first = 0, last = 0;
         boolean head = true, done = false;
         String prev = "", ref = null, who = "";
+        String[] cast = null;
+        int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
             boolean newLang = !anyLang && lang != null && !lang.equals(s.lang);
@@ -1078,6 +1157,8 @@ final class TextPrep {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
+                castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
+                cast = null;
                 ref = null;
                 sb.setLength(0);
                 lang = null;
@@ -1086,7 +1167,18 @@ final class TextPrep {
             done = s.translated;
             who = s.who;
             head &= s.heading;
-            if (sb.length() == 0) first = s.line;
+            if (sb.length() == 0) {
+                first = s.line;
+                cast = s.cast;
+            } else if (s.line != last && (cast != null || s.cast != null)) {
+                // Two screen lines read as one sentence: the second one's characters follow the first one's.
+                int had = Cast.quoteSpans(sb.toString(), false).size();
+                String[] both = new String[had + (s.cast == null ? 0 : s.cast.length)];
+                java.util.Arrays.fill(both, "");
+                if (cast != null) System.arraycopy(cast, 0, both, 0, Math.min(had, cast.length));
+                if (s.cast != null) System.arraycopy(s.cast, 0, both, had, s.cast.length);
+                cast = both;
+            }
             last = s.lastLine;
             if (lang == null || !anyLang || s.lang.equals(FIL)) lang = s.lang;
             if (sb.length() > 0 && !(goesOn && ",;:".indexOf(s.text.charAt(0)) >= 0)) sb.append(' ');
@@ -1098,8 +1190,26 @@ final class TextPrep {
             out.add(new Seg(sb.toString(), lang, first, last, head, done));
             out.get(out.size() - 1).ref = ref;
             out.get(out.size() - 1).who = who;
+            castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;
+    }
+
+    /**
+     * Gives the run its share of the paragraph's character voices. A long paragraph is read in several runs:
+     * each takes up the quoted parts where the one before stopped. Returns the state for the next run.
+     */
+    private static int[] castOf(Seg run, String[] cast, int[] state, int nextLine) {
+        run.cast = cast;
+        if (cast == null) return new int[]{0, 0};
+        run.castFrom = state[0];
+        run.inQuote = state[1] == 1;
+        List<int[]> spans = Cast.quoteSpans(run.text, run.inQuote);
+        int closed = 0;
+        for (int[] q : spans) closed += q[2];
+        boolean open = !spans.isEmpty() && spans.get(spans.size() - 1)[2] == 0;
+        if (nextLine != run.lastLine) return new int[]{0, 0}; // the next run is another paragraph
+        return new int[]{state[0] + closed, open ? 1 : 0};
     }
 
     /** The sentence in a goes on in b: a has no sentence end, and b starts small or with a comma, colon or semicolon. */
@@ -1127,6 +1237,8 @@ final class TextPrep {
     /** A closing full stop gives the voice its sentence-final fall and a natural pause. */
     private static String endWithStop(String t) {
         char c = t.charAt(t.length() - 1);
+        // "…for a different world." already ends inside its quotation marks.
+        if ("\"\u201D\u2019')".indexOf(c) >= 0 && t.length() > 1 && ".!?…,;:-\u2013\u2014".indexOf(t.charAt(t.length() - 2)) >= 0) return t;
         return (".!?…,;:".indexOf(c) >= 0) ? t : t + ".";
     }
 }

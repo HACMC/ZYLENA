@@ -366,6 +366,7 @@ public class ReaderService extends AccessibilityService {
         TextPrep.scope(pkg); // a story's voice carries on from page to page within the same app only
         List<TextPrep.Seg> out = TextPrep.prepare(ls, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
         if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
+        if (!TextPrep.lastCast.isEmpty()) Logs.d(this, "story characters: " + TextPrep.lastCast);
         if (!TextPrep.lastRefLine.isEmpty()) Logs.d(this, "a line with Bible references that is read: " + TextPrep.lastRefLine);
         return out;
     }
@@ -2316,8 +2317,7 @@ public class ReaderService extends AccessibilityService {
     private boolean early;
     /** The next page, scanned and ready: starts reading it. Run when the voice finishes. */
     private Runnable earlyRead;
-    /** How long before the voice is expected to finish the page the next one is turned to and scanned. */
-    private static final long EARLY_MS = 9000;
+    // How long before the voice is expected to finish the page the next one is turned to: Settings, "How early the page is turned".
 
     private final Runnable earlyTurn = () -> {
         Speaker sp = Speaker.get(this);
@@ -2398,8 +2398,8 @@ public class ReaderService extends AccessibilityService {
         // The page's last piece: shortly before it ends, the next page is turned to and scanned.
         main.removeCallbacks(earlyTurn);
         Speaker sp = Speaker.get(this);
-        if (scanned && Prefs.nextPage(this) && Prefs.wholePage(this) && !Prefs.testMode(this) && sp.onLastRun()) {
-            main.postDelayed(earlyTurn, Math.max(300, sp.currentRunMs() - EARLY_MS));
+        if (scanned && Prefs.nextPage(this) && Prefs.wholePage(this) && !Prefs.testMode(this) && sp.onLastRun() && Prefs.flag(this, "early_turn", true)) {
+            main.postDelayed(earlyTurn, Math.max(300, sp.currentRunMs() - (long) (Prefs.num(this, "early_seconds", 9f) * 1000)));
         }
     }
 

@@ -41,6 +41,10 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
+    private Ui.Row castRow, castFilRow, castEnRow;
+    private android.widget.EditText searchBox;
+    private ScrollView results;
+    private LinearLayout resultsCol;
     private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow, fil2Row, en2Row;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
@@ -57,15 +61,25 @@ public class MainActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.addView(topBar());
+        root.addView(searchBar());
         FrameLayout content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         root.addView(bottomBar());
         setContentView(root);
 
-        content.addView(page(homePage()));
-        content.addView(page(readingPage()));
-        content.addView(page(voicePage()));
-        content.addView(page(controlsPage()));
+        LinearLayout[] cols = {homePage(), readingPage(), voicePage(), controlsPage()};
+        for (int i = 0; i < cols.length; i++) {
+            content.addView(page(cols[i]));
+            tidy(i, cols[i]);
+        }
+        // What the search finds, shown in place of the pages.
+        resultsCol = column();
+        results = new ScrollView(this);
+        int rp = Theme.dp(this, 16);
+        resultsCol.setPadding(rp, Theme.dp(this, 4), rp, Theme.dp(this, 28));
+        results.addView(resultsCol);
+        results.setVisibility(View.GONE);
+        content.addView(results);
         showTab(0);
 
         if (Prefs.notificationControls(this)) askNotificationPermission();
@@ -109,7 +123,8 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
-        if (tab != 0) showTab(0);
+        if (searchBox.getText().length() > 0) searchBox.setText("");
+        else if (tab != 0) showTab(0);
         else super.onBackPressed();
     }
 
@@ -174,6 +189,7 @@ public class MainActivity extends Activity {
 
     private void showTab(int which) {
         tab = which;
+        if (results != null) results.setVisibility(View.GONE);
         for (int i = 0; i < pages.size(); i++) pages.get(i).setVisibility(i == which ? View.VISIBLE : View.GONE);
         for (int i = 0; i < tabs.size(); i++) {
             LinearLayout t = tabs.get(i);
@@ -402,6 +418,10 @@ public class MainActivity extends Activity {
         markRow = Ui.toggle(this, R.drawable.ic_frame, "Highlight while reading", "Gold outline around the paragraph",
                 on -> Prefs.setHighlight(this, on));
         Ui.add(g, markRow.view);
+        Ui.add(g, flagRow(R.drawable.ic_next, "Turn the page early",
+                "Shortly before the last paragraph ends, the next page is opened and scanned, so reading goes on without a wait.",
+                "early_turn", true));
+        Ui.add(g, numSlider(R.drawable.ic_clock, "How early the page is turned", 3f, 20f, 1f, "early_seconds", 9f, "%.0f s"));
         col.addView(g);
 
         col.addView(Ui.section(this, "Open & read"));
@@ -437,6 +457,18 @@ public class MainActivity extends Activity {
         sayRow = Ui.nav(this, R.drawable.ic_translate, "My pronunciations", "", () -> editList(true));
         Ui.add(say, sayRow.view);
         col.addView(say);
+
+        col.addView(Ui.section(this, "How words are said"));
+        LinearLayout how = Ui.group(this);
+        Ui.add(how, flagRow(R.drawable.ic_clock, "Years the way people say them", "\"In 1844\" is read \"eighteen forty-four\". Off: left to the voice.",
+                "say_years", true));
+        Ui.add(how, flagRow(R.drawable.ic_book, "Page numbers in English", "In a Tagalog text, \"pahina 254\" is read \"pahina two fifty-four\".",
+                "pages_english", true));
+        Ui.add(how, flagRow(R.drawable.ic_translate, "Bible names the Tagalog way", "The Tagalog voice says \"Jesus\" as \"Hesus\" and \"Jerusalem\" as \"Herusalem\".",
+                "respell_names", true));
+        Ui.add(how, flagRow(R.drawable.ic_translate, "Say -syon as -shon", "The Tagalog voice says \"leksyon\" as \"lek-shon\". Off: as the voice reads it, \"lek-si-yon\".",
+                "respell_syon", true));
+        col.addView(how);
         return col;
     }
 
@@ -452,12 +484,64 @@ public class MainActivity extends Activity {
         Ui.add(g, enRow.view);
         filRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voice", "", () -> pickVoice(TextPrep.FIL));
         Ui.add(g, filRow.view);
+        fil2Row = Ui.nav(this, R.drawable.ic_person, "Second Tagalog voice", "", () -> pickVoice(TextPrep.FIL, true));
+        Ui.add(g, fil2Row.view);
+        en2Row = Ui.nav(this, R.drawable.ic_person, "Second English voice", "", () -> pickVoice(TextPrep.EN, true));
+        Ui.add(g, en2Row.view);
         col.addView(g);
         warn = Theme.body(this, "", Theme.DANGER, 12.5f);
         warn.setPadding(Theme.dp(this, 6), Theme.dp(this, 8), Theme.dp(this, 6), 0);
         col.addView(warn);
 
-        col.addView(Ui.section(this, "Internet"));
+        col.addView(Ui.section(this, "Story and Bible voices"));
+        LinearLayout st = Ui.group(this);
+        Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
+                "In a story, what each character says is read in a voice of their own: a man's voice for a man, a woman's for a woman, "
+                        + "the best voices first. The storyteller keeps the usual voice.", "cast_voices", true));
+        castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
+        Ui.add(st, castFilRow.view);
+        castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
+        Ui.add(st, castEnRow.view);
+        castRow = Ui.nav(this, R.drawable.ic_person, "Story characters", "", this::editPovNames);
+        Ui.add(st, castRow.view);
+        povRow = Ui.toggle(this, R.drawable.ic_person, "Point of view (POV) voice",
+                "A line like \"Liam's POV\" switches the storyteller to the second voice for a man and \"POV: Mia\" to the usual voice for a woman.",
+                on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
+        Ui.add(st, povRow.view);
+        bibleVoiceRow = Ui.toggle(this, R.drawable.ic_book, "Second voice for Bible verses",
+                "A quoted verse is read in the second voice, then the usual voice goes on.",
+                on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
+        Ui.add(st, bibleVoiceRow.view);
+        Ui.add(st, numSlider(R.drawable.ic_clock, "Pause when the voice changes", 0f, 1f, 0.05f, "pause_voice", 0f, "%.2f s"));
+        col.addView(st);
+
+        col.addView(Ui.section(this, "Speed and pitch"));
+        LinearLayout s = Ui.group(this);
+        Ui.add(s, Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f×",
+                v -> Prefs.setRate(this, v)));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_translate, "Tagalog speed", 0.8f, 1.2f, 0.05f, Prefs.rateFil(this), "%.2f×",
+                v -> Prefs.setRateFil(this, v)));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
+                v -> Prefs.setPitch(this, v)));
+        col.addView(s);
+
+        col.addView(Ui.section(this, "Tone and pauses"));
+        LinearLayout t = Ui.group(this);
+        toneRow = Ui.toggle(this, R.drawable.ic_eq, "Expressive reading",
+                "Questions sound asking, with a moment after each. Exclamations have more life. Headings and quoted verses are read calmer and slower.",
+                on -> Prefs.setQuestionTone(this, on));
+        Ui.add(t, toneRow.view);
+        Ui.add(t, Ui.slider(this, R.drawable.ic_eq, "Tone strength", 0f, 2f, 0.1f, Prefs.toneStrength(this), "%.1f×",
+                v -> Prefs.setFloat(this, "tone_strength", v)));
+        Ui.add(t, Ui.slider(this, R.drawable.ic_clock, "Pause between paragraphs", 0f, 1.5f, 0.05f, Prefs.pauseParagraph(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_paragraph", v)));
+        Ui.add(t, Ui.slider(this, R.drawable.ic_clock, "Pause around headings", 0f, 2f, 0.05f, Prefs.pauseHeading(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_heading", v)));
+        Ui.add(t, Ui.slider(this, R.drawable.ic_clock, "Pause after a question", 0f, 2f, 0.05f, Prefs.pauseQuestion(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_question", v)));
+        col.addView(t);
+
+        col.addView(Ui.section(this, "Internet and translation"));
         LinearLayout n = Ui.group(this);
         offlineRow = Ui.nav(this, R.drawable.ic_download, "Download for offline use", "", this::offlineDownloads);
         Ui.add(n, offlineRow.view);
@@ -488,42 +572,6 @@ public class MainActivity extends Activity {
         Ui.add(n, dataRow.view);
         col.addView(n);
 
-        col.addView(Ui.section(this, "Sound"));
-        LinearLayout s = Ui.group(this);
-        Ui.add(s, Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f\u00D7",
-                v -> Prefs.setRate(this, v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_translate, "Tagalog speed", 0.8f, 1.2f, 0.05f, Prefs.rateFil(this), "%.2f\u00D7",
-                v -> Prefs.setRateFil(this, v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
-                v -> Prefs.setPitch(this, v)));
-        toneRow = Ui.toggle(this, R.drawable.ic_eq, "Expressive reading",
-                "Questions sound asking, with a moment after each. Exclamations have more life. Headings and quoted verses are read calmer and slower.",
-                on -> Prefs.setQuestionTone(this, on));
-        Ui.add(s, toneRow.view);
-        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Tone strength", 0f, 2f, 0.1f, Prefs.toneStrength(this), "%.1f\u00D7",
-                v -> Prefs.setFloat(this, "tone_strength", v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause between paragraphs", 0f, 1.5f, 0.05f, Prefs.pauseParagraph(this), "%.2f s",
-                v -> Prefs.setFloat(this, "pause_paragraph", v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause around headings", 0f, 2f, 0.05f, Prefs.pauseHeading(this), "%.2f s",
-                v -> Prefs.setFloat(this, "pause_heading", v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause after a question", 0f, 2f, 0.05f, Prefs.pauseQuestion(this), "%.2f s",
-                v -> Prefs.setFloat(this, "pause_question", v)));
-        fil2Row = Ui.nav(this, R.drawable.ic_person, "Second Tagalog voice", "", () -> pickVoice(TextPrep.FIL, true));
-        Ui.add(s, fil2Row.view);
-        en2Row = Ui.nav(this, R.drawable.ic_person, "Second English voice", "", () -> pickVoice(TextPrep.EN, true));
-        Ui.add(s, en2Row.view);
-        bibleVoiceRow = Ui.toggle(this, R.drawable.ic_person, "Second voice for Bible verses",
-                "A quoted verse is read in the second voice, then the usual voice goes on.",
-                on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
-        Ui.add(s, bibleVoiceRow.view);
-        povRow = Ui.toggle(this, R.drawable.ic_person, "Story voices (POV)",
-                "In a story, a line like \"Liam's POV\" switches to the second voice for a man and \"POV: Mia\" to the usual voice for a woman, until the next such line.",
-                on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
-        Ui.add(s, povRow.view);
-        Ui.add(s, Ui.nav(this, R.drawable.ic_person, "Story characters", "Tell ZYLENA who is a man or a woman when it guesses wrong",
-                this::editPovNames).view);
-        col.addView(s);
-
         col.addView(Ui.section(this, "Voice app"));
         LinearLayout a = Ui.group(this);
         appRow = Ui.nav(this, R.drawable.ic_apps, "Phone voice app", "", this::pickPhoneApp);
@@ -532,7 +580,7 @@ public class MainActivity extends Activity {
                 this::openVoiceDownloads).view);
         col.addView(a);
 
-        Button test = Theme.button(this, "\u25B6  Test the voice", true);
+        Button test = Theme.button(this, "▶  Test the voice", true);
         test.setOnClickListener(v -> Speaker.get(this).speakText(SAMPLE));
         col.addView(test, Theme.spaced(this, 20));
         Button stop = Theme.button(this, "Stop", false);
@@ -590,6 +638,243 @@ public class MainActivity extends Activity {
                 "Free. Uses your phone's own voices; the Bible texts are public domain.").view);
         col.addView(app);
         return col;
+    }
+
+    // ------------------------------------------------------------ settings kept by key, folding and search
+
+    private final List<Object[]> flagRows = new ArrayList<>(); // {row, key, default}
+
+    /** An on/off row for a setting kept by its key. */
+    private View flagRow(int icon, String title, String sub, String key, boolean def) {
+        Ui.Row r = Ui.toggle(this, icon, title, sub, on -> Prefs.setFlag(this, key, on));
+        flagRows.add(new Object[]{r, key, def});
+        return r.view;
+    }
+
+    /** A slider for a number kept by its key. */
+    private View numSlider(int icon, String title, float min, float max, float step, String key, float def, String format) {
+        return Ui.slider(this, icon, title, min, max, step, Prefs.num(this, key, def), format, v -> Prefs.setFloat(this, key, v));
+    }
+
+    /** One setting, for the search: where it is and what it says. */
+    private static final class Found {
+        int tab;
+        String section;
+        TextView header;
+        View group, row;
+    }
+
+    private final List<Found> allSettings = new ArrayList<>();
+    private static final String[] TAB_NAMES = {"Home", "Reading", "Voice", "Controls"};
+    /** Sections that start closed, so each page opens short: the less often needed ones. */
+    private static final java.util.Set<String> CLOSED = new java.util.HashSet<>(java.util.Arrays.asList(
+            "Open & read", "How words are said", "Leave out", "Tone and pauses", "Internet and translation", "Voice app"));
+
+    /** Makes each section fold away when its title is tapped, and lists every setting for the search. */
+    private void tidy(int tab, LinearLayout col) {
+        for (int i = 0; i + 1 < col.getChildCount(); i++) {
+            View head = col.getChildAt(i), body = col.getChildAt(i + 1);
+            if (!(head instanceof TextView) || !(body instanceof LinearLayout) || !"group".equals(body.getTag())) continue;
+            final TextView title = (TextView) head;
+            final String name = title.getText().toString();
+            final View group = body;
+            boolean closed = getSharedPreferences("zylena_reader", MODE_PRIVATE).getBoolean("fold_" + name, CLOSED.contains(name));
+            fold(title, name, group, closed);
+            title.setOnClickListener(v -> {
+                boolean now = group.getVisibility() == View.VISIBLE;
+                getSharedPreferences("zylena_reader", MODE_PRIVATE).edit().putBoolean("fold_" + name, now).apply();
+                fold(title, name, group, now);
+            });
+            LinearLayout g = (LinearLayout) body;
+            for (int k = 0; k < g.getChildCount(); k++) {
+                View row = g.getChildAt(k);
+                if (!(row.getTag() instanceof String) || !((String) row.getTag()).startsWith("set:")) continue;
+                Found f = new Found();
+                f.tab = tab;
+                f.section = name;
+                f.header = title;
+                f.group = group;
+                f.row = row;
+                allSettings.add(f);
+            }
+        }
+    }
+
+    private void fold(TextView title, String name, View group, boolean closed) {
+        title.setText(name + (closed ? "   ▸" : "   ▾"));
+        title.setTag(name);
+        group.setVisibility(closed ? View.GONE : View.VISIBLE);
+    }
+
+    private static void texts(View v, StringBuilder into) {
+        if (v instanceof TextView) into.append(((TextView) v).getText()).append('\n');
+        else if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) texts(((ViewGroup) v).getChildAt(i), into);
+    }
+
+    private View searchBar() {
+        searchBox = new android.widget.EditText(this);
+        searchBox.setHint("Search settings");
+        searchBox.setSingleLine(true);
+        searchBox.setTextColor(Theme.INK);
+        searchBox.setHintTextColor(Theme.FAINT);
+        searchBox.setTextSize(15);
+        searchBox.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        searchBox.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setCornerRadius(Theme.dp(this, 14));
+        bg.setColor(Theme.SURFACE_2);
+        bg.setStroke(Theme.dp(this, 1), Theme.LINE);
+        searchBox.setBackground(bg);
+        int h = Theme.dp(this, 14), v = Theme.dp(this, 10);
+        searchBox.setPadding(h, v, h, v);
+        searchBox.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable e) {
+                search(e.toString());
+            }
+        });
+        LinearLayout wrap = new LinearLayout(this);
+        wrap.setPadding(Theme.dp(this, 16), 0, Theme.dp(this, 16), Theme.dp(this, 6));
+        wrap.addView(searchBox, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return wrap;
+    }
+
+    /** Shows the settings whose name or description holds every word typed. */
+    private void search(String q) {
+        String[] words = q.trim().toLowerCase(java.util.Locale.ROOT).split("\\s+");
+        if (q.trim().length() < 2) {
+            results.setVisibility(View.GONE);
+            pages.get(tab).setVisibility(View.VISIBLE);
+            return;
+        }
+        for (ScrollView p : pages) p.setVisibility(View.GONE);
+        results.setVisibility(View.VISIBLE);
+        resultsCol.removeAllViews();
+        resultsCol.addView(pageTitle("Search"));
+        LinearLayout g = Ui.group(this);
+        int n = 0;
+        for (Found f : allSettings) {
+            StringBuilder sb = new StringBuilder(f.section).append('\n');
+            texts(f.row, sb);
+            String hay = sb.toString().toLowerCase(java.util.Locale.ROOT);
+            boolean all = true;
+            for (String w : words) all &= hay.contains(w);
+            if (!all) continue;
+            String name = ((String) f.row.getTag()).substring(4);
+            Ui.add(g, Ui.nav(this, R.drawable.ic_tune, name, TAB_NAMES[f.tab] + "  ›  " + f.section, () -> open(f)).view);
+            n++;
+        }
+        if (n > 0) resultsCol.addView(g);
+        else resultsCol.addView(Theme.body(this, "No setting found for \"" + q.trim() + "\". Try another word, like voice, pause, Bible, page or story.", Theme.MUTED, 14));
+    }
+
+    /** Goes to a setting found by the search: its tab, its section opened, the row in view and marked for a moment. */
+    private void open(Found f) {
+        searchBox.setText("");
+        searchBox.clearFocus();
+        android.view.inputmethod.InputMethodManager im = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (im != null) im.hideSoftInputFromWindow(searchBox.getWindowToken(), 0);
+        showTab(f.tab);
+        fold(f.header, (String) f.header.getTag(), f.group, false);
+        final ScrollView page = pages.get(f.tab);
+        page.post(() -> {
+            int y = 0;
+            View v = f.row;
+            while (v != null && v != page.getChildAt(0)) {
+                y += v.getTop();
+                v = (View) v.getParent();
+            }
+            page.smoothScrollTo(0, Math.max(0, y - Theme.dp(this, 80)));
+            final android.graphics.drawable.Drawable was = f.row.getBackground();
+            f.row.setBackgroundColor(Color.argb(70, 214, 173, 85));
+            f.row.postDelayed(() -> f.row.setBackground(was), 1400);
+        });
+    }
+
+    /** Which of the phone's voices a story's characters may use, and whether each is a man's or a woman's. */
+    private void pickCastVoices(String lang) {
+        Speaker sp = Speaker.get(this);
+        List<Voice> voices = sp.voicesFor(lang);
+        if (voices.isEmpty()) {
+            refresh();
+            return;
+        }
+        final String sample = lang.equals(TextPrep.FIL) ? "\"Saan ka pupunta?\" tanong niya." : "\"Where are you going?\" she asked.";
+        LinearLayout list = new LinearLayout(this);
+        list.setOrientation(LinearLayout.VERTICAL);
+        int p = Theme.dp(this, 14);
+        list.setPadding(p, p, p, p);
+        list.addView(Theme.body(this, "Characters take these voices in turn, the best first; your usual voice stays the storyteller's. "
+                + "Android doesn't say whether a voice is a man's or a woman's, so ZYLENA guesses: tap Play to hear one, and tap the "
+                + "button beside it to set it right or to leave the voice out.", Theme.MUTED, 13));
+        ScrollView sv = new ScrollView(this);
+        sv.addView(list);
+        AlertDialog dlg = new AlertDialog.Builder(this)
+                .setTitle(lang.equals(TextPrep.FIL) ? "Tagalog voices for characters" : "English voices for characters")
+                .setView(sv)
+                .setPositiveButton("Done", null)
+                .create();
+        dlg.setOnDismissListener(d -> {
+            sp.stop();
+            sp.voicesChanged();
+            refresh();
+        });
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        List<Voice> order = new ArrayList<>(sp.castPool(lang, 'm'));
+        order.addAll(sp.castPool(lang, 'f'));
+        for (Voice v : voices) order.add(v); // then the rest: not known, or left out
+        for (Voice v : order) {
+            final String base = Speaker.base(v.getName());
+            if (!seen.add(base)) continue;
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, Theme.dp(this, 4), 0, Theme.dp(this, 4));
+            String country = v.getLocale().getDisplayCountry();
+            TextView name = Theme.body(this, Speaker.friendly(v).replaceAll(" · likely.*", "") + (country.isEmpty() ? "" : "  · " + country), Theme.INK, 14);
+            row.addView(name, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            final Button kind = Theme.button(this, "", false);
+            kind.setMinHeight(Theme.dp(this, 40));
+            kind.setTextSize(13);
+            final Runnable label = () -> {
+                String mine = Prefs.voiceGenders(this).get(base);
+                char g = sp.genderOf(v);
+                kind.setText(mine == null ? (g == 'm' ? "Man (guess)" : g == 'f' ? "Woman (guess)" : "Not sure")
+                        : g == 'm' ? "Man" : g == 'f' ? "Woman" : "Not used");
+            };
+            label.run();
+            kind.setOnClickListener(x -> {
+                String mine = Prefs.voiceGenders(this).get(base);
+                Prefs.setVoiceGender(this, base, mine == null ? "m" : mine.equals("m") ? "f" : mine.equals("f") ? "x" : null);
+                label.run();
+            });
+            LinearLayout.LayoutParams klp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            klp.setMarginEnd(Theme.dp(this, 6));
+            row.addView(kind, klp);
+            Button play = Theme.button(this, "▶", false);
+            play.setMinHeight(Theme.dp(this, 40));
+            play.setTextSize(13);
+            play.setOnClickListener(x -> sp.preview(v, sample));
+            row.addView(play, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            list.addView(row);
+        }
+        dlg.show();
+    }
+
+    private String castLabel(String lang) {
+        Speaker sp = Speaker.get(this);
+        int m = sp.castPool(lang, 'm').size(), f = sp.castPool(lang, 'f').size();
+        if (m + f == 0) return "No other voices on the phone: the usual voice is said higher or lower for each character";
+        return m + (m == 1 ? " man's voice, " : " men's voices, ") + f + (f == 1 ? " woman's voice" : " women's voices")
+                + (m == 0 ? ". No man's voice: the usual voice, lower" : "");
     }
 
     // ------------------------------------------------------------ state
@@ -653,6 +938,11 @@ public class MainActivity extends Activity {
         set(toneRow, Prefs.questionTone(this));
         set(bibleVoiceRow, Prefs.bibleVoice(this));
         set(povRow, Prefs.povVoices(this));
+        for (Object[] fr : flagRows) set((Ui.Row) fr[0], Prefs.flag(this, (String) fr[1], (Boolean) fr[2]));
+        castFilRow.setSub(castLabel(TextPrep.FIL));
+        castEnRow.setSub(castLabel(TextPrep.EN));
+        String known = Cast.known();
+        castRow.setSub(known.isEmpty() ? "Tell ZYLENA who is a man or a woman when it guesses wrong" : "Found so far: " + known);
         refsRow.setValue(mode.equals("skip") ? "Skip" : mode.equals("verses") ? "Verse text" : "Read");
         set(timeRow, Prefs.skipTimestamps(this));
         set(buttonsRow, Prefs.skipButtons(this));
@@ -866,8 +1156,9 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(p, Theme.dp(this, 8), p, 0);
-        box.addView(Theme.body(this, "One per line: name = male or female (lalaki or babae). Used when a story says \"Riley's POV\" "
-                + "and the name could be either.", Theme.MUTED, 13));
+        String known = Cast.known();
+        box.addView(Theme.body(this, "One per line: name = male or female (lalaki or babae). Used for a character's voice when the name could be either."
+                + (known.isEmpty() ? "" : "\n\nFound so far: " + known + "."), Theme.MUTED, 13));
         box.addView(e);
         new AlertDialog.Builder(this)
                 .setTitle("Story characters")
@@ -877,6 +1168,10 @@ public class MainActivity extends Activity {
                     refresh();
                 })
                 .setNegativeButton("Cancel", null)
+                .setNeutralButton("Forget the characters", (d, w) -> {
+                    Cast.reset();
+                    refresh();
+                })
                 .show();
     }
 

@@ -34,6 +34,7 @@ final class Ui {
         g.setOrientation(LinearLayout.VERTICAL);
         g.setBackground(Theme.card(c));
         g.setPadding(0, Theme.dp(c, 4), 0, Theme.dp(c, 4));
+        g.setTag("group");
         return g;
     }
 
@@ -73,6 +74,7 @@ final class Ui {
             view.setOrientation(LinearLayout.HORIZONTAL);
             view.setGravity(Gravity.CENTER_VERTICAL);
             view.setMinimumHeight(Theme.dp(c, 64));
+            view.setTag("set:" + titleText); // found by the settings search
             int h = Theme.dp(c, 14);
             view.setPadding(h, Theme.dp(c, 10), h, Theme.dp(c, 10));
             GradientDrawable mask = new GradientDrawable();
@@ -164,6 +166,8 @@ final class Ui {
         r.setValue(String.format(Locale.US, format, now));
         r.view.setMinimumHeight(Theme.dp(c, 52));
         r.view.setPadding(r.view.getPaddingLeft(), r.view.getPaddingTop(), r.view.getPaddingRight(), 0);
+        r.view.setTag(null);
+        box.setTag("set:" + title);
         box.addView(r.view);
         SeekBar sb = new SeekBar(c);
         int steps = Math.round((max - min) / step);

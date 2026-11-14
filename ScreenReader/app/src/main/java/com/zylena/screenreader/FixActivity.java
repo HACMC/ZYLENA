@@ -43,6 +43,7 @@ public class FixActivity extends Activity {
     private String text = "";
     private int from = -1, to = -1;
     private TextView said;
+    private Button mine; // opens the list of fixes made so far, to take one back
     private EditText wrong, right;
     private TextView hints; // real words spelled close to the chosen one: tap one to use it
     private int asked;
@@ -145,7 +146,8 @@ public class FixActivity extends Activity {
         Button hearWord = new Button(this);
         hearWord.setText("Hear the word");
         hearWord.setAllCaps(false);
-        hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(wrong.getText().toString(), lang()));
+        // As it is read now: with the fixes and respellings already in use.
+        hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(TextPrep.say(wrong.getText().toString(), lang()), lang()));
         Button hearFix = new Button(this);
         hearFix.setText("Hear my fix");
         hearFix.setAllCaps(false);
@@ -162,11 +164,21 @@ public class FixActivity extends Activity {
         save.setOnClickListener(v -> save(false));
         Button never = button("Never read this");
         never.setOnClickListener(v -> save(true));
+        Button asIs = button("Say it as written");
+        asIs.setOnClickListener(v -> {
+            right.setText(wrong.getText().toString());
+            save(false);
+        });
+        mine = button("My fixes");
+        mine.setOnClickListener(v -> showMine());
         Button cancel = button("Cancel");
         cancel.setOnClickListener(v -> finish());
         col.addView(save);
+        col.addView(asIs);
         col.addView(never);
+        col.addView(mine);
         col.addView(cancel);
+        countMine();
 
         ScrollView scroller = new ScrollView(this);
         scroller.addView(col);
@@ -278,6 +290,13 @@ public class FixActivity extends Activity {
         String phrase = text.substring(words.get(from)[0], words.get(to)[1])
                 .replaceAll("\\s+", " ").replaceAll("^[^\\p{L}\\d]+|[^\\p{L}\\d]+$", ""); // without the quotation marks and full stops around it
         wrong.setText(phrase);
+        // A word fixed before: say so, so it isn't fixed twice.
+        for (String[] p : TextPrep.parseSay(Prefs.sayList(this))) {
+            if (p[0].equalsIgnoreCase(phrase)) {
+                right.setText(p[1]);
+                Toast.makeText(this, "\"" + p[0] + "\" is now said \"" + p[1] + "\". Change it here, or take it back in My fixes.", Toast.LENGTH_LONG).show();
+            }
+        }
         show();
         right.requestFocus();
         suggest(from == to ? phrase : "");
@@ -388,17 +407,51 @@ public class FixActivity extends Activity {
         if (never) {
             skip = (skip.trim().isEmpty() ? "" : skip.trim() + "\n") + w;
         } else {
-            // A newer fix for the same word takes the place of the older one.
+            // A newer fix for the same word takes the place of the older one. Changing a fixed word back
+            // ("AIR-un" to "Aaron" after "Aaron" was made "AIR-un") takes that fix away instead of adding another.
             StringBuilder keep = new StringBuilder();
+            boolean undone = false;
             for (String[] p : TextPrep.parseSay(say)) {
-                if (!p[0].equalsIgnoreCase(w)) keep.append(p[0]).append(" = ").append(p[1]).append("\n");
+                if (p[0].equalsIgnoreCase(r) && p[1].equalsIgnoreCase(w)) undone = true;
+                else if (!p[0].equalsIgnoreCase(w)) keep.append(p[0]).append(" = ").append(p[1]).append("\n");
             }
-            say = keep + w + " = " + r;
+            say = undone ? keep.toString().trim() : keep + w + " = " + r;
         }
         Prefs.setLists(this, say, skip);
         Logs.d(this, never ? "fix: never read \"" + w + "\"" : "fix: \"" + w + "\" is said \"" + r + "\"");
         Toast.makeText(this, never ? "\"" + w + "\" won't be read any more." : "From now on \"" + w + "\" is said \"" + r + "\".", Toast.LENGTH_LONG).show();
         finish();
+    }
+
+    private void countMine() {
+        int n = TextPrep.parseSay(Prefs.sayList(this)).size() + TextPrep.parseSkip(Prefs.skipList(this)).size();
+        mine.setText(n == 0 ? "My fixes (none yet)" : "My fixes (" + n + ")");
+    }
+
+    /** The fixes made so far: tap one to take it back. */
+    private void showMine() {
+        final List<String[]> say = TextPrep.parseSay(Prefs.sayList(this));
+        final List<String> skip = TextPrep.parseSkip(Prefs.skipList(this));
+        if (say.isEmpty() && skip.isEmpty()) {
+            Toast.makeText(this, "No fixes yet.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] items = new String[say.size() + skip.size()];
+        for (int i = 0; i < say.size(); i++) items[i] = "\"" + say.get(i)[0] + "\" is said \"" + say.get(i)[1] + "\"";
+        for (int i = 0; i < skip.size(); i++) items[say.size() + i] = "\"" + skip.get(i) + "\" is never read";
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("My fixes: tap one to remove it")
+                .setItems(items, (d, which) -> {
+                    StringBuilder a = new StringBuilder(), b = new StringBuilder();
+                    for (int i = 0; i < say.size(); i++) if (i != which) a.append(say.get(i)[0]).append(" = ").append(say.get(i)[1]).append("\n");
+                    for (int i = 0; i < skip.size(); i++) if (say.size() + i != which) b.append(skip.get(i)).append("\n");
+                    Prefs.setLists(this, a.toString().trim(), b.toString().trim());
+                    Logs.d(this, "fix removed: " + items[which]);
+                    Toast.makeText(this, "Removed: " + items[which], Toast.LENGTH_LONG).show();
+                    countMine();
+                })
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     @Override

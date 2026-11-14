@@ -406,6 +406,51 @@ final class Prefs {
         TextPrep.bibleVoice = bibleVoice(c);
         TextPrep.povOn = povVoices(c);
         TextPrep.userPov = TextPrep.parseSay(povNames(c));
+        TextPrep.castOn = flag(c, "cast_voices", true);
+        TextPrep.respellNames = flag(c, "respell_names", true);
+        TextPrep.respellSyon = flag(c, "respell_syon", true);
+        TextPrep.sayYears = flag(c, "say_years", true);
+        TextPrep.pagesEnglish = flag(c, "pages_english", true);
+    }
+
+    /** A plain on/off setting by its key (the newer settings are kept this way). */
+    static boolean flag(Context c, String key, boolean def) {
+        return sp(c).getBoolean(key, def);
+    }
+
+    static void setFlag(Context c, String key, boolean v) {
+        sp(c).edit().putBoolean(key, v).apply();
+        applyLists(c);
+    }
+
+    static float num(Context c, String key, float def) {
+        return sp(c).getFloat(key, def);
+    }
+
+    /** The user's word on a voice, by its name without "-local" / "-network": "m" a man's, "f" a woman's, "x" not for characters. */
+    static java.util.Map<String, String> voiceGenders(Context c) {
+        String raw = sp(c).getString("voice_genders", "");
+        if (raw.equals(gendersRaw)) return genders;
+        java.util.Map<String, String> m = new java.util.HashMap<>();
+        for (String line : raw.split(";")) {
+            int eq = line.indexOf('=');
+            if (eq > 0) m.put(line.substring(0, eq), line.substring(eq + 1));
+        }
+        genders = m;
+        gendersRaw = raw;
+        return m;
+    }
+
+    private static volatile java.util.Map<String, String> genders = new java.util.HashMap<>();
+    private static volatile String gendersRaw = "";
+
+    static void setVoiceGender(Context c, String base, String g) {
+        java.util.Map<String, String> m = new java.util.HashMap<>(voiceGenders(c));
+        if (g == null || g.isEmpty()) m.remove(base);
+        else m.put(base, g);
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, String> e : m.entrySet()) sb.append(sb.length() > 0 ? ";" : "").append(e.getKey()).append('=').append(e.getValue());
+        sp(c).edit().putString("voice_genders", sb.toString()).apply();
     }
 
     /** Bible verses are read in a man's voice, then the usual voice goes on. */
