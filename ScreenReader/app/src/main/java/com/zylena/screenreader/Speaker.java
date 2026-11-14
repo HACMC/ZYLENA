@@ -762,7 +762,7 @@ final class Speaker {
             p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
             r *= (1f + (kind[1] - 1f) * strength) * (1f + (feel[1] - 1f) * strength);
             // A story is read a little under full loudness, so that a shout can be louder than the rest.
-            float base = s.cast != null && TextPrep.feelOn ? 0.78f : 1f;
+            float base = s.story && TextPrep.feelOn ? 0.8f : 1f;
             float loud = Math.max(0.3f, Math.min(1f, base * (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
             android.os.Bundle how = null;
             if (loud < 0.99f) {

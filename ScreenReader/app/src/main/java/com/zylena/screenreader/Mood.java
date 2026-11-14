@@ -97,7 +97,7 @@ final class Mood {
                     + "|bulong|ibinulong|pabulong|bumulong|anas|mahinang|mahina"},
             {"s", "shout|shouted|shouts|yell|yelled|yells|yelling|shouting|screaming|scream|screamed|screams|roared|bellowed|shrieked|screeched|hollered|barked|loudly|exclaimed|exclaims|cried out|burst out"
                     + "|sigaw|sumigaw|isinigaw|pasigaw|hiyaw|humiyaw|bulyaw|binulyawan|tili|tumili|malakas"},
-            {"d", "sob|sobbed|sobs|cried|cries|wept|wailed|sniffled|sadly|tearfully|choked|sighed|sighs|weakly"
+            {"d", "sob|sobbed|sobs|cried|cries|wept|wailed|sniffled|sadly|tearfully"
                     + "|hikbi|humihikbi|umiiyak|umiyak|iyak|daing|malungkot|buntong-hininga|napabuntong-hininga|garalgal"},
             {"j", "laugh|laughed|laughs|giggled|giggles|chuckled|chuckles|joked|jokes|grinned|beamed|cheered|happily|excitedly|teased|squealed"
                     + "|tawa|tumawa|natatawa|natawa|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|natatawang|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},

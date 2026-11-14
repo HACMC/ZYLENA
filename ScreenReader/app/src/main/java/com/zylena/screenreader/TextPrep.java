@@ -34,6 +34,8 @@ final class TextPrep {
         String[] cast;
         /** The kind of text the page is ("suspense", "romance", …; "" plain): the voice reads to suit it. */
         String mood = "";
+        /** The page is a story with characters: all of it is read at the same loudness, a little under full. */
+        boolean story;
         /** How many of those quoted parts came before this text, and whether it begins inside one. */
         int castFrom;
         boolean inQuote;
@@ -44,6 +46,7 @@ final class TextPrep {
             who = o.who;
             cast = o.cast;
             mood = o.mood;
+            story = o.story;
             castFrom = o.castFrom;
             inQuote = o.inQuote;
             return this;
@@ -1138,6 +1141,7 @@ final class TextPrep {
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     if (cast != null) g.cast = cast[li];
                     g.mood = mood;
+                    g.story = cast != null;
                     out.add(g);
                 }
             }
@@ -1180,6 +1184,7 @@ final class TextPrep {
         String prev = "", ref = null, who = "";
         String[] cast = null;
         String mood = "";
+        boolean story = false;
         int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
@@ -1201,6 +1206,7 @@ final class TextPrep {
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
                 out.get(out.size() - 1).mood = mood;
+                out.get(out.size() - 1).story = story;
                 castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
                 cast = null;
                 ref = null;
@@ -1215,6 +1221,7 @@ final class TextPrep {
                 first = s.line;
                 cast = s.cast;
                 mood = s.mood;
+                story = s.story;
             } else if (s.line != last && (cast != null || s.cast != null)) {
                 // Two screen lines read as one sentence: the second one's characters follow the first one's.
                 int had = Cast.quoteSpans(sb.toString(), false).size();
@@ -1236,6 +1243,7 @@ final class TextPrep {
             out.get(out.size() - 1).ref = ref;
             out.get(out.size() - 1).who = who;
             out.get(out.size() - 1).mood = mood;
+            out.get(out.size() - 1).story = story;
             castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;
