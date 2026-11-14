@@ -216,6 +216,11 @@ final class Bible {
             return null;
         }
 
+        /** Real words spelled close to this one, nearest and most used first (from the built-in Bibles' words). */
+        default List<String> near(String word) {
+            return new ArrayList<>();
+        }
+
         /** The quote is from the King James Version (it may leave words out): where it is, else null. */
         default String verseOf(String quote) {
             return null;
@@ -514,7 +519,7 @@ final class Bible {
     }
 
     /** Letters to change, add, drop or swap to get from a to b; more than max is reported as max + 1. */
-    private static int distance(String a, String b, int max) {
+    static int distance(String a, String b, int max) {
         int[][] d = new int[a.length() + 1][b.length() + 1];
         for (int i = 0; i <= a.length(); i++) d[i][0] = i;
         for (int j = 0; j <= b.length(); j++) d[0][j] = j;

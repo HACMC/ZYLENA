@@ -244,6 +244,49 @@ final class VerseStore implements Bible.Verses {
         return rest.isEmpty() ? null : Character.toUpperCase(rest.charAt(0)) + rest.substring(1);
     }
 
+    private Map<String, Integer> vocab; // every word of both Bibles, lower case -> how often it is used
+
+    private synchronized Map<String, Integer> vocab() {
+        if (vocab != null) return vocab;
+        long t0 = System.currentTimeMillis();
+        Map<String, Integer> v = new HashMap<>(60000);
+        get(true, 1, 1, 1);
+        get(false, 1, 1, 1);
+        java.util.regex.Pattern w = java.util.regex.Pattern.compile("[\\p{L}]+(?:['\u2019-][\\p{L}]+)*");
+        for (Map<Long, String> m : java.util.Arrays.asList(tl, en)) {
+            if (m == null) continue;
+            for (String verse : m.values()) {
+                java.util.regex.Matcher x = w.matcher(verse);
+                while (x.find()) v.merge(x.group().toLowerCase(java.util.Locale.ROOT), 1, Integer::sum);
+            }
+        }
+        Logs.d(ctx, "bible words for suggestions: " + v.size() + " in " + (System.currentTimeMillis() - t0) + " ms");
+        vocab = v;
+        return v;
+    }
+
+    /** Up to eight real words within a letter or two of this one, nearest first, then the more common. */
+    @Override
+    public java.util.List<String> near(String word) {
+        final String w = word.toLowerCase(java.util.Locale.ROOT).trim();
+        java.util.List<String> out = new java.util.ArrayList<>();
+        if (w.length() < 3 || w.indexOf(' ') >= 0) return out;
+        final Map<String, Integer> v = vocab();
+        int allow = w.length() >= 6 ? 2 : 1;
+        final Map<String, Integer> found = new HashMap<>();
+        for (String k : v.keySet()) {
+            if (Math.abs(k.length() - w.length()) > allow || k.equals(w)) continue;
+            int d = Bible.distance(w, k, allow);
+            if (d <= allow) found.put(k, d);
+        }
+        out.addAll(found.keySet());
+        out.sort((x, y) -> {
+            int d = found.get(x) - found.get(y);
+            return d != 0 ? d : v.get(y) - v.get(x);
+        });
+        return out.size() > 8 ? new java.util.ArrayList<>(out.subList(0, 8)) : out;
+    }
+
     /** Loads both Bibles in the background so the first reference doesn't hold up reading. */
     void warmUp() {
         new Thread(() -> {

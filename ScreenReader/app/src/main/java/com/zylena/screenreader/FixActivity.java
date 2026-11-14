@@ -41,6 +41,8 @@ public class FixActivity extends Activity {
     private int from = -1, to = -1;
     private TextView said;
     private EditText wrong, right;
+    private TextView hints; // real words spelled close to the chosen one: tap one to use it
+    private int asked;
 
     @Override
     protected void onCreate(Bundle b) {
@@ -117,6 +119,14 @@ public class FixActivity extends Activity {
         col.addView(label("Say it as"));
         right = field("How it should be said");
         col.addView(right);
+        hints = new TextView(this);
+        hints.setTextColor(0xFFF0D690);
+        hints.setTextSize(15);
+        hints.setLineSpacing(0, 1.3f);
+        hints.setMovementMethod(LinkMovementMethod.getInstance());
+        hints.setHighlightColor(Color.TRANSPARENT);
+        hints.setVisibility(View.GONE);
+        col.addView(hints);
         col.addView(label("Tip: write it the way it sounds, like \"Zeleena\" or \"pro-pe-ta\". It changes how the word is said everywhere."));
 
         Button save = button("Say it this way");
@@ -241,6 +251,52 @@ public class FixActivity extends Activity {
         wrong.setText(phrase);
         show();
         right.requestFocus();
+        suggest(from == to ? phrase : "");
+    }
+
+    /** Looks up real words spelled close to the chosen word (in the built-in Bibles' words) and offers them. */
+    private void suggest(String word) {
+        final int mine = ++asked;
+        hints.setVisibility(View.GONE);
+        final Bible.Verses src = Bible.source != null ? Bible.source : new VerseStore(getApplicationContext());
+        if (Bible.source == null) Bible.source = src;
+        if (word.length() < 3) return;
+        new Thread(() -> {
+            List<String> near;
+            try {
+                near = src.near(word);
+            } catch (Exception e) {
+                return;
+            }
+            final List<String> got = near;
+            runOnUiThread(() -> {
+                if (mine != asked || got.isEmpty() || isFinishing()) return;
+                StringBuilder sb = new StringBuilder("Did you mean:  ");
+                List<int[]> at = new ArrayList<>();
+                for (String g : got) {
+                    at.add(new int[]{sb.length(), sb.length() + g.length()});
+                    sb.append(g).append("    ");
+                }
+                SpannableString sp = new SpannableString(sb.toString());
+                for (int i = 0; i < got.size(); i++) {
+                    final String pick = got.get(i);
+                    sp.setSpan(new ClickableSpan() {
+                        @Override
+                        public void onClick(View v) {
+                            right.setText(pick);
+                            right.setSelection(pick.length());
+                        }
+
+                        @Override
+                        public void updateDrawState(TextPaint p) {
+                            p.setUnderlineText(true);
+                        }
+                    }, at.get(i)[0], at.get(i)[1], Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                hints.setText(sp);
+                hints.setVisibility(View.VISIBLE);
+            });
+        }, "zylena-suggest").start();
     }
 
     private void save(boolean never) {
