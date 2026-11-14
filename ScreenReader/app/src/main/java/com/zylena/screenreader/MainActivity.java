@@ -496,8 +496,8 @@ public class MainActivity extends Activity {
                 v -> Prefs.setRateFil(this, v)));
         Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
                 v -> Prefs.setPitch(this, v)));
-        toneRow = Ui.toggle(this, R.drawable.ic_eq, "Asking voice for questions",
-                "A question is read a little higher and slower, with a moment after it to think.",
+        toneRow = Ui.toggle(this, R.drawable.ic_eq, "Expressive reading",
+                "Questions sound asking, with a moment after each. Exclamations have more life. Headings and quoted verses are read calmer and slower.",
                 on -> Prefs.setQuestionTone(this, on));
         Ui.add(s, toneRow.view);
         col.addView(s);

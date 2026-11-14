@@ -695,12 +695,18 @@ final class Speaker {
             else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1]});
         }
         float pitch = Prefs.pitch(ctx);
+        // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
+        // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
+        String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
         for (int k = 0; k < parts.size(); k++) {
             String lang = parts.get(k)[1];
-            boolean ask = parts.get(k)[2].equals("q");
+            String t = parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
+            boolean ask = t.equals("q");
+            float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : 1f;
+            float r = ask ? 0.96f : t.equals("e") ? 1.02f : t.equals("h") ? 0.93f : t.equals("v") ? 0.94f : 1f;
             if (k > 0 || !lang.equals(s.lang)) applyVoice(lang);
-            tts.setSpeechRate(rateFor(lang) * (ask ? 0.96f : 1f));
-            tts.setPitch(pitch * (ask ? QUESTION_PITCH : 1f));
+            tts.setSpeechRate(rateFor(lang) * r);
+            tts.setPitch(pitch * p);
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
             tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, null, id);
             // Time to think about the question, unless the page ends here.

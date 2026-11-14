@@ -617,12 +617,19 @@ final class TextPrep {
     private static final Pattern SENTENCE_CUT = Pattern.compile("(?<=[.!?\u2026][\u201D\u2019\"')\\]]{0,3})\\s+(?=[\\p{Lu}\u201C\u2018\"(\\d])");
 
     /**
-     * The words about to be spoken as {text, tone} pieces, tone "q" for a question and "" otherwise: a question
-     * is said in an asking voice. Sentences that are not questions stay together in one piece.
+     * The words about to be spoken as {text, tone} pieces, tone "q" for a question, "e" for an exclamation and ""
+     * otherwise: each is said in its own voice. Sentences that are not questions stay together in one piece.
      */
+    /** The whole text is one quotation, like a lesson's memory verse: “…” with nothing said around it. */
+    static boolean wholeQuote(String s) {
+        String t = s.trim();
+        return t.length() >= 40 && t.matches("(?s)[\u201C\"].*[\u201D\"][.,;:]?")
+                && t.substring(1, t.length() - 2).indexOf('\u201C') < 0 && t.substring(1, t.length() - 2).indexOf('\u201D') < 0;
+    }
+
     static List<String[]> tonePieces(String s) {
         List<String[]> out = new ArrayList<>();
-        if (s.indexOf('?') < 0) {
+        if (s.indexOf('?') < 0 && s.indexOf('!') < 0) {
             out.add(new String[]{s, ""});
             return out;
         }
@@ -632,7 +639,9 @@ final class TextPrep {
             if (t.isEmpty()) continue;
             // A question ends in "?" (quotation marks or a bracket may follow) and has a few words to say.
             boolean q = t.matches("(?s).*\\?[\u201D\u2019\"')\\]]{0,3}") && t.chars().filter(Character::isLetter).count() >= 4;
-            if (!q) {
+            // An exclamation ("Pakinggan ninyo ito!") is said with some life.
+            boolean e = !q && t.matches("(?s).*![\u201D\u2019\"')\\]]{0,3}") && t.chars().filter(Character::isLetter).count() >= 4;
+            if (!q && !e) {
                 plain.append(plain.length() > 0 ? " " : "").append(t);
                 continue;
             }
@@ -640,7 +649,7 @@ final class TextPrep {
                 out.add(new String[]{plain.toString(), ""});
                 plain.setLength(0);
             }
-            out.add(new String[]{t, "q"});
+            out.add(new String[]{t, q ? "q" : "e"});
         }
         if (plain.length() > 0) out.add(new String[]{plain.toString(), ""});
         if (out.isEmpty()) out.add(new String[]{s, ""});
