@@ -29,7 +29,12 @@ import java.util.List;
  * in Settings, so they can be seen and changed there.
  */
 public class FixActivity extends Activity {
-    static final String EXTRA_TEXT = "text";
+    static final String EXTRA_PAGE = "page", EXTRA_AT = "at";
+    private int startAt; // where the paragraph being read begins in text
+    private android.widget.ScrollView box;
+    private EditText find;
+    private final List<int[]> hits = new ArrayList<>(); // what the search found: {start, end}
+    private int hit = -1;
 
     private final List<int[]> words = new ArrayList<>(); // {start, end} of each word in text
     private String text = "";
@@ -40,7 +45,14 @@ public class FixActivity extends Activity {
     @Override
     protected void onCreate(Bundle b) {
         super.onCreate(b);
-        text = String.valueOf(getIntent().getStringExtra(EXTRA_TEXT)).trim();
+        java.util.ArrayList<String> page = getIntent().getStringArrayListExtra(EXTRA_PAGE);
+        int at = getIntent().getIntExtra(EXTRA_AT, 0);
+        StringBuilder all = new StringBuilder();
+        for (int i = 0; page != null && i < page.size(); i++) {
+            if (i == at) startAt = all.length();
+            all.append(page.get(i).trim()).append("\n\n");
+        }
+        text = all.toString().trim();
         for (int i = 0; i < text.length(); ) {
             while (i < text.length() && Character.isWhitespace(text.charAt(i))) i++;
             int s = i;
@@ -58,7 +70,34 @@ public class FixActivity extends Activity {
         title.setTextColor(0xFFF0D690);
         title.setTextSize(20);
         col.addView(title);
-        col.addView(label("This is what was just read. Tap the word that sounded wrong. For a phrase, tap its first word, then its last."));
+        col.addView(label("This is the whole page as it is read, opened where the voice was. Tap the word that sounded wrong. "
+                + "For a phrase, tap its first word, then its last."));
+
+        LinearLayout search = new LinearLayout(this);
+        search.setOrientation(LinearLayout.HORIZONTAL);
+        search.setGravity(Gravity.CENTER_VERTICAL);
+        find = field("Search the page");
+        search.addView(find, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        Button next = new Button(this);
+        next.setText("Next");
+        next.setAllCaps(false);
+        next.setOnClickListener(v -> nextHit());
+        search.addView(next, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        col.addView(search);
+        find.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int a, int b, int c) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable e) {
+                search(e.toString());
+            }
+        });
 
         said = new TextView(this);
         said.setTextColor(Color.WHITE);
@@ -66,9 +105,9 @@ public class FixActivity extends Activity {
         said.setLineSpacing(0, 1.25f);
         said.setMovementMethod(LinkMovementMethod.getInstance());
         said.setHighlightColor(Color.TRANSPARENT);
-        ScrollView box = new ScrollView(this);
+        box = new ScrollView(this);
         box.addView(said);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 170));
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 220));
         bl.topMargin = Theme.dp(this, 8);
         col.addView(box, bl);
 
@@ -90,11 +129,46 @@ public class FixActivity extends Activity {
         col.addView(never);
         col.addView(cancel);
 
-        ScrollView page = new ScrollView(this);
-        page.addView(col);
-        setContentView(page);
+        ScrollView scroller = new ScrollView(this);
+        scroller.addView(col);
+        setContentView(scroller);
         getWindow().setLayout(getResources().getDisplayMetrics().widthPixels * 94 / 100, ViewGroup.LayoutParams.WRAP_CONTENT);
         show();
+        scrollTo(startAt);
+    }
+
+    /** Brings the text at this place into view. */
+    private void scrollTo(int offset) {
+        said.post(() -> {
+            android.text.Layout l = said.getLayout();
+            if (l == null) return;
+            int line = l.getLineForOffset(Math.max(0, Math.min(offset, text.length())));
+            box.scrollTo(0, Math.max(0, l.getLineTop(line) - Theme.dp(this, 8)));
+        });
+    }
+
+    /** Marks every place the words are found on the page and shows the first. */
+    private void search(String q) {
+        hits.clear();
+        hit = -1;
+        String needle = q.trim().toLowerCase(java.util.Locale.ROOT), hay = text.toLowerCase(java.util.Locale.ROOT);
+        if (needle.length() >= 2 && hay.length() == text.length()) {
+            for (int i = hay.indexOf(needle); i >= 0 && hits.size() < 200; i = hay.indexOf(needle, i + needle.length())) {
+                hits.add(new int[]{i, i + needle.length()});
+            }
+        }
+        show();
+        if (!hits.isEmpty()) nextHit();
+    }
+
+    private void nextHit() {
+        if (hits.isEmpty()) {
+            if (find.getText().toString().trim().length() >= 2) Toast.makeText(this, "Not on this page.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        hit = (hit + 1) % hits.size();
+        show();
+        scrollTo(hits.get(hit)[0]);
     }
 
     private TextView label(String s) {
@@ -144,6 +218,9 @@ public class FixActivity extends Activity {
                 }
             }, w[0], w[1], Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
+        for (int i = 0; i < hits.size(); i++) { // what the search found; the one being shown is brighter
+            sp.setSpan(new BackgroundColorSpan(i == hit ? 0xFF2F6B3A : 0xFF24402A), hits.get(i)[0], hits.get(i)[1], Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
         if (from >= 0) {
             sp.setSpan(new BackgroundColorSpan(0xFF7A5C12), words.get(from)[0], words.get(to)[1], Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
@@ -160,7 +237,7 @@ public class FixActivity extends Activity {
             to = z;
         }
         String phrase = text.substring(words.get(from)[0], words.get(to)[1])
-                .replaceAll("^[^\\p{L}\\d]+|[^\\p{L}\\d]+$", ""); // without the quotation marks and full stops around it
+                .replaceAll("\\s+", " ").replaceAll("^[^\\p{L}\\d]+|[^\\p{L}\\d]+$", ""); // without the quotation marks and full stops around it
         wrong.setText(phrase);
         show();
         right.requestFocus();
@@ -201,6 +278,6 @@ public class FixActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         // Reading goes on from the paragraph it stopped at, so the fix is heard right away.
-        if (isFinishing()) Speaker.get(this).resume();
+        if (isFinishing() && Speaker.get(this).isPaused()) Speaker.get(this).resume();
     }
 }

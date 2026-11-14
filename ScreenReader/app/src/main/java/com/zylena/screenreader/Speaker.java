@@ -167,13 +167,28 @@ final class Speaker {
 
     /** The words of the piece being spoken (or paused at), exactly as the voice gets them; null when nothing is read. */
     String currentSpoken() {
-        List<TextPrep.Seg> runs = paused ? pausedRuns : (speaking ? currentRuns : null);
-        if (runs == null || runs.isEmpty()) return null;
-        int at = paused ? pausedAt : curRun;
-        TextPrep.Seg r = runs.get(Math.max(0, Math.min(at, runs.size() - 1)));
-        StringBuilder sb = new StringBuilder();
-        for (String[] part : voiceParts(r)) sb.append(sb.length() > 0 ? " " : "").append(TextPrep.sayName(part[0], part[1]));
-        return sb.toString();
+        java.util.ArrayList<String> page = pageSpoken();
+        return page.isEmpty() ? null : page.get(pageAt());
+    }
+
+    /** Every piece of the page being read (or last read), as the voice gets it. Empty when nothing was read yet. */
+    java.util.ArrayList<String> pageSpoken() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;
+        if (runs == null) return out;
+        for (TextPrep.Seg r : runs) {
+            StringBuilder sb = new StringBuilder();
+            for (String[] part : voiceParts(r)) sb.append(sb.length() > 0 ? " " : "").append(TextPrep.sayName(part[0], part[1]));
+            out.add(sb.toString());
+        }
+        return out;
+    }
+
+    /** Which of those pieces is being read (or was, when it stopped). */
+    int pageAt() {
+        List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;
+        int n = runs == null ? 0 : runs.size();
+        return Math.max(0, Math.min(paused ? pausedAt : curRun, n - 1));
     }
 
     /** The piece being spoken is the last one of what was given to read. */
@@ -787,7 +802,7 @@ final class Speaker {
     /** Sets the voice for this language and reader. True: a man's voice was asked for and the phone has none (say it lower). */
     private boolean applyVoice(String lang, String who) {
         boolean man = "m".equals(who);
-        Voice male = man ? maleVoice(lang) : null;
+        Voice male = man ? secondVoice(lang) : null;
         if (male != null) {
             if (!male.equals(lastSet)) tts.setVoice(male);
             lastSet = male;
@@ -795,6 +810,22 @@ final class Speaker {
         }
         applyUsual(lang);
         return man;
+    }
+
+    /**
+     * The second voice, for Bible verses and a story's other point of view: the one chosen in Settings; else
+     * for Tagalog Google's "FIE" voice (the owner's pick), for English the best man's voice; null if none.
+     */
+    Voice secondVoice(String lang) {
+        List<Voice> all = voicesFor(lang);
+        String name = Prefs.voice2(ctx, lang);
+        if (!name.isEmpty()) {
+            for (Voice v : all) if (v.getName().equals(name)) return twin(v, all);
+        }
+        if (lang.equals(TextPrep.FIL)) {
+            for (Voice v : all) if (v.getName().toLowerCase(Locale.ROOT).contains("-x-fie")) return twin(v, all);
+        }
+        return maleVoice(lang);
     }
 
     /** The best man's voice for the language on this phone, by the codes Google gives its voices; null if none. */

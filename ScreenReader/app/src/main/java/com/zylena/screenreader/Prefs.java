@@ -53,6 +53,15 @@ final class Prefs {
         return sp(c).getString("voice_" + lang, "");
     }
 
+    /** The second voice (Bible verses, a story's other point of view); empty = the default for the language. */
+    static String voice2(Context c, String lang) {
+        return sp(c).getString("voice2_" + lang, "");
+    }
+
+    static void setVoice2(Context c, String lang, String name) {
+        sp(c).edit().putString("voice2_" + lang, name).apply();
+    }
+
     static void setVoice(Context c, String lang, String name) {
         sp(c).edit().putString("voice_" + lang, name).apply();
     }

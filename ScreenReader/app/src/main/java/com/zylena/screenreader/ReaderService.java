@@ -3092,19 +3092,21 @@ public class ReaderService extends AccessibilityService {
         }
     }
 
-    /** Pauses and opens "Fix a word" on the words being read, as the voice says them. */
+    /** Pauses and opens "Fix a word" on the whole page being read (or just read), as the voice says it. */
     private void fixWord() {
         Speaker sp = Speaker.get(this);
-        String said = sp.currentSpoken();
-        if (said == null || said.trim().isEmpty()) {
-            android.widget.Toast.makeText(this, "Start reading first. When something sounds wrong, tap Fix a word.",
+        java.util.ArrayList<String> page = sp.pageSpoken();
+        if (page.isEmpty()) {
+            android.widget.Toast.makeText(this, "Read a page first. Then Fix a word shows it, and you can correct any word in it.",
                     android.widget.Toast.LENGTH_LONG).show();
             return;
         }
+        int at = sp.pageAt();
         if (sp.isSpeaking()) sp.pause();
         main.removeCallbacks(earlyTurn);
         startActivity(new android.content.Intent(this, FixActivity.class)
-                .putExtra(FixActivity.EXTRA_TEXT, said)
+                .putStringArrayListExtra(FixActivity.EXTRA_PAGE, page)
+                .putExtra(FixActivity.EXTRA_AT, at)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 

@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow;
+    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow, fil2Row, en2Row;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -508,12 +508,16 @@ public class MainActivity extends Activity {
                 v -> Prefs.setFloat(this, "pause_heading", v)));
         Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause after a question", 0f, 2f, 0.05f, Prefs.pauseQuestion(this), "%.2f s",
                 v -> Prefs.setFloat(this, "pause_question", v)));
-        bibleVoiceRow = Ui.toggle(this, R.drawable.ic_person, "A man's voice for Bible verses",
-                "A quoted verse is read in a man's voice, then the usual voice goes on. With no man's voice on the phone, the usual voice is lowered.",
+        fil2Row = Ui.nav(this, R.drawable.ic_person, "Second Tagalog voice", "", () -> pickVoice(TextPrep.FIL, true));
+        Ui.add(s, fil2Row.view);
+        en2Row = Ui.nav(this, R.drawable.ic_person, "Second English voice", "", () -> pickVoice(TextPrep.EN, true));
+        Ui.add(s, en2Row.view);
+        bibleVoiceRow = Ui.toggle(this, R.drawable.ic_person, "Second voice for Bible verses",
+                "A quoted verse is read in the second voice, then the usual voice goes on.",
                 on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
         Ui.add(s, bibleVoiceRow.view);
         povRow = Ui.toggle(this, R.drawable.ic_person, "Story voices (POV)",
-                "In a story, a line like \"Liam's POV\" or \"POV: Mia\" switches to a man's or a woman's voice until the next one.",
+                "In a story, a line like \"Liam's POV\" switches to the second voice for a man and \"POV: Mia\" to the usual voice for a woman, until the next such line.",
                 on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
         Ui.add(s, povRow.view);
         Ui.add(s, Ui.nav(this, R.drawable.ic_person, "Story characters", "Tell ZYLENA who is a man or a woman when it guesses wrong",
@@ -658,6 +662,8 @@ public class MainActivity extends Activity {
         sayRow.setSub(say == 0 ? "Teach it how to say a word" : say + (say == 1 ? " word" : " words"));
         skipRow.setSub(skip == 0 ? "Words or phrases never read" : skip + (skip == 1 ? " item" : " items"));
 
+        fil2Row.setSub(voice2Label(TextPrep.FIL));
+        en2Row.setSub(voice2Label(TextPrep.EN));
         enRow.setSub(voiceLabel(TextPrep.EN));
         filRow.setSub(voiceLabel(TextPrep.FIL));
         String pkg = Prefs.ttsPackage(this);
@@ -1081,6 +1087,18 @@ public class MainActivity extends Activity {
     }
 
     private void pickVoice(String lang) {
+        pickVoice(lang, false);
+    }
+
+    private String voice2Label(String lang) {
+        String chosen = Prefs.voice2(this, lang);
+        Voice v = Speaker.get(this).secondVoice(lang);
+        if (v == null) return "none on the phone: the usual voice, lower";
+        return (chosen.isEmpty() ? "Default (" : "") + Speaker.friendly(v) + (chosen.isEmpty() ? ")" : "");
+    }
+
+    /** second: the voice for Bible verses and a story's other point of view. */
+    private void pickVoice(String lang, boolean second) {
         List<Voice> voices = Speaker.get(this).voicesFor(lang);
         if (voices.isEmpty()) {
             refresh();
@@ -1096,19 +1114,33 @@ public class MainActivity extends Activity {
         sv.addView(list);
 
         AlertDialog dlg = new AlertDialog.Builder(this)
-                .setTitle(lang.equals(TextPrep.FIL) ? "Tagalog voice" : "English voice")
+                .setTitle((second ? "Second " : "") + (lang.equals(TextPrep.FIL) ? "Tagalog voice" : "English voice"))
                 .setView(sv)
                 .setNegativeButton("Close", null)
                 .create();
         dlg.setOnDismissListener(d -> Speaker.get(this).stop());
 
-        String current = Prefs.voice(this, lang);
-        list.addView(voiceRow("Auto (best female guess)", current.isEmpty(), voices.get(0), sample, dlg,
-                () -> Prefs.setVoice(this, lang, "")));
+        String current = second ? Prefs.voice2(this, lang) : Prefs.voice(this, lang);
+        if (second) {
+            Voice def = Speaker.get(this).secondVoice(lang);
+            if (!current.isEmpty()) { // what the default would be, with nothing chosen
+                Prefs.setVoice2(this, lang, "");
+                def = Speaker.get(this).secondVoice(lang);
+                Prefs.setVoice2(this, lang, current);
+            }
+            list.addView(voiceRow(lang.equals(TextPrep.FIL) ? "Default (Voice FIE)" : "Default (best man's voice)", current.isEmpty(),
+                    def != null ? def : voices.get(0), sample, dlg, () -> Prefs.setVoice2(this, lang, "")));
+        } else {
+            list.addView(voiceRow("Auto (best female guess)", current.isEmpty(), voices.get(0), sample, dlg,
+                    () -> Prefs.setVoice(this, lang, "")));
+        }
         for (Voice v : voices) {
             String label = Speaker.friendly(v) + (v.isNetworkConnectionRequired() ? "  \u00B7 online, better quality" : "  \u00B7 offline");
             list.addView(voiceRow(label, v.getName().equals(current), v, sample, dlg,
-                    () -> Prefs.setVoice(this, lang, v.getName())));
+                    () -> {
+                        if (second) Prefs.setVoice2(this, lang, v.getName());
+                        else Prefs.setVoice(this, lang, v.getName());
+                    }));
         }
         dlg.show();
     }
