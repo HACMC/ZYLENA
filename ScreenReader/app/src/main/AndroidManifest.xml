@@ -41,6 +41,15 @@
             android:name=".LogActivity"
             android:exported="false" />
 
+        <!-- "Fix a word": opened over the app being read, on the words the voice just said. -->
+        <activity
+            android:name=".FixActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.DeviceDefault.Dialog.NoActionBar"
+            android:windowSoftInputMode="adjustResize" />
+
         <!-- The tile opens this invisible screen so the panel closes, then the service reads what is behind it. -->
         <activity
             android:name=".ReadNowActivity"

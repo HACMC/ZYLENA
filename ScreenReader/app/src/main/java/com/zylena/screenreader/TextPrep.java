@@ -595,6 +595,25 @@ final class TextPrep {
         return SPACES.matcher(s).replaceAll(" ").trim();
     }
 
+    /**
+     * The user's own fixes on the words as they are about to be spoken (a translation, a reference said in
+     * English): what "Fix a word" shows is what these are matched against. A fix whose new wording holds the
+     * old one ("EGW = EGW Writings") was applied when the text was prepared and is not applied twice.
+     */
+    static String userFix(String s) {
+        if (userSkip.isEmpty() && userSay.isEmpty()) return s;
+        for (String w : userSkip) {
+            s = Pattern.compile("(?<![\\p{L}\\d])" + Pattern.quote(w) + "(?![\\p{L}\\d])", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                    .matcher(s).replaceAll(" ");
+        }
+        for (String[] p : userSay) {
+            if (p[1].toLowerCase(Locale.ROOT).contains(p[0].toLowerCase(Locale.ROOT))) continue;
+            s = Pattern.compile("(?<![\\p{L}\\d])" + Pattern.quote(p[0]) + "(?![\\p{L}\\d])", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE)
+                    .matcher(s).replaceAll(java.util.regex.Matcher.quoteReplacement(p[1]));
+        }
+        return SPACES.matcher(s).replaceAll(" ").trim();
+    }
+
     static List<Seg> prepare(List<String> lines, boolean skipTimes) {
         return prepare(lines, skipTimes, false, false);
     }

@@ -21,7 +21,8 @@ final class Shortcuts {
             {"skip", "⏭", "Skip"},
             {"top", "⤒", "From top"},
             {"picture", "🖼", "Picture text"},
-            {"audio", "💾", "Save audio"}};
+            {"audio", "💾", "Save audio"},
+            {"fix", "✎", "Fix a word"}};
 
     static final int SLOTS = 4;
 

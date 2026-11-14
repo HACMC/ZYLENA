@@ -165,6 +165,17 @@ final class Speaker {
         return speaking;
     }
 
+    /** The words of the piece being spoken (or paused at), exactly as the voice gets them; null when nothing is read. */
+    String currentSpoken() {
+        List<TextPrep.Seg> runs = paused ? pausedRuns : (speaking ? currentRuns : null);
+        if (runs == null || runs.isEmpty()) return null;
+        int at = paused ? pausedAt : curRun;
+        TextPrep.Seg r = runs.get(Math.max(0, Math.min(at, runs.size() - 1)));
+        StringBuilder sb = new StringBuilder();
+        for (String[] part : voiceParts(r)) sb.append(sb.length() > 0 ? " " : "").append(TextPrep.sayName(part[0], part[1]));
+        return sb.toString();
+    }
+
     /** The piece being spoken is the last one of what was given to read. */
     boolean onLastRun() {
         List<TextPrep.Seg> runs = currentRuns;
@@ -681,7 +692,7 @@ final class Speaker {
             if (k > 0 || !lang.equals(s.lang)) applyVoice(lang);
             tts.setSpeechRate(rateFor(lang));
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
-            tts.speak(TextPrep.sayName(parts.get(k)[0], lang), TextToSpeech.QUEUE_ADD, null, id);
+            tts.speak(TextPrep.userFix(TextPrep.sayName(parts.get(k)[0], lang)), TextToSpeech.QUEUE_ADD, null, id);
         }
     }
 

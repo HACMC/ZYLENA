@@ -3085,6 +3085,22 @@ public class ReaderService extends AccessibilityService {
         }
     }
 
+    /** Pauses and opens "Fix a word" on the words being read, as the voice says them. */
+    private void fixWord() {
+        Speaker sp = Speaker.get(this);
+        String said = sp.currentSpoken();
+        if (said == null || said.trim().isEmpty()) {
+            android.widget.Toast.makeText(this, "Start reading first. When something sounds wrong, tap Fix a word.",
+                    android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (sp.isSpeaking()) sp.pause();
+        main.removeCallbacks(earlyTurn);
+        startActivity(new android.content.Intent(this, FixActivity.class)
+                .putExtra(FixActivity.EXTRA_TEXT, said)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+    }
+
     private void runShortcut(String id) {
         Speaker sp = Speaker.get(this);
         Logs.d(this, "shortcut: " + id);
@@ -3126,6 +3142,9 @@ public class ReaderService extends AccessibilityService {
                 break;
             case "panel":
                 showPanel();
+                break;
+            case "fix":
+                fixWord();
                 break;
         }
     }

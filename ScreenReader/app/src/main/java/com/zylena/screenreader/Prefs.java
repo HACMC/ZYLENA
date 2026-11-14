@@ -120,9 +120,9 @@ final class Prefs {
 
     /** The floating button's four shortcuts (ids from Shortcuts.ALL), comma separated. */
     static String shortcuts(Context c) {
-        String v = sp(c).getString("shortcuts", "scan,translate,locate,picture");
+        String v = sp(c).getString("shortcuts", "scan,translate,fix,picture");
         // The first version's four (never changed by the user) get Picture text in place of Settings.
-        return v.equals("scan,translate,locate,settings") ? "scan,translate,locate,picture" : v;
+        return v.equals("scan,translate,locate,settings") ? "scan,translate,fix,picture" : v;
     }
 
     static void setShortcuts(Context c, String v) {
