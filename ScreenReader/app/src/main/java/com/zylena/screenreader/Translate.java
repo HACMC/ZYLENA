@@ -729,6 +729,35 @@ final class Translate {
         return sb.toString();
     }
 
+    /**
+     * Google's free translator sometimes hands a quotation back as it was (He shook his head, "Look, I don't
+     * care." stays English inside a Tagalog sentence). Such a quotation is translated on its own and put in.
+     */
+    private static String leftOver(Context c, String source, String said, String from, String to) {
+        java.util.List<int[]> spans = Cast.quoteSpans(said, false);
+        if (spans.isEmpty()) return said;
+        StringBuilder sb = new StringBuilder();
+        int at = 0, fixed = 0;
+        for (int[] q : spans) {
+            if (q[1] - q[0] < 14 || q[2] == 0) continue;
+            String inner = said.substring(q[0] + 1, q[1] - 1).trim();
+            if (inner.split("\\s+").length < 3 || !source.contains(inner)) continue;
+            String tr;
+            try {
+                tr = google(c, inner, from, to);
+            } catch (Exception e) {
+                break; // busy: the rest stays as it is
+            }
+            if (tr == null || tr.trim().isEmpty() || tr.trim().equalsIgnoreCase(inner)) continue;
+            sb.append(said, at, q[0] + 1).append(tr.trim());
+            at = q[1] - 1;
+            if (++fixed >= 4) break;
+        }
+        if (fixed == 0) return said;
+        Logs.d(c, "translate: " + fixed + (fixed == 1 ? " quotation" : " quotations") + " came back untranslated, translated again");
+        return sb.append(said.substring(at)).toString();
+    }
+
     private static void translate(Context c, String text, String fromLang, Done out) {
         if (!Net.online(c)) {
             offline(c, text, fromLang, out);
@@ -752,6 +781,7 @@ final class Translate {
                 tried = true;
                 try {
                     said = google(c, text, from, to);
+                    if (said != null) said = leftOver(c, text, said, from, to);
                     if (said != null) lastBy = "Google free";
                 } catch (Exception e) {
                     Logs.d(c, "translate online failed: " + e);

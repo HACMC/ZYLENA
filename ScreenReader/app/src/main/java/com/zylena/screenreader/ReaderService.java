@@ -1431,6 +1431,7 @@ public class ReaderService extends AccessibilityService {
 
     private void cancelScan() {
         placing = false;
+        goingUp = false;
         scanGen++;
         showGen++;
         if (scanning) Logs.d(this, "whole page: scan stopped");
@@ -1881,6 +1882,7 @@ public class ReaderService extends AccessibilityService {
         turnedFor = markedFirst = -1;
         markedAlong = -1f;
         placing = true;
+        goingUp = false;
         Runnable read = () -> {
             placing = false;
             if (gen != scanGen) return;
@@ -1896,7 +1898,21 @@ public class ReaderService extends AccessibilityService {
         };
         // From the top: the app's quick "scroll up" first. From further down: go straight there.
         showBanner(back && first.line == 0 ? "Scanned. Going back to the top\u2026" : "Going to where you stopped\u2026");
-        if (back && first.line == 0) toTop(gen, 0, place);
+        if (back && first.line == 0 && scanSteps >= 4 && !early && Prefs.flag(this, "read_at_once", true) && !Prefs.testMode(this)) {
+            // A long page takes many seconds to scroll back up: the voice starts now, and the page and the
+            // outline catch up with it once the top is reached.
+            Logs.d(this, "whole page: a long page, reading starts while it goes back to the top");
+            placing = false;
+            goingUp = true;
+            upFirst = upLast = -1;
+            hideBanner();
+            Speaker.get(this).speak(from, true);
+            toTop(gen, 0, () -> {
+                goingUp = false;
+                if (gen != scanGen || !Speaker.get(this).isSpeaking()) return;
+                if (upFirst >= 0) showLine(upFirst, upLast);
+            });
+        } else if (back && first.line == 0) toTop(gen, 0, place);
         else place.run();
     }
 
@@ -2369,6 +2385,24 @@ public class ReaderService extends AccessibilityService {
         else asItIs.run();
     }
 
+    /** The page is being scrolled back to its top after a scan while the voice already reads (a long page). */
+    private boolean goingUp;
+    private int upFirst = -1, upLast = -1;
+
+    /** Brings the paragraph being read into view and puts the outline on it. */
+    private void showLine(int first, int last) {
+        // The outline goes on at once and rides along with the text while the page moves into place.
+        markOnScreen(first, last);
+        putInView(first, last, markAlong, false, () -> {
+            if (markFirst != first) return;
+            markOnScreen(first, last);
+            // Once more when the page has come to rest, in case the app reported a position mid-move.
+            main.postDelayed(() -> {
+                if (markFirst == first && Speaker.get(this).isSpeaking()) markOnScreen(first, last);
+            }, 400);
+        });
+    }
+
     private void onProgress(int first, int last) {
         if (early) return; // the page on screen is the next one already
         if (first < 0 || first >= lines.size()) return;
@@ -2381,17 +2415,12 @@ public class ReaderService extends AccessibilityService {
         while (list.size() > 8) list.removeLast();
         highlight(first);
         Logs.t(this, "reading line " + first + ": " + Logs.snip(lines.get(first)));
-        if (scanned) {
-            // The outline goes on at once and rides along with the text while the page moves into place.
-            markOnScreen(first, last);
-            putInView(first, last, markAlong, false, () -> {
-                if (markFirst != first) return;
-                markOnScreen(first, last);
-                // Once more when the page has come to rest, in case the app reported a position mid-move.
-                main.postDelayed(() -> {
-                    if (markFirst == first && Speaker.get(this).isSpeaking()) markOnScreen(first, last);
-                }, 400);
-            });
+        if (scanned && goingUp) {
+            // The page is still on its way back to the top while the voice has begun: shown once it is there.
+            upFirst = first;
+            upLast = last;
+        } else if (scanned) {
+            showLine(first, last);
         } else {
             markOnScreen(first, last);
         }
@@ -3329,7 +3358,13 @@ public class ReaderService extends AccessibilityService {
         if (scanning || placing) {
             cancelScan();
             if (early) sp.stop(); // the last paragraph was still being read while the next page was scanned
-        } else if (sp.isSpeaking()) sp.stop();
+        } else if (sp.isSpeaking()) {
+            if (goingUp) { // the page was still going back to the top: that stops too
+                goingUp = false;
+                cancelScan();
+            }
+            sp.stop();
+        }
         else if (sp.isPaused()) sp.resume();
         else readScreen();
     }

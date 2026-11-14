@@ -418,6 +418,9 @@ public class MainActivity extends Activity {
         markRow = Ui.toggle(this, R.drawable.ic_frame, "Highlight while reading", "Gold outline around the paragraph",
                 on -> Prefs.setHighlight(this, on));
         Ui.add(g, markRow.view);
+        Ui.add(g, flagRow(R.drawable.ic_play, "Start reading right after the scan",
+                "On a long page the voice starts at once, while the page is still going back to the top. Off: it waits until the page is at the top.",
+                "read_at_once", true));
         Ui.add(g, flagRow(R.drawable.ic_next, "Turn the page early",
                 "Shortly before the last paragraph ends, the next page is opened and scanned, so reading goes on without a wait.",
                 "early_turn", true));
