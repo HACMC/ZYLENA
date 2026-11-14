@@ -1422,6 +1422,7 @@ public class ReaderService extends AccessibilityService {
         scanOrder.clear();
         spots.clear();
         scanY = 0;
+        scanDoubt = false;
         knownY = 0;
         pageEndY = 0;
         upSeen = false;
@@ -1781,6 +1782,20 @@ public class ReaderService extends AccessibilityService {
                 moved = lastScrollAsked;
                 Logs.d(this, "whole page: step " + scanSteps + " not measured, taking " + moved + " px");
             }
+            // Scrolling down must move the page down, by no more than the step asked (plus a little). A step that
+            // measured otherwise (EGW Writings once gave -28 px for a whole chapter) is not believed: the
+            // page's own report is used, else what shows of the page; and the paragraphs then keep the order
+            // they were found in (the page is scrolled down from its top, so that is the reading order).
+            int measuredMove = moved;
+            int cap = Math.max(Math.abs(lastScrollAsked), sh.view.height()) * 12 / 10 + Theme.dp(this, 24);
+            if (lastScrollAsked > 0 && (moved < 0 || moved > cap)) {
+                int guess = told != null && told > 0 && told <= cap ? told : Math.min(lastScrollAsked, sh.view.height());
+                Logs.d(this, "whole page: step " + scanSteps + " measured " + measuredMove + " px, not believable, taking " + guess + " px");
+                moved = guess;
+                scanDoubt = true;
+            }
+            Logs.t(this, "scan step " + scanSteps + ": moved " + moved + " (measured " + measuredMove + ", told " + told
+                    + ", asked " + lastScrollAsked + "), " + sh.lines.size() + " lines, view " + sh.view.toShortString());
             scanY += moved;
             scanStuck = Math.abs(moved) < Theme.dp(this, 4) ? scanStuck + 1 : 0;
         }
@@ -1844,6 +1859,7 @@ public class ReaderService extends AccessibilityService {
     }
 
     private int lastScrollAsked;
+    private boolean scanDoubt;
 
     /** How far the page really moved between two shots, from paragraphs whose edge shows on both. */
     private Integer movedBy(Shot a, Shot b) {
@@ -1906,7 +1922,8 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         List<String> ordered = new ArrayList<>(scanOrder);
-        ordered.sort((x, y) -> Integer.compare(topOf(x), topOf(y)));
+        // (Stable sort; after a step that couldn't be measured the order found is kept as it is.)
+        if (!scanDoubt) ordered.sort((x, y) -> Integer.compare(topOf(x), topOf(y)));
         lines = ordered;
         rects = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) rects.add(new Rect());
