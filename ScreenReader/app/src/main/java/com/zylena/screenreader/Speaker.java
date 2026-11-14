@@ -184,6 +184,25 @@ final class Speaker {
         return out;
     }
 
+    /** The language of each of those pieces. */
+    java.util.ArrayList<String> pageLangs() {
+        java.util.ArrayList<String> out = new java.util.ArrayList<>();
+        List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;
+        if (runs != null) for (TextPrep.Seg r : runs) out.add(r.lang);
+        return out;
+    }
+
+    /** Says a few words right now in the usual voice of that language, to try a way of saying them. Reading stays paused. */
+    void sayNow(String text, String lang) {
+        if (speaking || text == null || text.trim().isEmpty()) return;
+        ensureTts(() -> {
+            applyVoice(lang);
+            tts.setSpeechRate(rateFor(lang));
+            tts.setPitch(Prefs.pitch(ctx));
+            tts.speak(text.trim(), TextToSpeech.QUEUE_FLUSH, null, "try");
+        });
+    }
+
     /** Which of those pieces is being read (or was, when it stopped). */
     int pageAt() {
         List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;

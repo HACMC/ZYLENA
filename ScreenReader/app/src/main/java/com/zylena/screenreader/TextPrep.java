@@ -702,6 +702,84 @@ final class TextPrep {
 
     private static final Pattern QUOTE_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
 
+    // ---- Ways to write a word so the voice says it differently (for "Fix a word") ----
+
+    private static boolean vowel(char c) {
+        return "aeiouAEIOU".indexOf(c) >= 0;
+    }
+
+    /** "propeta" -> "pro-pe-ta": a cut before each consonant that starts a new syllable ("ng" counts as one). */
+    static String syllables(String w) {
+        StringBuilder sb = new StringBuilder();
+        boolean seenVowel = false;
+        for (int i = 0; i < w.length(); i++) {
+            char c = w.charAt(i);
+            if (!Character.isLetter(c)) {
+                sb.append(c);
+                seenVowel = false;
+                continue;
+            }
+            boolean ng = (c == 'n' || c == 'N') && i + 2 < w.length() && (w.charAt(i + 1) == 'g' || w.charAt(i + 1) == 'G') && vowel(w.charAt(i + 2));
+            boolean startsNext = !vowel(c) && seenVowel && (ng || i + 1 < w.length() && vowel(w.charAt(i + 1)));
+            boolean vowelAfterVowel = vowel(c) && i > 0 && vowel(w.charAt(i - 1)) && Character.toLowerCase(c) != Character.toLowerCase(w.charAt(i - 1));
+            if (startsNext || vowelAfterVowel) {
+                sb.append('-');
+                seenVowel = false;
+            }
+            sb.append(c);
+            if (ng) sb.append(w.charAt(++i));
+            if (vowel(c)) seenVowel = true;
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Other ways to write a word so the voice says it another way: in syllables, spelled the way it sounds in
+     * the voice's language, or letter by letter. The user hears them and picks one; they are only ideas.
+     */
+    static List<String> sayIdeas(String word, boolean filVoice) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        String w = word.trim();
+        if (w.isEmpty() || w.indexOf(' ') >= 0 || w.length() > 30) return new ArrayList<>();
+        String low = w.toLowerCase(Locale.ROOT);
+        String cap = Character.isUpperCase(w.charAt(0)) ? "U" : "";
+        if (w.length() <= 5 && w.equals(w.toUpperCase(Locale.ROOT)) && w.chars().allMatch(Character::isLetter)) {
+            out.add(String.join(" ", w.split(""))); // "EGW" letter by letter
+        }
+        out.add(syllables(w));
+        String sound;
+        if (filVoice) {
+            // An English or foreign spelling, written the way a Filipino would say it.
+            sound = low.replace("tion", "syon").replace("ph", "p").replace("th", "t").replace("sh", "sy").replace("ch", "ts")
+                    .replace("ck", "k").replace("qu", "kw").replace("x", "ks").replaceAll("c(?=[eiy])", "s").replace("c", "k")
+                    .replace("j", "dy").replace("v", "b").replace("z", "s").replace("f", "p").replace("ee", "i").replace("ea", "i")
+                    .replace("oo", "u").replace("ou", "aw").replaceAll("y$", "i").replaceAll("e$", "");
+        } else {
+            // A Tagalog word for an English voice: each vowel the way English would have to write it.
+            StringBuilder sb = new StringBuilder();
+            for (char c : syllables(low).toCharArray()) {
+                sb.append(c == 'a' ? "ah" : c == 'e' ? "eh" : c == 'i' ? "ee" : c == 'o' ? "oh" : c == 'u' ? "oo" : String.valueOf(c));
+            }
+            sound = sb.toString();
+        }
+        if (!cap.isEmpty() && !sound.isEmpty()) sound = Character.toUpperCase(sound.charAt(0)) + sound.substring(1);
+        out.add(sound);
+        if (filVoice) out.add(syllables(sound));
+        // The stress on another syllable: the stressed vowel doubled ("propeeta").
+        java.util.regex.Matcher m = Pattern.compile("[aeiou]").matcher(low);
+        List<Integer> at = new ArrayList<>();
+        while (m.find()) at.add(m.start());
+        if (at.size() >= 2) {
+            int pen = at.get(at.size() - 2), last = at.get(at.size() - 1);
+            out.add(w.substring(0, pen + 1) + w.charAt(pen) + w.substring(pen + 1));
+            out.add(w.substring(0, last + 1) + w.charAt(last) + w.substring(last + 1));
+        }
+        out.remove(w);
+        out.remove("");
+        List<String> list = new ArrayList<>(out);
+        return list.size() > 6 ? list.subList(0, 6) : list;
+    }
+
     // ---- Voices: the Bible voice and a story's points of view ----
 
     /** Bible verses are read in a man's voice, then the usual voice goes on. */

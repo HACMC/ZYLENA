@@ -3102,11 +3102,13 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         int at = sp.pageAt();
+        java.util.ArrayList<String> langs = sp.pageLangs();
         if (sp.isSpeaking()) sp.pause();
         main.removeCallbacks(earlyTurn);
         startActivity(new android.content.Intent(this, FixActivity.class)
                 .putStringArrayListExtra(FixActivity.EXTRA_PAGE, page)
                 .putExtra(FixActivity.EXTRA_AT, at)
+                .putStringArrayListExtra(FixActivity.EXTRA_LANGS, langs)
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 

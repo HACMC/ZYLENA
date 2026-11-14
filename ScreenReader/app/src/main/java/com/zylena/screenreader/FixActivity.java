@@ -29,7 +29,10 @@ import java.util.List;
  * in Settings, so they can be seen and changed there.
  */
 public class FixActivity extends Activity {
-    static final String EXTRA_PAGE = "page", EXTRA_AT = "at";
+    static final String EXTRA_PAGE = "page", EXTRA_AT = "at", EXTRA_LANGS = "langs";
+    private final List<Integer> paraStart = new ArrayList<>(); // where each paragraph begins in text
+    private java.util.ArrayList<String> langs;
+    private TextView ideas; // other ways to write the word so the voice says it differently
     private int startAt; // where the paragraph being read begins in text
     private android.widget.ScrollView box;
     private EditText find;
@@ -50,7 +53,9 @@ public class FixActivity extends Activity {
         java.util.ArrayList<String> page = getIntent().getStringArrayListExtra(EXTRA_PAGE);
         int at = getIntent().getIntExtra(EXTRA_AT, 0);
         StringBuilder all = new StringBuilder();
+        langs = getIntent().getStringArrayListExtra(EXTRA_LANGS);
         for (int i = 0; page != null && i < page.size(); i++) {
+            paraStart.add(all.length());
             if (i == at) startAt = all.length();
             all.append(page.get(i).trim()).append("\n\n");
         }
@@ -127,6 +132,30 @@ public class FixActivity extends Activity {
         hints.setHighlightColor(Color.TRANSPARENT);
         hints.setVisibility(View.GONE);
         col.addView(hints);
+        ideas = new TextView(this);
+        ideas.setTextColor(0xFFF0D690);
+        ideas.setTextSize(15);
+        ideas.setLineSpacing(0, 1.3f);
+        ideas.setMovementMethod(LinkMovementMethod.getInstance());
+        ideas.setHighlightColor(Color.TRANSPARENT);
+        ideas.setVisibility(View.GONE);
+        col.addView(ideas);
+        LinearLayout hear = new LinearLayout(this);
+        hear.setOrientation(LinearLayout.HORIZONTAL);
+        Button hearWord = new Button(this);
+        hearWord.setText("Hear the word");
+        hearWord.setAllCaps(false);
+        hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(wrong.getText().toString(), lang()));
+        Button hearFix = new Button(this);
+        hearFix.setText("Hear my fix");
+        hearFix.setAllCaps(false);
+        hearFix.setOnClickListener(v -> {
+            if (right.getText().toString().trim().isEmpty()) Toast.makeText(this, "Type how it should be said first, or tap an idea.", Toast.LENGTH_SHORT).show();
+            else Speaker.get(this).sayNow(right.getText().toString(), lang());
+        });
+        hear.addView(hearWord, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        hear.addView(hearFix, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        col.addView(hear);
         col.addView(label("Tip: write it the way it sounds, like \"Zeleena\" or \"pro-pe-ta\". It changes how the word is said everywhere."));
 
         Button save = button("Say it this way");
@@ -252,6 +281,48 @@ public class FixActivity extends Activity {
         show();
         right.requestFocus();
         suggest(from == to ? phrase : "");
+        sayIdeas(from == to ? phrase : "");
+    }
+
+    /** The language of the paragraph the chosen word is in (the voice that reads it). */
+    private String lang() {
+        int off = from >= 0 ? words.get(from)[0] : startAt, p = 0;
+        for (int i = 0; i < paraStart.size(); i++) if (paraStart.get(i) <= off) p = i;
+        return langs != null && p < langs.size() ? langs.get(p) : TextPrep.FIL;
+    }
+
+    /** Other ways to write the word so the voice says it another way: tap one to try it, then Hear my fix. */
+    private void sayIdeas(String word) {
+        List<String> got = word.isEmpty() ? new ArrayList<>() : TextPrep.sayIdeas(word, TextPrep.FIL.equals(lang()));
+        if (got.isEmpty()) {
+            ideas.setVisibility(View.GONE);
+            return;
+        }
+        StringBuilder sb = new StringBuilder("Ways to say it:  ");
+        List<int[]> at = new ArrayList<>();
+        for (String g : got) {
+            at.add(new int[]{sb.length(), sb.length() + g.length()});
+            sb.append(g).append("    ");
+        }
+        SpannableString sp = new SpannableString(sb.toString());
+        for (int i = 0; i < got.size(); i++) {
+            final String pick = got.get(i);
+            sp.setSpan(new ClickableSpan() {
+                @Override
+                public void onClick(View v) {
+                    right.setText(pick);
+                    right.setSelection(pick.length());
+                    Speaker.get(FixActivity.this).sayNow(pick, lang()); // heard at once
+                }
+
+                @Override
+                public void updateDrawState(TextPaint p) {
+                    p.setUnderlineText(true);
+                }
+            }, at.get(i)[0], at.get(i)[1], Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        ideas.setText(sp);
+        ideas.setVisibility(View.VISIBLE);
     }
 
     /** Looks up real words spelled close to the chosen word (in the built-in Bibles' words) and offers them. */
