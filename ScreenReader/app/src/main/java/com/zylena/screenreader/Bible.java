@@ -463,6 +463,73 @@ final class Bible {
         return sb.toString();
     }
 
+    private static final Pattern MAYBE_BOOK = Pattern.compile("(?<![\\p{L}])(\\p{Lu}\\p{L}{5,})(?=\\.?\\s?\\d{1,3}\\s?:\\s?\\d)");
+    private static final Set<String> KNOWN = new HashSet<>();
+    private static final List<String> ONE_WORD = new ArrayList<>();
+
+    static {
+        KNOWN.addAll(Arrays.asList(ENGLISH));
+        KNOWN.addAll(Arrays.asList(TAGALOG));
+        for (String[] a : ABBR) KNOWN.add(a[0]);
+        for (String n : ENGLISH) if (n.indexOf(' ') < 0) ONE_WORD.add(n);
+        for (String n : TAGALOG) if (n.indexOf(' ') < 0) ONE_WORD.add(n);
+    }
+
+    /**
+     * A book name with a slip of the pen right before chapter:verse ("Deuteonomio 34:10", "Jeremais 1:4",
+     * "Apocalipsiss 14:6") becomes the book it must be: the only known name one letter away (two for long names).
+     */
+    static String fixNames(String text) {
+        Matcher m = MAYBE_BOOK.matcher(text);
+        StringBuffer sb = null;
+        while (m.find()) {
+            String w = m.group(1);
+            if (KNOWN.contains(w)) continue;
+            int allow = w.length() >= 9 ? 2 : 1, best = allow + 1;
+            String pick = null;
+            boolean tie = false;
+            for (String k : ONE_WORD) {
+                if (Math.abs(k.length() - w.length()) > allow) continue;
+                int d = distance(w.toLowerCase(Locale.ROOT), k.toLowerCase(Locale.ROOT), allow);
+                if (d < best) {
+                    best = d;
+                    pick = k;
+                    tie = false;
+                } else if (d == best && pick != null && !sameBook(k, pick)) {
+                    tie = true; // two different books are as near: left as written
+                }
+            }
+            if (pick == null || tie) continue;
+            if (sb == null) sb = new StringBuffer();
+            m.appendReplacement(sb, Matcher.quoteReplacement(pick));
+        }
+        if (sb == null) return text;
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    private static boolean sameBook(String a, String b) {
+        String x = SAME_MAP.containsKey(a) ? SAME_MAP.get(a) : a, y = SAME_MAP.containsKey(b) ? SAME_MAP.get(b) : b;
+        return x.equals(y);
+    }
+
+    /** Letters to change, add, drop or swap to get from a to b; more than max is reported as max + 1. */
+    private static int distance(String a, String b, int max) {
+        int[][] d = new int[a.length() + 1][b.length() + 1];
+        for (int i = 0; i <= a.length(); i++) d[i][0] = i;
+        for (int j = 0; j <= b.length(); j++) d[0][j] = j;
+        for (int i = 1; i <= a.length(); i++) {
+            for (int j = 1; j <= b.length(); j++) {
+                int c = a.charAt(i - 1) == b.charAt(j - 1) ? 0 : 1;
+                d[i][j] = Math.min(Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1), d[i - 1][j - 1] + c);
+                if (i > 1 && j > 1 && a.charAt(i - 1) == b.charAt(j - 2) && a.charAt(i - 2) == b.charAt(j - 1)) {
+                    d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+                }
+            }
+        }
+        return Math.min(d[a.length()][b.length()], max + 1);
+    }
+
     /** How many references are in the text, and how many letters are outside them. */
     static int[] refShare(String text) {
         Matcher m = REF.matcher(text);

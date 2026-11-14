@@ -487,7 +487,12 @@ final class TextPrep {
         return out;
     }
 
+    /** Hyphens and dashes that look like "-" or "–" but are other characters (a page's no-break hyphen, a minus sign). */
+    private static final Pattern ODD_HYPHEN = Pattern.compile("[\u2010\u2011\u2012\u2212\uFE58\uFE63\uFF0D]");
+
     static String clean(String s) {
+        s = ODD_HYPHEN.matcher(s).replaceAll("-").replace('\u2015', '\u2014');
+        s = Bible.fixNames(s);
         s = eraDots(s);
         s = URL.matcher(s).replaceAll(" link ");
         s = EMAIL.matcher(s).replaceAll(" email address ");
@@ -703,9 +708,11 @@ final class TextPrep {
             // reader doesn't know: with "skip Bible references" it is not read (only the verses' words are worth it).
             if (skipRefs && !readVerses && !inSentence) {
                 String flat = SPACES.matcher(Bible.normalize(lines.get(li))).replaceAll(" ").trim();
-                int[] share = Bible.refShare(flat);
+                // (References in brackets are skipped anyway and don't make a sentence a list.)
+                String open = Bible.stripRefs(ODD_HYPHEN.matcher(flat).replaceAll("-"));
+                int[] share = Bible.refShare(open.isEmpty() ? flat : open);
                 // Only references, or a list of three or more with hardly a word between them.
-                if (REFS_LINE.matcher(flat).matches() || share[0] >= 3 && share[1] <= 12) continue;
+                if (REFS_LINE.matcher(ODD_HYPHEN.matcher(flat).replaceAll("-")).matches() || share[0] >= 3 && share[1] <= 12) continue;
                 if (share[0] >= 2 && share[1] <= 40 && lastRefLine.isEmpty()) lastRefLine = flat; // for the log: why it was read
             }
             char endCh = cleaned.charAt(cleaned.length() - 1);
