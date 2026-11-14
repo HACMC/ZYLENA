@@ -407,6 +407,8 @@ final class Prefs {
         TextPrep.povOn = povVoices(c);
         TextPrep.userPov = TextPrep.parseSay(povNames(c));
         TextPrep.castOn = flag(c, "cast_voices", true);
+        TextPrep.feelOn = flag(c, "feel_voices", true);
+        TextPrep.moodMode = sp(c).getString("mood", "auto");
         TextPrep.respellNames = flag(c, "respell_names", true);
         TextPrep.respellSyon = flag(c, "respell_syon", true);
         TextPrep.sayYears = flag(c, "say_years", true);
@@ -420,6 +422,16 @@ final class Prefs {
 
     static void setFlag(Context c, String key, boolean v) {
         sp(c).edit().putBoolean(key, v).apply();
+        applyLists(c);
+    }
+
+    /** The kind of text the voice reads to suit: "auto", "off" or one of Mood.KINDS. */
+    static String mood(Context c) {
+        return sp(c).getString("mood", "auto");
+    }
+
+    static void setMood(Context c, String v) {
+        sp(c).edit().putString("mood", v).apply();
         applyLists(c);
     }
 

@@ -756,12 +756,22 @@ final class Speaker {
             r = 1f + (r - 1f) * strength;
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             p *= applyVoice(lang, parts.get(k)[3]);
+            // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
+            float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
+            p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
+            r *= (1f + (kind[1] - 1f) * strength) * (1f + (feel[1] - 1f) * strength);
+            float loud = Math.max(0.3f, Math.min(1f, (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
+            android.os.Bundle how = null;
+            if (loud < 0.99f) {
+                how = new android.os.Bundle();
+                how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, loud);
+            }
             // A breath when another voice takes over, if the user wants one.
-            if (change > 0 && k > 0 && !parts.get(k)[3].equals(parts.get(k - 1)[3])) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            if (change > 0 && k > 0 && !Cast.voice(parts.get(k)[3]).equals(Cast.voice(parts.get(k - 1)[3]))) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
             tts.setSpeechRate(rateFor(lang) * r);
             tts.setPitch(pitch * p);
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
-            tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, null, id);
+            tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, how, id);
             // Time to think about the question, unless the page ends here.
             long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
             if (ask && after > 0 && !(last && k == parts.size() - 1)) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
@@ -800,6 +810,7 @@ final class Speaker {
                 String c = off ? (one && only != null && q.get(k)[1] - q.get(k)[0] > 12 ? only : "")
                         : idx < s.cast.length ? s.cast[idx] : "";
                 if (c == null || c.isEmpty()) continue;
+                if (c.startsWith("~")) c = s.who + c; // the storyteller's own words, whispered or shouted
                 for (int x = q.get(k)[0]; x < q.get(k)[1]; x++) w[x] = c;
             }
         }
@@ -867,6 +878,7 @@ final class Speaker {
      * again a little higher or lower.
      */
     private float applyVoice(String lang, String who) {
+        who = Cast.voice(who);
         if (Cast.isCode(who)) return applyCast(lang, who);
         boolean man = "m".equals(who);
         Voice male = man ? secondVoice(lang) : null;

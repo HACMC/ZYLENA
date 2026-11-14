@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row castRow, castFilRow, castEnRow;
+    private Ui.Row castRow, castFilRow, castEnRow, moodRow;
     private android.widget.EditText searchBox;
     private ScrollView results;
     private LinearLayout resultsCol;
@@ -527,6 +527,11 @@ public class MainActivity extends Activity {
 
         col.addView(Ui.section(this, "Tone and pauses"));
         LinearLayout t = Ui.group(this);
+        moodRow = Ui.nav(this, R.drawable.ic_eq, "Match the kind of text", "", this::pickMood);
+        Ui.add(t, moodRow.view);
+        Ui.add(t, flagRow(R.drawable.ic_eq, "Feelings in what characters say",
+                "\"she whispered\" is read softly, \"he shouted\" louder and higher, \"umiiyak na sabi niya\" sadly. In stories only.",
+                "feel_voices", true));
         toneRow = Ui.toggle(this, R.drawable.ic_eq, "Expressive reading",
                 "Questions sound asking, with a moment after each. Exclamations have more life. Headings and quoted verses are read calmer and slower.",
                 on -> Prefs.setQuestionTone(this, on));
@@ -799,6 +804,29 @@ public class MainActivity extends Activity {
         });
     }
 
+    private void pickMood() {
+        final String[] ids = new String[Mood.KINDS.length + 2];
+        final String[] names = new String[ids.length];
+        ids[0] = "auto";
+        names[0] = "Auto: tell from the page";
+        ids[1] = "off";
+        names[1] = "Off: always the same";
+        for (int i = 0; i < Mood.KINDS.length; i++) {
+            ids[i + 2] = Mood.KINDS[i];
+            names[i + 2] = "Always: " + Mood.KIND_NAMES[i];
+        }
+        int now = Math.max(0, java.util.Arrays.asList(ids).indexOf(Prefs.mood(this)));
+        new AlertDialog.Builder(this)
+                .setTitle("Match the kind of text")
+                .setSingleChoiceItems(names, now, (d, w) -> {
+                    Prefs.setMood(this, ids[w]);
+                    d.dismiss();
+                    refresh();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
     /** Which of the phone's voices a story's characters may use, and whether each is a man's or a woman's. */
     private void pickCastVoices(String lang) {
         Speaker sp = Speaker.get(this);
@@ -939,6 +967,11 @@ public class MainActivity extends Activity {
         set(bibleVoiceRow, Prefs.bibleVoice(this));
         set(povRow, Prefs.povVoices(this));
         for (Object[] fr : flagRows) set((Ui.Row) fr[0], Prefs.flag(this, (String) fr[1], (Boolean) fr[2]));
+        String md = Prefs.mood(this);
+        int mi = Mood.kinds().indexOf(md);
+        moodRow.setValue(md.equals("auto") ? "Auto" : md.equals("off") ? "Off" : Mood.KIND_NAMES[mi < 0 ? 0 : mi].replaceAll("[ ,(].*", ""));
+        moodRow.setSub(md.equals("auto") ? "ZYLENA tells a devotional, a love story, suspense, comedy, drama or action from the page and reads to suit it"
+                : md.equals("off") ? "The voice reads every kind of text the same way" : "Always read as: " + Mood.KIND_NAMES[mi < 0 ? 0 : mi]);
         castFilRow.setSub(castLabel(TextPrep.FIL));
         castEnRow.setSub(castLabel(TextPrep.EN));
         String known = Cast.known();

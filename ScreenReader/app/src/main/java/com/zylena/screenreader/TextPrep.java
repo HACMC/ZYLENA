@@ -32,6 +32,8 @@ final class TextPrep {
         String who = "";
         /** A story's characters: the voice of each quoted part of this text's paragraph, in order ("" the usual voice). */
         String[] cast;
+        /** The kind of text the page is ("suspense", "romance", …; "" plain): the voice reads to suit it. */
+        String mood = "";
         /** How many of those quoted parts came before this text, and whether it begins inside one. */
         int castFrom;
         boolean inQuote;
@@ -41,6 +43,7 @@ final class TextPrep {
             ref = o.ref;
             who = o.who;
             cast = o.cast;
+            mood = o.mood;
             castFrom = o.castFrom;
             inQuote = o.inQuote;
             return this;
@@ -835,6 +838,12 @@ final class TextPrep {
     static volatile boolean castOn = true;
     /** For the log: the characters found on the page just prepared. */
     static volatile String lastCast = "";
+    /** How characters say their lines (whispered, shouted, in tears) is heard in the voice. */
+    static volatile boolean feelOn = true;
+    /** The kind of text: "auto" finds it from the page, "off" never changes the voice, else one of Mood.KINDS always. */
+    static volatile String moodMode = "auto";
+    /** For the log: the kind of text the page just prepared was taken for. */
+    static volatile String lastMood = "";
     /** The user's own "name = male / female" list, for names the reader can't tell. */
     static volatile List<String[]> userPov = new ArrayList<>();
     private static volatile String povScope = "", povCarry = "";
@@ -1012,6 +1021,8 @@ final class TextPrep {
         // A story's characters each get a voice of their own for what they say.
         String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
         lastCast = cast == null ? "" : Cast.lastSummary;
+        String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
+        lastMood = moodMode.equals("auto") ? Mood.lastWhy : "";
         for (int li = 0; li < lines.size(); li++) {
             if (povOn) {
                 String pv = povOf(lines.get(li));
@@ -1096,6 +1107,7 @@ final class TextPrep {
                     Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     if (cast != null) g.cast = cast[li];
+                    g.mood = mood;
                     out.add(g);
                 }
             }
@@ -1137,6 +1149,7 @@ final class TextPrep {
         boolean head = true, done = false;
         String prev = "", ref = null, who = "";
         String[] cast = null;
+        String mood = "";
         int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
@@ -1157,6 +1170,7 @@ final class TextPrep {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
+                out.get(out.size() - 1).mood = mood;
                 castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
                 cast = null;
                 ref = null;
@@ -1170,6 +1184,7 @@ final class TextPrep {
             if (sb.length() == 0) {
                 first = s.line;
                 cast = s.cast;
+                mood = s.mood;
             } else if (s.line != last && (cast != null || s.cast != null)) {
                 // Two screen lines read as one sentence: the second one's characters follow the first one's.
                 int had = Cast.quoteSpans(sb.toString(), false).size();
@@ -1190,6 +1205,7 @@ final class TextPrep {
             out.add(new Seg(sb.toString(), lang, first, last, head, done));
             out.get(out.size() - 1).ref = ref;
             out.get(out.size() - 1).who = who;
+            out.get(out.size() - 1).mood = mood;
             castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;

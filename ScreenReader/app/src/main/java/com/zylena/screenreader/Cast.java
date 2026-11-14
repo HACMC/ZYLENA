@@ -23,8 +23,21 @@ final class Cast {
 
     /** A voice code: "cm0" the first man's voice, "cf1" the second woman's, "cu0" a character the reader can't tell. */
     static boolean isCode(String who) {
+        who = voice(who);
         return who != null && who.length() >= 3 && who.charAt(0) == 'c' && "mfu".indexOf(who.charAt(1)) >= 0
                 && Character.isDigit(who.charAt(2));
+    }
+
+    /** The voice part of "cf1~w" (a character's voice, whispered): "cf1". */
+    static String voice(String who) {
+        int at = who == null ? -1 : who.indexOf('~');
+        return at < 0 ? who : who.substring(0, at);
+    }
+
+    /** The feeling part of "cf1~w": "w"; "" when it is said plainly. */
+    static String feel(String who) {
+        int at = who == null ? -1 : who.indexOf('~');
+        return at < 0 ? "" : who.substring(at + 1);
     }
 
     static char genderOf(String who) {
@@ -33,7 +46,7 @@ final class Cast {
 
     static int slotOf(String who) {
         try {
-            return Integer.parseInt(who.substring(2));
+            return Integer.parseInt(voice(who).substring(2));
         } catch (Exception e) {
             return 0;
         }
@@ -144,7 +157,7 @@ final class Cast {
             + "|paliwanag|dagdag|singit|bulalas|hiyaw|ungol|daing|tili|sambit|banggit|bigkas|tawag|pagtatapat|paalala|yaya|aya|alok|angal"
             + "|pagmamakaawa|pangako|hirit|kontra|sabat|puna|pansin|taka|tukso|asar|sermon|bulyaw|singhal|sita|hikbi|iyak|tawa|ngiti|buntong-hininga";
     private static final Pattern TL_SAID = Pattern.compile(
-            "(?i)(?<![\\p{L}])(?:(?:na)?(?:pa)?(?:" + TL_VERBS + ")(?:ng)?|ani)\\s+(?:(ko|ako)|(niya|nito|siya)|(?:ni|ng|si)\\s+(" + NAME + ")|(" + NAME + "))(?![\\p{L}])");
+            "(?<![\\p{L}])(?i:(?:na)?(?:pa)?(?:" + TL_VERBS + ")(?:ng)?|ani)\\s+(?:(?i:(ko|ako)|(niya|nito|siya))|(?i:ni|ng|si)\\s+(" + NAME + ")|(" + NAME + "))(?![\\p{L}])");
     private static final Pattern TL_ANIYA = Pattern.compile("(?i)(?<![\\p{L}])aniya(?![\\p{L}])");
     /** The narrator's own name: "I'm Millie Ripley", "My name is Millie", "Ako si Millie". */
     private static final Pattern I_AM = Pattern.compile("(?:\\bI'm|\\bI’m|\\bI am|\\b[Mm]y name(?: is|'s|’s)|\\b[Aa]ko si|\\b[Aa]ko nga pala si)\\s+(" + NAME + ")");
@@ -416,7 +429,15 @@ final class Cast {
             String code = speaker.isEmpty() || speaker.equals("I") ? "" : speaker.startsWith("\u0002") ? "c" + speaker.charAt(1) + "0"
                     : codeFor(people, people.get(speaker));
             out[i] = new String[sp.size()];
-            for (int k = 0; k < sp.size(); k++) out[i][k] = spoken(l, sp.get(k)) ? code : "";
+            for (int k = 0; k < sp.size(); k++) {
+                if (!spoken(l, sp.get(k))) {
+                    out[i][k] = "";
+                    continue;
+                }
+                // How it is said: "she whispered", "pasigaw na sabi niya", or ALL IN CAPITALS.
+                String feel = TextPrep.feelOn ? Mood.feeling(narration, l.substring(sp.get(k)[0], sp.get(k)[1])) : "";
+                out[i][k] = code + (feel.isEmpty() ? "" : "~" + feel);
+            }
             // Names said in this line: who may answer, and who "she" may be next.
             Matcher m = CAP_WORD.matcher(l);
             while (m.find()) {
