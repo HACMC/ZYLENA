@@ -375,10 +375,18 @@ final class TextPrep {
     private static final Pattern SHORT_CODE = Pattern.compile("^[\\s(\\[—–-]*\\d?\\p{L}{1,6}\\s?(?:\\d{1,4}|[ivxlcdmIVXLCDM]{1,7})\\s?[.,:·]\\s?\\d{1,3}[\\s)\\].,;:—–-]*$");
 
     static String dropCodes(String line) {
-        String was = line.trim();
-        String r = dropCodes0(ODD_SPACE.matcher(line).replaceAll(" "));
-        if (!r.equals(was) && lastCodes.length() < 160) lastCodes += (lastCodes.isEmpty() ? "" : " | ") + (was.length() > 40 ? was.substring(Math.max(0, was.length() - 40)) : was);
+        // Compare with the spaces already evened out: a line with an odd space (common on Wattpad) used to be
+        // logged as if a code had been dropped from it.
+        String was = ODD_SPACE.matcher(line).replaceAll(" ").trim();
+        String r = dropCodes0(was);
+        if (!r.equals(was) && lastCodes.length() < 300) {
+            lastCodes += (lastCodes.isEmpty() ? "" : " | ") + tail40(was) + " → " + (r.isEmpty() ? "(nothing)" : tail40(r));
+        }
         return r;
+    }
+
+    private static String tail40(String s) {
+        return s.length() > 40 ? "…" + s.substring(s.length() - 40) : s;
     }
 
     private static String dropCodes0(String line) {

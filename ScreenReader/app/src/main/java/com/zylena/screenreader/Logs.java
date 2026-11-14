@@ -26,9 +26,10 @@ final class Logs {
     private static final StringBuilder testBuf = new StringBuilder();
     private static File testFile;
 
-    /** Extra detail that only the emulator test needs (outline positions and the like). */
+    /** Extra detail for the emulator test, and for debug mode (Settings, App: Debug mode). */
     static void t(Context c, String msg) {
         if (toLogcat) d(c, "TEST " + msg);
+        else if (Prefs.flag(c, "debug", false)) d(c, msg);
     }
 
     static synchronized void d(Context c, String msg) {

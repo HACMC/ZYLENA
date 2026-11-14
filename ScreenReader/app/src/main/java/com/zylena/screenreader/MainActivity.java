@@ -644,6 +644,9 @@ public class MainActivity extends Activity {
                 this::restoreDefaults).view);
         Ui.add(app, Ui.nav(this, R.drawable.ic_list, "Logs", "See and share what happened",
                 () -> startActivity(new Intent(this, LogActivity.class))).view);
+        Ui.add(app, flagRow(R.drawable.ic_tune, "Debug mode",
+                "The log records much more: every line on screen, the scrolling areas, and what was tried. Turn it on, make the problem happen, then share the log.",
+                "debug", false));
         String ver = "";
         try {
             ver = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;

@@ -50,6 +50,10 @@ public class ReaderService extends AccessibilityService {
     private volatile String pkg = ""; // also set on the look thread
     private List<Rect> rects = new ArrayList<>();
     private boolean fromPicture; // the current lines came from Picture text, not the screen's own text
+    // The screen is read as it is (not a scanned page): its scrolling part is not the page being read, so
+    // a drag to keep the paragraph in view can move the wrong thing (Wattpad's end-of-chapter screen slid
+    // to another story's card). No drags then.
+    private boolean screenAsIs;
     private Controls controls;
     private View onScreenMark;
     private static VerseStore verses;
@@ -410,6 +414,7 @@ public class ReaderService extends AccessibilityService {
         List<String> lines;
         List<Rect> rects;
         List<String> skipped;
+        String scrollers; // debug mode: every scrolling area on screen
     }
 
     private Snap readSnap() {
@@ -418,6 +423,7 @@ public class ReaderService extends AccessibilityService {
         Snap sn = new Snap();
         sn.pkg = String.valueOf(root.getPackageName());
         sn.lines = ScreenText.read(root, Prefs.wholePage(this), Prefs.skipButtons(this));
+        if (Prefs.flag(this, "debug", false)) sn.scrollers = describeScrollers(root);
         sn.rects = ScreenText.lastRects;
         sn.skipped = ScreenText.lastSkipped;
         root.recycle();
@@ -454,7 +460,10 @@ public class ReaderService extends AccessibilityService {
         if (Prefs.skipButtons(this) && !sn.skipped.isEmpty()) {
             Logs.d(this, "  left out as buttons: " + sn.skipped);
         }
-        for (int i = 0; i < Math.min(6, lines.size()); i++) {
+        if (sn.scrollers != null) Logs.d(this, "  scrolling areas: " + sn.scrollers);
+        // Debug mode: every line, so a missed or misread one can be found.
+        int show = Prefs.flag(this, "debug", false) ? Math.min(120, lines.size()) : Math.min(6, lines.size());
+        for (int i = 0; i < show; i++) {
             String l = lines.get(i);
             String codes = "";
             if (!l.isEmpty() && !Character.isLetter(l.charAt(0))) {
@@ -485,6 +494,7 @@ public class ReaderService extends AccessibilityService {
         if (tries == 0) {
             early = false;
             earlyRead = null;
+            screenAsIs = false;
             main.removeCallbacks(earlyTurn);
         }
         pagesTurned = 0;
@@ -709,6 +719,8 @@ public class ReaderService extends AccessibilityService {
         }
         int max = (int) (room * 0.9f);
         shift = Math.max(-max, Math.min(max, shift));
+        Logs.t(this, "keep in view: paragraph " + paragraph + " at " + para.toShortString() + ", room " + top + "-"
+                + bottom + ", along " + markAlong + ", check " + checks + ", shift " + shift);
         if (Math.abs(shift) < Theme.dp(this, 24)) return;
 
         // Down the empty left margin (touching words selects them); hold still before lifting so it stops.
@@ -955,7 +967,7 @@ public class ReaderService extends AccessibilityService {
         }
         markBusy = true;
         final int g = ++markGen;
-        final boolean picture = fromPicture, sc = scanned;
+        final boolean picture = fromPicture, sc = scanned, asIs = screenAsIs;
         final List<String> ls = lines;
         final List<Rect> rs = rects;
         final String p = pkg;
@@ -976,7 +988,8 @@ public class ReaderService extends AccessibilityService {
                 for (int i = first; i <= last && i < ls.size(); i++) m.want.add(ls.get(i));
                 m.nodes = ScreenText.find(root, m.want);
                 m.r = liveBounds(m.nodes, m.want);
-                if (follow && !sc && !m.r.isEmpty() && starts) keepInView(root, m.r, first);
+                // (Not on a screen read as it is: dragging its scrolling part moves the wrong content.)
+                if (follow && !sc && !asIs && !m.r.isEmpty() && starts) keepInView(root, m.r, first);
                 m.area = readArea(root);
                 // (Not for a scanned page: putInView swipes it there, and the app's own scroll on top of that overshot.)
                 if (m.r.isEmpty() && !m.nodes.isEmpty() && !sc) {
@@ -1382,15 +1395,20 @@ public class ReaderService extends AccessibilityService {
         Shot first = f.shot;
         if (first == null || first.lines.isEmpty()) {
             Logs.d(this, "whole page: no scrolling page here, reading the screen as it is");
+            screenAsIs = true;
             return false;
         }
         Logs.t(this, "page area " + first.list.toShortString() + ", readable " + first.view.toShortString());
-        if (first.noUp && first.atEnd) return false; // all of it is on screen already
+        if (first.noUp && first.atEnd) {
+            screenAsIs = true;
+            return false; // all of it is on screen already
+        }
         // The page must hold most of the screen's words; otherwise read the screen as it is.
         int inPage = 0, all = f.allChars;
         for (String l : first.lines) inPage += l.length();
         if (inPage * 10 < all * 6) {
             Logs.d(this, "whole page: most of the text is outside the scrolling part, reading the screen as it is");
+            screenAsIs = true;
             return false;
         }
         final int gen = ++scanGen;
@@ -1447,10 +1465,23 @@ public class ReaderService extends AccessibilityService {
      * Then a look makes sure it really is the top before going on.
      */
     private void toTop(int gen, int n, Runnable then) {
+        topJumped = false;
         toTop(gen, n, 0, then);
     }
 
     private String topSig = "";
+    /** The app itself leapt to its first row: the top is one quick check away, no flicking needed. */
+    private boolean topJumped;
+
+    /** The app's own leap to the first row (lists like Wattpad's): the top at once, without scrolling up. */
+    private static boolean jumpToTop(AccessibilityNodeInfo list) {
+        if (android.os.Build.VERSION.SDK_INT < 23) return false;
+        if (!list.getActionList().contains(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION)) return false;
+        android.os.Bundle b = new android.os.Bundle();
+        b.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_ROW_INT, 0);
+        b.putInt(AccessibilityNodeInfo.ACTION_ARGUMENT_COLUMN_INT, 0);
+        return list.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_TO_POSITION.getId(), b);
+    }
 
     private void toTop(int gen, int n, int refused, Runnable then) {
         if (gen != scanGen) return;
@@ -1464,6 +1495,8 @@ public class ReaderService extends AccessibilityService {
             if (list != null && (n == 0 || n % 20 == 0)) Logs.d(this, "whole page: going up in " + describe(list));
             // (An app that always says it can go further up would keep this going: 80 is plenty for a long page.)
             if (list == null || !canScroll(list, false) || n >= 80) return 0;
+            // The app's own leap to its first row first: the top at once instead of scroll-up by scroll-up.
+            if (n == 0 && jumpToTop(list)) return 3;
             // Every few scroll-ups: the same paragraph in the same place means the page stopped moving (EGW
             // Writings kept saying "scroll up" at the top, and 80 scroll-ups held up reading for seconds).
             if (n % 6 == 0 && root != null) {
@@ -1596,6 +1629,12 @@ public class ReaderService extends AccessibilityService {
 
     private void toTopNext(int gen, int n, int refused, int result, Runnable then) {
         if (gen != scanGen) return;
+        if (result == 3) {
+            Logs.d(this, "whole page: jumped straight to the top");
+            topJumped = true;
+            main.postDelayed(() -> toTop(gen, 1, 0, then), 350);
+            return;
+        }
         boolean more = result != 0;
         if (result == 2) {
             // Busy with the last one: that is not the top. Try again a moment later, a few times.
@@ -1606,6 +1645,11 @@ public class ReaderService extends AccessibilityService {
             more = false;
         }
         if (!more) {
+            if (topJumped) {
+                // After the leap no flicking back: one check that the top is really there, then read.
+                main.postDelayed(() -> checkTop(gen, 0, then), 120);
+                return;
+            }
             if (n == 0) {
                 swipeToTop(gen, 0, 0, null, () -> checkTop(gen, 0, then)); // no quick "scroll up" here: flick back by finger
                 return;
@@ -2316,6 +2360,7 @@ public class ReaderService extends AccessibilityService {
                 all++;
                 if (before.contains(l)) same++;
             }
+            Logs.t(this, "next page: " + same + " of " + all + " long lines are the same as before");
             if (sh == null || all > 0 && same * 2 > all) {
                 // The same text is still there: no further page.
                 Logs.d(this, "next page: nothing new came up, this was the last page");
@@ -2345,6 +2390,7 @@ public class ReaderService extends AccessibilityService {
         for (String w : Prefs.nextWords(this).split("[,\\n]")) if (!w.trim().isEmpty()) words.add(w.trim().toLowerCase(java.util.Locale.ROOT));
         AccessibilityNodeInfo best = null;
         int bestScore = 0;
+        List<String> seen = Prefs.flag(this, "debug", false) ? new ArrayList<>() : null;
         java.util.ArrayDeque<AccessibilityNodeInfo> todo = new java.util.ArrayDeque<>();
         todo.add(root);
         int visited = 0;
@@ -2352,6 +2398,7 @@ public class ReaderService extends AccessibilityService {
             AccessibilityNodeInfo n = todo.poll();
             String l = label(n).toLowerCase(java.util.Locale.ROOT).replaceAll("[\\s\u203A\u00BB>\u2192]+$", "");
             if (!l.isEmpty() && l.length() <= 40 && n.isVisibleToUser()) {
+                if (seen != null && seen.size() < 25) seen.add(l);
                 for (String w : words) {
                     // The whole label, or the label's beginning ("Next part: 03 The Lake"); the longest wording wins.
                     if (l.equals(w) || l.startsWith(w + " ") || l.startsWith(w + ":")) {
@@ -2368,6 +2415,7 @@ public class ReaderService extends AccessibilityService {
                 if (c != null) todo.add(c);
             }
         }
+        if (best == null && seen != null) Logs.d(this, "next page: no Next button; short labels here: " + seen);
         return best;
     }
 

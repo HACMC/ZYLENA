@@ -94,6 +94,7 @@ public class LogActivity extends Activity {
                 + " skipTimes=" + Prefs.skipTimestamps(this) + " resume=" + Prefs.resume(this)
                 + " bibleRefs=" + Prefs.refMode(this)
                 + " wholePage=" + Prefs.wholePage(this) + " serviceOn=" + (ReaderService.instance != null)
+                + (Prefs.flag(this, "debug", false) ? " debug=true" : "")
                 + "\n\n";
     }
 
