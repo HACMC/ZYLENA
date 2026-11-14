@@ -394,6 +394,55 @@ final class Prefs {
         TextPrep.userSay = TextPrep.parseSay(sayList(c));
         TextPrep.userSkip = TextPrep.parseSkip(skipList(c));
         Bible.englishNames = englishBooks(c);
+        TextPrep.bibleVoice = bibleVoice(c);
+        TextPrep.povOn = povVoices(c);
+        TextPrep.userPov = TextPrep.parseSay(povNames(c));
+    }
+
+    /** Bible verses are read in a man's voice, then the usual voice goes on. */
+    static boolean bibleVoice(Context c) {
+        return sp(c).getBoolean("bible_voice", true);
+    }
+
+    /** A story's "Liam's POV" lines switch between a man's and a woman's voice. */
+    static boolean povVoices(Context c) {
+        return sp(c).getBoolean("pov_voices", true);
+    }
+
+    /** The user's own "name = male / female" lines for story characters. */
+    static String povNames(Context c) {
+        return sp(c).getString("pov_names", "");
+    }
+
+    static void setVoices(Context c, boolean bible, boolean pov) {
+        sp(c).edit().putBoolean("bible_voice", bible).putBoolean("pov_voices", pov).apply();
+        applyLists(c);
+    }
+
+    static void setPovNames(Context c, String v) {
+        sp(c).edit().putString("pov_names", v).apply();
+        applyLists(c);
+    }
+
+    /** Seconds of silence between paragraphs, around a heading and after a question; how strong the tones are (1 = as designed). */
+    static float pauseParagraph(Context c) {
+        return sp(c).getFloat("pause_paragraph", 0.2f);
+    }
+
+    static float pauseHeading(Context c) {
+        return sp(c).getFloat("pause_heading", 0.45f);
+    }
+
+    static float pauseQuestion(Context c) {
+        return sp(c).getFloat("pause_question", 0.35f);
+    }
+
+    static float toneStrength(Context c) {
+        return sp(c).getFloat("tone_strength", 1f);
+    }
+
+    static void setFloat(Context c, String key, float v) {
+        sp(c).edit().putFloat(key, v).apply();
     }
 
     /** Book names in references said in English ("Numbers fourteen"); off: as printed ("Bilang fourteen"). */

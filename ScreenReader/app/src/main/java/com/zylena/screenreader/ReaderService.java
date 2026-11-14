@@ -363,6 +363,7 @@ public class ReaderService extends AccessibilityService {
     /** The screen's lines as language-tagged pieces; notes in the log why a long paragraph got the Tagalog voice. */
     private List<TextPrep.Seg> prep(List<String> ls) {
         TextPrep.lastWhy = "";
+        TextPrep.scope(pkg); // a story's voice carries on from page to page within the same app only
         List<TextPrep.Seg> out = TextPrep.prepare(ls, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
         if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
         if (!TextPrep.lastRefLine.isEmpty()) Logs.d(this, "a line with Bible references that is read: " + TextPrep.lastRefLine);

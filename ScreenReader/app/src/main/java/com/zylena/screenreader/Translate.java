@@ -674,7 +674,7 @@ final class Translate {
     private static final java.util.regex.Pattern QUOTE = java.util.regex.Pattern.compile(
             "([\u2018\u201C\"])([^\u2018\u201C\u201D\"]{25,}?)([\u2019\u201D\"])(?![\\p{L}])");
 
-    /** Marks a stretch read with the English voice inside Tagalog (not used for verses any more; kept for the reader). */
+    /** Marks Bible text inside a paragraph: the reader gives it to the Bible voice. */
     static final char VERSE_ON = '\u000E', VERSE_OFF = '\u000F';
 
     /**
@@ -702,7 +702,7 @@ final class Translate {
             String end = inner.replaceAll("^.*?([.,;:!?]*)$", "$1");
             String tl = found[0].trim().replaceAll("[\\s.,;:!?]+$", "") + (end.isEmpty() ? "" : end.substring(0, 1));
             Logs.d(c, "a quoted verse (" + found[1] + ") read from the Tagalog Bible: " + Logs.snip(inner));
-            kept.add(tl);
+            kept.add(VERSE_ON + tl + VERSE_OFF); // marked, so the Bible voice reads it
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + "ZQ" + kept.size() + "X" + m.group(3)));
         }
         m.appendTail(sb);

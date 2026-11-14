@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row offlineRow, booksRow, toneRow;
+    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -500,6 +500,24 @@ public class MainActivity extends Activity {
                 "Questions sound asking, with a moment after each. Exclamations have more life. Headings and quoted verses are read calmer and slower.",
                 on -> Prefs.setQuestionTone(this, on));
         Ui.add(s, toneRow.view);
+        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Tone strength", 0f, 2f, 0.1f, Prefs.toneStrength(this), "%.1f\u00D7",
+                v -> Prefs.setFloat(this, "tone_strength", v)));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause between paragraphs", 0f, 1.5f, 0.05f, Prefs.pauseParagraph(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_paragraph", v)));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause around headings", 0f, 2f, 0.05f, Prefs.pauseHeading(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_heading", v)));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_clock, "Pause after a question", 0f, 2f, 0.05f, Prefs.pauseQuestion(this), "%.2f s",
+                v -> Prefs.setFloat(this, "pause_question", v)));
+        bibleVoiceRow = Ui.toggle(this, R.drawable.ic_person, "A man's voice for Bible verses",
+                "A quoted verse is read in a man's voice, then the usual voice goes on. With no man's voice on the phone, the usual voice is lowered.",
+                on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
+        Ui.add(s, bibleVoiceRow.view);
+        povRow = Ui.toggle(this, R.drawable.ic_person, "Story voices (POV)",
+                "In a story, a line like \"Liam's POV\" or \"POV: Mia\" switches to a man's or a woman's voice until the next one.",
+                on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
+        Ui.add(s, povRow.view);
+        Ui.add(s, Ui.nav(this, R.drawable.ic_person, "Story characters", "Tell ZYLENA who is a man or a woman when it guesses wrong",
+                this::editPovNames).view);
         col.addView(s);
 
         col.addView(Ui.section(this, "Voice app"));
@@ -629,6 +647,8 @@ public class MainActivity extends Activity {
                 : mode.equals("verses") ? "Read the verse text (Ang Biblia 1905 / KJV)" : "Read the reference: Lucas kabanata 8, talata 51");
         set(booksRow, Prefs.englishBooks(this));
         set(toneRow, Prefs.questionTone(this));
+        set(bibleVoiceRow, Prefs.bibleVoice(this));
+        set(povRow, Prefs.povVoices(this));
         refsRow.setValue(mode.equals("skip") ? "Skip" : mode.equals("verses") ? "Verse text" : "Read");
         set(timeRow, Prefs.skipTimestamps(this));
         set(buttonsRow, Prefs.skipButtons(this));
@@ -821,6 +841,33 @@ public class MainActivity extends Activity {
                 .setPositiveButton("Save", (d, w) -> {
                     Prefs.setGlossary(this, e.getText().toString());
                     Logs.d(this, "translation words: " + TextPrep.parseSay(Prefs.glossary(this)).size() + " saved");
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /** Edits who is a man or a woman among a story's characters. */
+    private void editPovNames() {
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setText(Prefs.povNames(this));
+        e.setHint("Riley = male\nAlex = female\nSkye = babae");
+        e.setMinLines(5);
+        e.setGravity(android.view.Gravity.TOP);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int p = Theme.dp(this, 20);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(p, Theme.dp(this, 8), p, 0);
+        box.addView(Theme.body(this, "One per line: name = male or female (lalaki or babae). Used when a story says \"Riley's POV\" "
+                + "and the name could be either.", Theme.MUTED, 13));
+        box.addView(e);
+        new AlertDialog.Builder(this)
+                .setTitle("Story characters")
+                .setView(box)
+                .setPositiveButton("Save", (d, w) -> {
+                    Prefs.setPovNames(this, e.getText().toString());
                     refresh();
                 })
                 .setNegativeButton("Cancel", null)

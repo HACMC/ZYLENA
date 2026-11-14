@@ -204,7 +204,7 @@ final class Speaker {
             int last = groupEnd(runs, i);
             StringBuilder all = new StringBuilder();
             for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
-            Translate.text(ctx, all.toString(), s.lang, "", out -> {
+            Translate.text(ctx, all.toString().replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang, "", out -> {
             });
             i = last + 1;
             n++;
@@ -512,13 +512,14 @@ final class Speaker {
         TextPrep.Seg s = runs.get(i);
         StringBuilder all = new StringBuilder();
         for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
-        final String source = all.toString();
+        // (The marks around Bible text are for the voice, not for a translator.)
+        final String source = all.toString().replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "");
         // A quoted verse with its reference after it: the Tagalog Bible's own words, not a new translation.
         String ref = runs.get(last).ref;
         if (ref != null && s.lang.equals(TextPrep.EN)) {
             String verse = Bible.quotedVerse(source, ref);
             if (verse != null) {
-                p.out = verse.trim().replaceAll("[\\s,;:]+$", "") + ".";
+                p.out = Translate.VERSE_ON + verse.trim().replaceAll("[\\s,;:]+$", "") + "." + Translate.VERSE_OFF;
                 p.by = "the Tagalog Bible (" + ref + ")";
                 p.done = true;
                 Logs.d(ctx, "translated by " + p.by + ", lines " + s.line + "-" + runs.get(last).lastLine + ": " + Logs.snip(source));
@@ -681,7 +682,9 @@ final class Speaker {
             // waits a moment before each piece, so it gets no extra breath between paragraphs.
             boolean head = s.heading || runs.get(i - 1).heading;
             boolean online = used != null && used.isNetworkConnectionRequired();
-            long breath = head ? (online ? HEADING_PAUSE_MS / 3 : HEADING_PAUSE_MS) : (online ? 0 : PARAGRAPH_PAUSE_MS);
+            // The pauses are the user's (Voice > Pauses); the online voice's own wait before each piece counts toward them.
+            long want = (long) ((head ? Prefs.pauseHeading(ctx) : Prefs.pauseParagraph(ctx)) * 1000);
+            long breath = online ? Math.max(0, want - 300) : want;
             if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
         // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
@@ -691,10 +694,10 @@ final class Speaker {
         boolean tone = Prefs.questionTone(ctx);
         for (String[] vp : voiceParts(s)) {
             String said = TextPrep.userFix(TextPrep.sayName(vp[0], vp[1]));
-            if (!tone) parts.add(new String[]{said, vp[1], ""});
-            else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1]});
+            if (!tone) parts.add(new String[]{said, vp[1], "", vp[2]});
+            else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1], vp[2]});
         }
-        float pitch = Prefs.pitch(ctx);
+        float pitch = Prefs.pitch(ctx), strength = Prefs.toneStrength(ctx);
         // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
         // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
         String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
@@ -704,23 +707,29 @@ final class Speaker {
             boolean ask = t.equals("q");
             float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : 1f;
             float r = ask ? 0.96f : t.equals("e") ? 1.02f : t.equals("h") ? 0.93f : t.equals("v") ? 0.94f : 1f;
-            if (k > 0 || !lang.equals(s.lang)) applyVoice(lang);
+            // How strong the tones are is the user's choice (Voice > Tone strength).
+            p = 1f + (p - 1f) * strength;
+            r = 1f + (r - 1f) * strength;
+            // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
+            boolean lower = applyVoice(lang, parts.get(k)[3]);
+            if (lower) p *= 0.82f;
             tts.setSpeechRate(rateFor(lang) * r);
             tts.setPitch(pitch * p);
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
             tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, null, id);
             // Time to think about the question, unless the page ends here.
-            if (ask && !(last && k == parts.size() - 1)) tts.playSilentUtterance(QUESTION_PAUSE_MS, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
+            if (ask && after > 0 && !(last && k == parts.size() - 1)) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
         tts.setPitch(pitch);
     }
 
     private static final float QUESTION_PITCH = 1.12f;
-    private static final long QUESTION_PAUSE_MS = 350;
+
 
     /** The run as {text, language} pieces: verses kept in English are pieces of their own. */
     private static List<String[]> voiceParts(TextPrep.Seg s) {
-        List<String[]> out = new ArrayList<>();
+        List<String[]> out = new ArrayList<>(); // {text, language, whose voice}
         String t = s.text;
         int at = 0;
         while (at < t.length()) {
@@ -728,21 +737,21 @@ final class Speaker {
             if (on < 0) break;
             int off = t.indexOf(Translate.VERSE_OFF, on);
             if (off < 0) break;
-            addPart(out, t.substring(at, on), s);
-            String verse = t.substring(on + 1, off).trim();
-            if (verse.chars().anyMatch(Character::isLetter)) out.add(new String[]{verse, TextPrep.EN});
+            addPart(out, t.substring(at, on), s, s.who);
+            // Bible text inside the paragraph: the Bible voice reads it, then the usual voice goes on.
+            addPart(out, t.substring(on + 1, off), s, TextPrep.bibleVoice ? "m" : s.who);
             at = off + 1;
         }
-        addPart(out, t.substring(at), s);
-        if (out.isEmpty()) out.add(new String[]{spoken(s), s.lang});
+        addPart(out, t.substring(at), s, s.who);
+        if (out.isEmpty()) out.add(new String[]{spoken(s), s.lang, s.who});
         return out;
     }
 
-    private static void addPart(List<String[]> out, String piece, TextPrep.Seg s) {
+    private static void addPart(List<String[]> out, String piece, TextPrep.Seg s, String who) {
         // Quotation marks and punctuation left alone around a verse aren't worth a piece of their own.
         if (!piece.chars().anyMatch(Character::isLetterOrDigit)) return;
         TextPrep.Seg p = new TextPrep.Seg(piece.trim(), s.lang, s.line, s.lastLine, s.heading, s.translated);
-        out.add(new String[]{spoken(p), s.lang});
+        out.add(new String[]{spoken(p), s.lang, who});
     }
 
     /** A translation into Tagalog, respelled for the voice ("Herusalem", "edishon"). */
@@ -772,6 +781,44 @@ final class Speaker {
     private Voice lastSet;
 
     private void applyVoice(String lang) {
+        applyVoice(lang, "");
+    }
+
+    /** Sets the voice for this language and reader. True: a man's voice was asked for and the phone has none (say it lower). */
+    private boolean applyVoice(String lang, String who) {
+        boolean man = "m".equals(who);
+        Voice male = man ? maleVoice(lang) : null;
+        if (male != null) {
+            if (!male.equals(lastSet)) tts.setVoice(male);
+            lastSet = male;
+            return false;
+        }
+        applyUsual(lang);
+        return man;
+    }
+
+    /** The best man's voice for the language on this phone, by the codes Google gives its voices; null if none. */
+    private Voice maleVoice(String lang) {
+        List<Voice> all = voicesFor(lang);
+        Voice best = null;
+        int bestScore = 0;
+        for (Voice v : all) {
+            String n = v.getName().toLowerCase(Locale.ROOT);
+            int sc = n.contains("male") && !n.contains("female") ? 100 : 0;
+            for (String code : MALE_CODES) if (n.contains("-x-" + code)) sc += 50;
+            if (sc == 0) continue;
+            sc += v.getQuality() / 100;
+            String country = v.getLocale().getCountry();
+            if (lang.equals(TextPrep.EN) && country.equals("US") || lang.equals(TextPrep.FIL) && country.equals("PH")) sc += 5;
+            if (sc > bestScore) {
+                bestScore = sc;
+                best = v;
+            }
+        }
+        return best == null ? null : twin(best, all);
+    }
+
+    private void applyUsual(String lang) {
         Voice v = chosenVoice(lang);
         if (v != null) {
             if (!v.equals(lastSet)) tts.setVoice(v); // the voice app loads a voice on each call: only when it changes

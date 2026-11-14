@@ -28,6 +28,8 @@ final class TextPrep {
         final boolean translated;
         /** The Bible reference printed right after this text ("Acts 2:17"), when the text is a quoted verse. */
         String ref;
+        /** Whose voice reads it: "m" a man's (a Bible verse, a man's point of view), "f" a woman's, "" the usual one. */
+        String who = "";
 
         Seg(String text, String lang, int line, int lastLine) {
             this(text, lang, line, lastLine, false);
@@ -700,6 +702,101 @@ final class TextPrep {
 
     private static final Pattern QUOTE_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
 
+    // ---- Voices: the Bible voice and a story's points of view ----
+
+    /** Bible verses are read in a man's voice, then the usual voice goes on. */
+    static volatile boolean bibleVoice = true;
+    /** A story's "Liam's POV" / "POV: Mia" lines switch between a man's and a woman's voice. */
+    static volatile boolean povOn = true;
+    /** The user's own "name = male / female" list, for names the reader can't tell. */
+    static volatile List<String[]> userPov = new ArrayList<>();
+    private static volatile String povScope = "", povCarry = "";
+    private static final java.util.LinkedHashMap<String, String> povStart = new java.util.LinkedHashMap<String, String>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(java.util.Map.Entry<String, String> e) {
+            return size() > 60;
+        }
+    };
+
+    /** The app being read: in another app the story's voice does not carry on. */
+    static void scope(String pkg) {
+        if (pkg == null || pkg.equals(povScope)) return;
+        povScope = pkg;
+        povCarry = "";
+    }
+
+    private static final Pattern POV_AFTER = Pattern.compile("(?i)^[^\\p{L}]*(.{2,40}?)(?:['\u2019]s|['\u2019])?\\s+(?:P\\.?O\\.?V\\.?|point of view)[^\\p{L}]*$");
+    private static final Pattern POV_BEFORE = Pattern.compile("(?i)^[^\\p{L}]*(?:P\\.?O\\.?V\\.?|point of view)(?:\\s+(?:ni|of|kay))?\\s*[:\\-\u2013\u2014]?\\s*(.{2,40}?)[^\\p{L}]*$");
+    private static final java.util.Set<String> MEN = new java.util.HashSet<>(Arrays.asList((
+            "liam noah ethan lucas mason logan james john jon juan jose joseph joshua josh jacob jake daniel dan david dave michael mike "
+            + "miguel mark marco marcus matthew matt luke paul peter pedro andrew andres anthony tony antonio carlos carlo charles christian chris "
+            + "gabriel rafael angelo adrian alex alexander xander aaron adam ben benjamin brian bryan caleb cedric dylan eric erik enzo felix "
+            + "francis franco gab gino harry henry ian ivan jared jason jay jayden jerome jesse joel jonathan jordan julian justin karl kevin "
+            + "kyle lance leo leon louis luis manuel martin max nathan nate neil nick nico nicolas oliver oscar patrick rico robert rob ryan "
+            + "sam samuel sean seth simon stephen steven thomas tom timothy tim tristan troy tyler victor vincent vince william will zach zion "
+            + "ace kuya tatay papa dad daddy lolo tito sir mister mr king prince boss ramon rodel romeo ruben rey ricardo rolando renz "
+            + "jericho joaquin emman emmanuel elias ezekiel dominic dom damian dante dean drake grey hunter kael kai kian knox zane").split(" ")));
+    private static final java.util.Set<String> WOMEN = new java.util.HashSet<>(Arrays.asList((
+            "emma olivia ava mia sophia sofia isabella bella amelia charlotte harper evelyn abigail abby emily ella elizabeth liza camila luna "
+            + "mary maria marie anne ann anna ana angela angel angelica andrea alyssa amanda amy ashley athena audrey bianca camille carla "
+            + "carmen cassandra cassie catherine cathy celine chloe claire clara cristina christine daisy danica diana eliza elena erica erika "
+            + "faith francine gabriela gabrielle grace hannah heaven hope irene iris ivy jade jane janine jasmine jen jenny jennifer jessica "
+            + "joy joyce julia julie karen kate katherine kathryn kim kimberly kristine lara laura lea leah lily lisa liz lorraine louise lucy "
+            + "lyn maddie madison maggie margaret maya megan melissa mica michelle mika nadine naomi natalie nicole nina patricia pauline "
+            + "rachel rain rebecca reese rose rhea ruth sam samantha sandra sara sarah scarlett selena serena shane sophie stella summer "
+            + "trisha valerie vanessa victoria vivian yna zoe zylena ate nanay mama mom mommy lola tita maam miss mrs queen princess "
+            + "althea aria celeste dahlia freya gwen hazel jillian kyla lexi nova raven sienna thea venus yumi").split(" ")));
+
+    /** A line that says whose point of view follows: "m", "f", or "" (a narrator, or a name the reader can't tell). Null: not such a line. */
+    static String povOf(String line) {
+        String t = line.trim();
+        if (t.length() < 5 || t.length() > 60 || !t.toLowerCase(Locale.ROOT).matches(".*(?:p\\.?o\\.?v|point of view).*")) return null;
+        java.util.regex.Matcher m = POV_AFTER.matcher(t);
+        String name = m.matches() ? m.group(1) : null;
+        if (name == null) {
+            m = POV_BEFORE.matcher(t);
+            name = m.matches() ? m.group(1) : null;
+        }
+        if (name == null) return null;
+        name = name.replaceAll("[^\\p{L}\\s'\u2019-]", " ").trim().toLowerCase(Locale.ROOT);
+        if (name.isEmpty()) return null;
+        for (String[] u : userPov) {
+            if (name.equals(u[0].toLowerCase(Locale.ROOT)) || name.startsWith(u[0].toLowerCase(Locale.ROOT) + " ")) {
+                String g = u[1].toLowerCase(Locale.ROOT);
+                return g.startsWith("m") || g.startsWith("l") || g.startsWith("b") && g.startsWith("boy") ? "m" : "f"; // male, lalaki, boy; else female, babae, girl
+            }
+        }
+        if (name.matches("(?:third|3rd|author|narrator|someone|unknown|omniscient|general|writer|ikatlong).*")) return "";
+        for (String w : name.split("[\\s-]+")) {
+            if (MEN.contains(w)) return "m";
+            if (WOMEN.contains(w)) return "f";
+        }
+        String first = name.split("[\\s-]+")[0];
+        if (first.matches(".*(?:a|ah|ie|elle|ette|ine|lyn|lynn|ella|ina|ita|een|eth)$")) return "f";
+        if (first.matches(".*(?:o|us|son|ton|ito|ard|bert|iel|ian)$")) return "m";
+        return "";
+    }
+
+    private static final Pattern QUOTE_THEN_REF = Pattern.compile("([\u201C\"])([^\u201C\u201D\"]{12,}?)([\u201D\"])(\\s*\\(([^()]{3,80})\\))");
+
+    /** A quotation followed by its Bible reference in brackets: the quoted words are marked as Bible text. */
+    static String markVerses(String s) {
+        if (s.indexOf('(') < 0 || s.indexOf('\u000E') >= 0) return s;
+        java.util.regex.Matcher m = QUOTE_THEN_REF.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        boolean any = false;
+        while (m.find()) {
+            if (Bible.firstRef(m.group(5)) == null) {
+                m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group()));
+                continue;
+            }
+            any = true;
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(m.group(1) + "\u000E" + m.group(2) + "\u000F" + m.group(3) + m.group(4)));
+        }
+        m.appendTail(sb);
+        return any ? sb.toString() : s;
+    }
+
     /** Quotes followed by their reference whose verse is found: the English verse, marked for the English voice. */
     static String englishVerses(String s) {
         if (s.indexOf('(') < 0) return s;
@@ -749,10 +846,31 @@ final class TextPrep {
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
+        // Whose voice reads: a story's "Liam's POV" lines switch it, and it carries on to the next page.
+        String pageKey = null;
+        for (String l : lines) if (l.trim().length() >= 3) {
+            pageKey = povScope + "|" + (l.trim().length() > 60 ? l.trim().substring(0, 60) : l.trim());
+            break;
+        }
+        String who = "";
+        if (povOn && pageKey != null) {
+            synchronized (povStart) {
+                String had = povStart.get(pageKey);
+                who = had != null ? had : povCarry;
+                povStart.put(pageKey, who);
+            }
+        }
         for (int li = 0; li < lines.size(); li++) {
+            if (povOn) {
+                String pv = povOf(lines.get(li));
+                if (pv != null) who = pv;
+            }
             // A reference alone on its line belongs to the quote before it.
             if (lines.get(li).length() <= 40 && !out.isEmpty() && out.get(out.size() - 1).ref == null && Bible.onlyRef(lines.get(li))) {
-                out.get(out.size() - 1).ref = Bible.firstRef(lines.get(li));
+                Seg quoted = out.get(out.size() - 1);
+                quoted.ref = Bible.firstRef(lines.get(li));
+                // The verse it belongs to is read in the Bible voice.
+                if (bibleVoice) for (Seg g : out) if (g.line == quoted.line) g.who = "m";
             }
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
@@ -778,6 +896,9 @@ final class TextPrep {
             }
             char endCh = cleaned.charAt(cleaned.length() - 1);
             boolean heading = cleaned.length() <= 70 && ".!?…,;:\"”’)".indexOf(endCh) < 0 && cleaned.chars().anyMatch(Character::isLetter);
+            // A quotation with its reference after it ("…halimbawa” (1 Corinto 10:11)) is Bible text: marked, so the
+            // Bible voice reads it and the usual voice takes over again after it.
+            if (bibleVoice && !verse) cleaned = markVerses(cleaned);
             if (readVerses && !verse) {
                 cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
             } else if (skipRefs) {
@@ -818,11 +939,14 @@ final class TextPrep {
                 sentence = sentence.trim();
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
-                    out.add(new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading));
+                    Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
+                    g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
+                    out.add(g);
                 }
             }
         }
         lastDropped = dropped;
+        if (povOn) povCarry = who;
         return out;
     }
 
@@ -856,7 +980,7 @@ final class TextPrep {
         String lang = null;
         int first = 0, last = 0;
         boolean head = true, done = false;
-        String prev = "", ref = null;
+        String prev = "", ref = null, who = "";
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
             boolean newLang = !anyLang && lang != null && !lang.equals(s.lang);
@@ -871,15 +995,18 @@ final class TextPrep {
             boolean newLine = perLine && lang != null && s.line != last && !goesOn;
             boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
             boolean tooLong = sb.length() + s.text.length() > max && !midSentence;
-            if (lang != null && (newLang || newLine || newKind || tooLong)) {
+            boolean newWho = lang != null && !who.equals(s.who); // another voice reads from here
+            if (lang != null && (newLang || newLine || newKind || tooLong || newWho)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
+                out.get(out.size() - 1).who = who;
                 ref = null;
                 sb.setLength(0);
                 lang = null;
                 head = true;
             }
             done = s.translated;
+            who = s.who;
             head &= s.heading;
             if (sb.length() == 0) first = s.line;
             last = s.lastLine;
@@ -892,6 +1019,7 @@ final class TextPrep {
         if (lang != null && sb.length() > 0) {
             out.add(new Seg(sb.toString(), lang, first, last, head, done));
             out.get(out.size() - 1).ref = ref;
+            out.get(out.size() - 1).who = who;
         }
         return out;
     }
