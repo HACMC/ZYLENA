@@ -363,6 +363,7 @@ public class ReaderService extends AccessibilityService {
     /** The screen's lines as language-tagged pieces; notes in the log why a long paragraph got the Tagalog voice. */
     private List<TextPrep.Seg> prep(List<String> ls) {
         TextPrep.lastWhy = "";
+        if (!pkg.isEmpty() && !pkg.equals(getPackageName())) Prefs.setLastApp(this, pkg);
         TextPrep.scope(pkg); // a story's voice carries on from page to page within the same app only
         List<TextPrep.Seg> out = TextPrep.prepare(ls, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
         if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
@@ -1898,7 +1899,7 @@ public class ReaderService extends AccessibilityService {
         };
         // From the top: the app's quick "scroll up" first. From further down: go straight there.
         showBanner(back && start == 0 ? "Scanned. Going back to the top\u2026" : "Going to where you stopped\u2026");
-        boolean atOnce = scanSteps >= 4 && !early && Prefs.flag(this, "read_at_once", true) && !Prefs.testMode(this);
+        boolean atOnce = scanSteps >= 4 && !early && Prefs.flag(this, "read_at_once", false) && !Prefs.testMode(this);
         // (start == 0: from the beginning, even when the page's first lines are not read, like a title that is skipped.)
         if (back && start == 0 && atOnce) {
             // A long page takes many seconds to scroll back up: the voice starts now, and the page and the
@@ -2232,10 +2233,17 @@ public class ReaderService extends AccessibilityService {
             Logs.d(this, "next page: stopped after 30 pages");
             return false;
         }
-        AccessibilityNodeInfo pager = biggestPager(root);
+        // Every app turns its pages its own way: the user's choice for this app, else for every app.
+        String how = Prefs.nextMode(this, pkg);
+        if (how.equals("off")) return false;
+        if (lines.hashCode() == noNextFor) return false; // tried on this very page already: it is the last one
+        AccessibilityNodeInfo pager = how.equals("auto") || how.equals("pager") ? biggestPager(root) : null;
         if (pager == null) {
-            Logs.d(this, "next page: this screen has no pages to turn");
-            return false;
+            if (how.equals("pager")) {
+                Logs.d(this, "next page: this screen has no pages to turn");
+                return false;
+            }
+            return otherNextPage(root, how);
         }
         boolean turned = false;
         if (android.os.Build.VERSION.SDK_INT >= 29
@@ -2255,6 +2263,112 @@ public class ReaderService extends AccessibilityService {
             readTurnedPage();
         }, 1200);
         return true;
+    }
+
+    /** The page a next-page try changed nothing on (its lines' hash): not tried again there. */
+    private int noNextFor;
+
+    /**
+     * Apps without a sideways pager: tap the app's own "Next" button (a story's "Continue to next part"),
+     * swipe a finger from right to left, or tap the right edge, as the user chose for this app; "auto" looks
+     * for the button. The page is then looked at: when nothing new shows, that was the last page.
+     */
+    private boolean otherNextPage(AccessibilityNodeInfo root, String how) {
+        boolean done = false;
+        String what = "";
+        if (how.equals("auto") || how.equals("button")) {
+            AccessibilityNodeInfo b = nextButton(root);
+            if (b != null) {
+                what = "button \"" + Logs.snip(label(b)) + "\"";
+                AccessibilityNodeInfo c = b;
+                for (int i = 0; c != null && i < 6 && !c.isClickable(); i++) c = c.getParent();
+                done = c != null && c.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+        }
+        DisplayMetrics dm = getResources().getDisplayMetrics();
+        if (!done && (how.equals("swipe") || how.equals("tap")) && android.os.Build.VERSION.SDK_INT >= 24) {
+            android.graphics.Path path = new android.graphics.Path();
+            float y = dm.heightPixels * 0.5f;
+            if (how.equals("swipe")) {
+                path.moveTo(dm.widthPixels * 0.88f, y);
+                path.lineTo(dm.widthPixels * 0.12f, y);
+            } else {
+                path.moveTo(dm.widthPixels * 0.94f, y);
+                path.lineTo(dm.widthPixels * 0.94f + 1, y);
+            }
+            what = how.equals("swipe") ? "a swipe to the left" : "a tap on the right edge";
+            done = dispatchGesture(new android.accessibilityservice.GestureDescription.Builder().addStroke(
+                    new android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, how.equals("swipe") ? 220 : 60)).build(), null, null);
+        }
+        if (!done) {
+            Logs.d(this, "next page: " + (what.isEmpty() ? "no pages to turn and no Next button on this screen" : what + " did not work")
+                    + " (Settings, Reading: How the next page is reached)");
+            return false;
+        }
+        Logs.d(this, "next page: by " + what);
+        final List<String> before = new ArrayList<>(lines);
+        final int was = lines.hashCode();
+        pagesTurned++;
+        main.postDelayed(() -> shootThen(sh -> {
+            int same = 0, all = 0;
+            if (sh != null) for (String l : sh.lines) {
+                if (l.trim().length() < 25) continue;
+                all++;
+                if (before.contains(l)) same++;
+            }
+            if (sh == null || all > 0 && same * 2 > all) {
+                // The same text is still there: no further page.
+                Logs.d(this, "next page: nothing new came up, this was the last page");
+                noNextFor = was;
+                boolean waiting = early;
+                early = false;
+                earlyRead = null;
+                if (!waiting && !Speaker.get(this).isSpeaking()) {
+                    Speaker.get(this).speakText(TextPrep.mostlyTagalog(before) ? "Tapos na." : "The end.");
+                }
+                return;
+            }
+            if (Speaker.get(this).isSpeaking() && !early) return;
+            readTurnedPage();
+        }), 1800);
+        return true;
+    }
+
+    private static String label(AccessibilityNodeInfo n) {
+        CharSequence t = n.getText(), d = n.getContentDescription();
+        return (t != null && t.length() > 0 ? t : d != null ? d : "").toString().trim();
+    }
+
+    /** The app's own way on: a short label like "Next", "Next part", "Continue to next part", "Susunod". */
+    private AccessibilityNodeInfo nextButton(AccessibilityNodeInfo root) {
+        List<String> words = new ArrayList<>();
+        for (String w : Prefs.nextWords(this).split("[,\\n]")) if (!w.trim().isEmpty()) words.add(w.trim().toLowerCase(java.util.Locale.ROOT));
+        AccessibilityNodeInfo best = null;
+        int bestScore = 0;
+        java.util.ArrayDeque<AccessibilityNodeInfo> todo = new java.util.ArrayDeque<>();
+        todo.add(root);
+        int visited = 0;
+        while (!todo.isEmpty() && visited++ < 4000) {
+            AccessibilityNodeInfo n = todo.poll();
+            String l = label(n).toLowerCase(java.util.Locale.ROOT).replaceAll("[\\s\u203A\u00BB>\u2192]+$", "");
+            if (!l.isEmpty() && l.length() <= 40 && n.isVisibleToUser()) {
+                for (String w : words) {
+                    // The whole label, or the label's beginning ("Next part: 03 The Lake"); the longest wording wins.
+                    if (l.equals(w) || l.startsWith(w + " ") || l.startsWith(w + ":")) {
+                        int score = w.length() * 2 + (l.equals(w) ? 1 : 0);
+                        if (score > bestScore) {
+                            bestScore = score;
+                            best = n;
+                        }
+                    }
+                }
+            }
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo c = n.getChild(i);
+                if (c != null) todo.add(c);
+            }
+        }
+        return best;
     }
 
     /** The largest area on screen that turns pages sideways. */

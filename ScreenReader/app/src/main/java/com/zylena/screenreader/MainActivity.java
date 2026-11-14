@@ -41,6 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
+    private Ui.Row nextHowRow, nextAppRow;
     private Ui.Row castRow, castFilRow, castEnRow, moodRow;
     private android.widget.EditText searchBox;
     private ScrollView results;
@@ -417,10 +418,16 @@ public class MainActivity extends Activity {
         Ui.add(g, nextRow.view);
         markRow = Ui.toggle(this, R.drawable.ic_frame, "Highlight while reading", "Gold outline around the paragraph",
                 on -> Prefs.setHighlight(this, on));
+        nextHowRow = Ui.nav(this, R.drawable.ic_next, "How the next page is reached", "", () -> pickNextMode(null));
+        Ui.add(g, nextHowRow.view);
+        nextAppRow = Ui.nav(this, R.drawable.ic_next, "Next page in the app last read", "", () -> pickNextMode(Prefs.lastApp(this)));
+        Ui.add(g, nextAppRow.view);
+        Ui.add(g, Ui.nav(this, R.drawable.ic_next, "Words on a Next button", "What the button that goes on may say: Next, Next part, Susunod\u2026",
+                this::editNextWords).view);
         Ui.add(g, markRow.view);
         Ui.add(g, flagRow(R.drawable.ic_play, "Start reading right after the scan",
                 "On a long page the voice starts at once, while the page is still going back to the top. Off: it waits until the page is at the top.",
-                "read_at_once", true));
+                "read_at_once", false));
         Ui.add(g, flagRow(R.drawable.ic_next, "Turn the page early",
                 "Shortly before the last paragraph ends, the next page is opened and scanned, so reading goes on without a wait.",
                 "early_turn", true));
@@ -807,6 +814,73 @@ public class MainActivity extends Activity {
         });
     }
 
+    private static final String[] NEXT_IDS = {"auto", "pager", "button", "swipe", "tap", "off"};
+    private static final String[] NEXT_NAMES = {
+            "Auto: swipe to the next page, else tap the app's Next button",
+            "Pages side by side (Sabbath School, EGW Writings)",
+            "Tap the app's Next button (story apps)",
+            "Swipe a finger from right to left",
+            "Tap the right edge of the screen",
+            "Don't go on to a next page"};
+
+    private static String nextName(String id) {
+        int i = java.util.Arrays.asList(NEXT_IDS).indexOf(id);
+        return NEXT_NAMES[i < 0 ? 0 : i];
+    }
+
+    /** pkg null: for every app; else for that app alone. */
+    private void pickNextMode(String pkg) {
+        if (pkg != null && pkg.isEmpty()) {
+            android.widget.Toast.makeText(this, "Read something in the app first, then come back here.", android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        final boolean own = pkg != null;
+        final String[] ids = new String[NEXT_IDS.length + (own ? 1 : 0)];
+        final String[] names = new String[ids.length];
+        if (own) {
+            ids[0] = "";
+            names[0] = "Same as every app";
+        }
+        for (int i = 0; i < NEXT_IDS.length; i++) {
+            ids[i + (own ? 1 : 0)] = NEXT_IDS[i];
+            names[i + (own ? 1 : 0)] = NEXT_NAMES[i];
+        }
+        String cur = own ? Prefs.nextModeOwn(this, pkg) : Prefs.nextMode(this, null);
+        int now = Math.max(0, java.util.Arrays.asList(ids).indexOf(cur));
+        new AlertDialog.Builder(this)
+                .setTitle(own ? "Next page in " + appName(pkg) : "How the next page is reached")
+                .setSingleChoiceItems(names, now, (d, w) -> {
+                    Prefs.setNextMode(this, pkg, ids[w]);
+                    Logs.d(this, "next page " + (own ? "in " + pkg : "in every app") + ": " + (ids[w].isEmpty() ? "same as every app" : ids[w]));
+                    d.dismiss();
+                    refresh();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void editNextWords() {
+        android.widget.EditText e = new android.widget.EditText(this);
+        e.setText(Prefs.nextWords(this));
+        e.setMinLines(4);
+        e.setGravity(Gravity.TOP);
+        e.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        int p = Theme.dp(this, 20);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(p, Theme.dp(this, 8), p, 0);
+        box.addView(Theme.body(this, "Separated by commas. At the end of a page ZYLENA taps a button whose label is one of these, or begins with one. "
+                + "Add the words your app uses. Empty: back to the list it came with.", Theme.MUTED, 13));
+        box.addView(e);
+        new AlertDialog.Builder(this)
+                .setTitle("Words on a Next button")
+                .setView(box)
+                .setPositiveButton("Save", (d, w) -> Prefs.setNextWords(this, e.getText().toString()))
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
     private void pickMood() {
         final String[] ids = new String[Mood.KINDS.length + 2];
         final String[] names = new String[ids.length];
@@ -970,6 +1044,11 @@ public class MainActivity extends Activity {
         set(bibleVoiceRow, Prefs.bibleVoice(this));
         set(povRow, Prefs.povVoices(this));
         for (Object[] fr : flagRows) set((Ui.Row) fr[0], Prefs.flag(this, (String) fr[1], (Boolean) fr[2]));
+        nextHowRow.setSub("In every app: " + nextName(Prefs.nextMode(this, null)));
+        String la = Prefs.lastApp(this);
+        nextAppRow.title.setText(la.isEmpty() ? "Next page in the app last read" : "Next page in " + appName(la));
+        nextAppRow.setSub(la.isEmpty() ? "Read something first: then its own way can be chosen here"
+                : Prefs.nextModeOwn(this, la).isEmpty() ? "Same as every app" : nextName(Prefs.nextModeOwn(this, la)));
         String md = Prefs.mood(this);
         int mi = Mood.kinds().indexOf(md);
         moodRow.setValue(md.equals("auto") ? "Auto" : md.equals("off") ? "Off" : Mood.KIND_NAMES[mi < 0 ? 0 : mi].replaceAll("[ ,(].*", ""));

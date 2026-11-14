@@ -435,6 +435,46 @@ final class Prefs {
         applyLists(c);
     }
 
+    /**
+     * How the next page is reached in this app: "auto" (a sideways pager, else the app's Next button), "pager",
+     * "button", "swipe" (a finger from right to left), "tap" (the right edge) or "off". The choice for the app
+     * itself first, else the one for every app.
+     */
+    static String nextMode(Context c, String pkg) {
+        String own = pkg == null ? "" : sp(c).getString("next_mode_" + pkg, "");
+        return own.isEmpty() ? sp(c).getString("next_mode", "auto") : own;
+    }
+
+    /** pkg null: for every app. mode "": this app goes by the choice for every app again. */
+    static void setNextMode(Context c, String pkg, String mode) {
+        sp(c).edit().putString(pkg == null ? "next_mode" : "next_mode_" + pkg, mode).apply();
+    }
+
+    static String nextModeOwn(Context c, String pkg) {
+        return sp(c).getString("next_mode_" + pkg, "");
+    }
+
+    static final String NEXT_WORDS = "continue to next part, continue to the next part, next chapter, next part, next page, next lesson, "
+            + "next episode, continue reading, read next, next, susunod na kabanata, susunod na bahagi, susunod";
+
+    /** The labels a "next page" button may have, separated by commas. */
+    static String nextWords(Context c) {
+        return sp(c).getString("next_words", NEXT_WORDS);
+    }
+
+    static void setNextWords(Context c, String v) {
+        sp(c).edit().putString("next_words", v.trim().isEmpty() ? NEXT_WORDS : v).apply();
+    }
+
+    /** The app last read, for settings that are kept per app. */
+    static String lastApp(Context c) {
+        return sp(c).getString("last_app", "");
+    }
+
+    static void setLastApp(Context c, String pkg) {
+        if (!pkg.equals(lastApp(c))) sp(c).edit().putString("last_app", pkg).apply();
+    }
+
     static float num(Context c, String key, float def) {
         return sp(c).getFloat(key, def);
     }
