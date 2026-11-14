@@ -174,6 +174,9 @@ final class Translate {
                 .append("in natural, flowing sentences that are easy to follow by ear. Stay faithful: add nothing, leave nothing out, ")
                 .append("and do not explain. Keep the sentences in the same order, one for one. Keep names of people and places as ")
                 .append("written (Mrs. White, James White, Ellen G. White). ");
+        // The small models sometimes make a word up ("kepanatikohan") or run two together ("upangantigin").
+        if (toFil) p.append("Use only real Tagalog words that are in common use and spell them correctly; never make up a word. ")
+                .append("When you are not sure of a word, choose a simpler, common one, or keep the English word. ");
         if (toFil) p.append("A Bible verse the text quotes is shown as a code like ZQ1X: keep each code exactly as written, ")
                 .append("in its place inside the same quotation marks. ");
         if (toFil) {
@@ -219,7 +222,7 @@ final class Translate {
                         .put(new org.json.JSONObject().put("text", persona(c, toFil, context)))))
                 .put("contents", new org.json.JSONArray().put(new org.json.JSONObject().put("role", "user")
                         .put("parts", new org.json.JSONArray().put(new org.json.JSONObject().put("text", text)))))
-                .put("generationConfig", new org.json.JSONObject().put("temperature", 0.4));
+                .put("generationConfig", new org.json.JSONObject().put("temperature", 0.2));
         // Google's AI is often busy on the free plan: several models are asked in turn, and one that failed
         // is left alone for a few minutes so nobody waits on it again.
         String model = null, got = null;
@@ -288,7 +291,7 @@ final class Translate {
         lastBy = "AI " + model;
         if (got == null) return null;
         got = (toFil ? bibleWords(got.trim()) : got.trim()).replaceAll("\\bDios\\b", "Diyos")
-                .replaceAll("\\b([Uu]pang)(?=[a-z]{4,})", "$1 "); // the light model sometimes glues words: "upangantigin"
+                .replaceAll("\\b([Uu]pang|[Dd]apat)(?=[a-z]{5,})", "$1 "); // the light model sometimes glues words: "upangantigin"
         // A model that answers with far too little or far too much did something other than translate.
         if (got.isEmpty() || got.length() < text.length() / 4 || got.length() > text.length() * 4 + 80) return null;
         return got;
