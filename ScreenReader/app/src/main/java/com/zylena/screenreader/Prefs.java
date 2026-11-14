@@ -31,6 +31,15 @@ final class Prefs {
     }
 
     /** System voices only. 1.0 is the voice's own pitch, which sounds the most natural. */
+    /** Questions are read in an asking voice (a little higher and slower) with a moment after each. */
+    static boolean questionTone(Context c) {
+        return sp(c).getBoolean("question_tone", true);
+    }
+
+    static void setQuestionTone(Context c, boolean v) {
+        sp(c).edit().putBoolean("question_tone", v).apply();
+    }
+
     static float pitch(Context c) {
         return sp(c).getFloat("pitch", 1.0f);
     }

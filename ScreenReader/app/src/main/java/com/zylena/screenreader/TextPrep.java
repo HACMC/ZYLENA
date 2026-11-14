@@ -614,6 +614,39 @@ final class TextPrep {
         return SPACES.matcher(s).replaceAll(" ").trim();
     }
 
+    private static final Pattern SENTENCE_CUT = Pattern.compile("(?<=[.!?\u2026][\u201D\u2019\"')\\]]{0,3})\\s+(?=[\\p{Lu}\u201C\u2018\"(\\d])");
+
+    /**
+     * The words about to be spoken as {text, tone} pieces, tone "q" for a question and "" otherwise: a question
+     * is said in an asking voice. Sentences that are not questions stay together in one piece.
+     */
+    static List<String[]> tonePieces(String s) {
+        List<String[]> out = new ArrayList<>();
+        if (s.indexOf('?') < 0) {
+            out.add(new String[]{s, ""});
+            return out;
+        }
+        StringBuilder plain = new StringBuilder();
+        for (String sentence : SENTENCE_CUT.split(s)) {
+            String t = sentence.trim();
+            if (t.isEmpty()) continue;
+            // A question ends in "?" (quotation marks or a bracket may follow) and has a few words to say.
+            boolean q = t.matches("(?s).*\\?[\u201D\u2019\"')\\]]{0,3}") && t.chars().filter(Character::isLetter).count() >= 4;
+            if (!q) {
+                plain.append(plain.length() > 0 ? " " : "").append(t);
+                continue;
+            }
+            if (plain.length() > 0) {
+                out.add(new String[]{plain.toString(), ""});
+                plain.setLength(0);
+            }
+            out.add(new String[]{t, "q"});
+        }
+        if (plain.length() > 0) out.add(new String[]{plain.toString(), ""});
+        if (out.isEmpty()) out.add(new String[]{s, ""});
+        return out;
+    }
+
     static List<Seg> prepare(List<String> lines, boolean skipTimes) {
         return prepare(lines, skipTimes, false, false);
     }

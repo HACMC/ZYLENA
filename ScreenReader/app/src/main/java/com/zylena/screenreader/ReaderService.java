@@ -1423,7 +1423,11 @@ public class ReaderService extends AccessibilityService {
         return known > 0;
     }
 
+    /** The page is scanned and being put in place, the voice about to start: a tap on the button still means stop. */
+    private boolean placing;
+
     private void cancelScan() {
+        placing = false;
         scanGen++;
         showGen++;
         if (scanning) Logs.d(this, "whole page: scan stopped");
@@ -1873,7 +1877,9 @@ public class ReaderService extends AccessibilityService {
         startPage();
         turnedFor = markedFirst = -1;
         markedAlong = -1f;
+        placing = true;
         Runnable read = () -> {
+            placing = false;
             if (gen != scanGen) return;
             hideBanner();
             // The first paragraph is already in place, before the voice starts.
@@ -3313,8 +3319,8 @@ public class ReaderService extends AccessibilityService {
 
     private void toggle() {
         Speaker sp = Speaker.get(this);
-        Logs.d(this, sp.isSpeaking() || scanning ? "button: stop" : "button: read");
-        if (scanning) {
+        Logs.d(this, sp.isSpeaking() || scanning || placing ? "button: stop" : "button: read");
+        if (scanning || placing) {
             cancelScan();
             if (early) sp.stop(); // the last paragraph was still being read while the next page was scanned
         } else if (sp.isSpeaking()) sp.stop();

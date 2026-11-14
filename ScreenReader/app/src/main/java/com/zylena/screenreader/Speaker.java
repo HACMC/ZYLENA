@@ -686,15 +686,31 @@ final class Speaker {
         }
         // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
         // in English inside a Tagalog run is its own utterance too, in the English voice.
-        List<String[]> parts = voiceParts(s);
+        // A question is a piece of its own as well, said a little higher and slower, with a moment after it.
+        List<String[]> parts = new ArrayList<>(); // {text, language, tone}
+        boolean tone = Prefs.questionTone(ctx);
+        for (String[] vp : voiceParts(s)) {
+            String said = TextPrep.userFix(TextPrep.sayName(vp[0], vp[1]));
+            if (!tone) parts.add(new String[]{said, vp[1], ""});
+            else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1]});
+        }
+        float pitch = Prefs.pitch(ctx);
         for (int k = 0; k < parts.size(); k++) {
             String lang = parts.get(k)[1];
+            boolean ask = parts.get(k)[2].equals("q");
             if (k > 0 || !lang.equals(s.lang)) applyVoice(lang);
-            tts.setSpeechRate(rateFor(lang));
+            tts.setSpeechRate(rateFor(lang) * (ask ? 0.96f : 1f));
+            tts.setPitch(pitch * (ask ? QUESTION_PITCH : 1f));
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
-            tts.speak(TextPrep.userFix(TextPrep.sayName(parts.get(k)[0], lang)), TextToSpeech.QUEUE_ADD, null, id);
+            tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, null, id);
+            // Time to think about the question, unless the page ends here.
+            if (ask && !(last && k == parts.size() - 1)) tts.playSilentUtterance(QUESTION_PAUSE_MS, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
+        tts.setPitch(pitch);
     }
+
+    private static final float QUESTION_PITCH = 1.12f;
+    private static final long QUESTION_PAUSE_MS = 350;
 
     /** The run as {text, language} pieces: verses kept in English are pieces of their own. */
     private static List<String[]> voiceParts(TextPrep.Seg s) {

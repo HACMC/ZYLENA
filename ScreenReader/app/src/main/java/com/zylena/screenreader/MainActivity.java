@@ -41,7 +41,7 @@ public class MainActivity extends Activity {
     private Button heroButton;
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
-    private Ui.Row offlineRow, booksRow;
+    private Ui.Row offlineRow, booksRow, toneRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -496,6 +496,10 @@ public class MainActivity extends Activity {
                 v -> Prefs.setRateFil(this, v)));
         Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
                 v -> Prefs.setPitch(this, v)));
+        toneRow = Ui.toggle(this, R.drawable.ic_eq, "Asking voice for questions",
+                "A question is read a little higher and slower, with a moment after it to think.",
+                on -> Prefs.setQuestionTone(this, on));
+        Ui.add(s, toneRow.view);
         col.addView(s);
 
         col.addView(Ui.section(this, "Voice app"));
@@ -624,6 +628,7 @@ public class MainActivity extends Activity {
         refsRow.setSub(mode.equals("skip") ? "Skip them: \u2026Apostol (Lucas 8:51). Matapos\u2026 is read \u2026Apostol. Matapos\u2026"
                 : mode.equals("verses") ? "Read the verse text (Ang Biblia 1905 / KJV)" : "Read the reference: Lucas kabanata 8, talata 51");
         set(booksRow, Prefs.englishBooks(this));
+        set(toneRow, Prefs.questionTone(this));
         refsRow.setValue(mode.equals("skip") ? "Skip" : mode.equals("verses") ? "Verse text" : "Read");
         set(timeRow, Prefs.skipTimestamps(this));
         set(buttonsRow, Prefs.skipButtons(this));
