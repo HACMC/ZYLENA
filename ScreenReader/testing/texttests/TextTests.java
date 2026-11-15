@@ -171,6 +171,15 @@ public class TextTests {
             String got = br == null ? "" : String.join(" ", br.codes);
             check("who speaks: " + c[0], c[1].equals(got), "'" + got + "'");
         }
+        // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
+        {
+            List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");
+            TextPrep.Seg tg = find(th, "And it came");
+            check("bible page: thunder is played", tg != null && "thunder".equals(tg.sfx), tg == null ? "none" : tg.sfx);
+            List<TextPrep.Seg> sa = story("Genesis 18", "12 Therefore Sarah laughed within herself, saying, After I am waxed old shall I have pleasure, my lord being old also?");
+            TextPrep.Seg sg = find(sa, "Therefore Sarah laughed within herself, saying");
+            check("bible page: the words are kept", sg != null, sa.toString());
+        }
         // The same in a lesson's own words, with quotation marks.
         String[][] lesson = {
                 {"Sinabi ni Jesus, \"Sumunod ka sa akin.\"", "cd1"},

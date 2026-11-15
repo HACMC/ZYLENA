@@ -1159,6 +1159,10 @@ final class TextPrep {
         String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
         // A few quotations in a lesson or a book: the people get voices, but shouts, laughs, sounds and scene changes are for stories.
         final boolean storyText = cast != null && !Cast.lastLight;
+        // The people of the Bible have the same feelings, sounds and sound effects a story's characters have (the words of
+        // Scripture themselves are never changed or left out for them).
+        final boolean bibleStory = verse && castOn;
+        final boolean feat = storyText || bibleStory;
         final boolean taglishStory = cast != null && hasTagalog(lines);
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
@@ -1281,6 +1285,7 @@ final class TextPrep {
             // (Judged on the line as it was printed: the words in capitals have been lowercased by now.)
             final boolean shoutLine = storyText && feelOn && !verse && lines.get(li).indexOf('"') < 0 && lines.get(li).indexOf('\u201C') < 0 && isShout(lines.get(li));
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
+            final String[] cl = cast != null ? cast[li] : bibleQuotes != null ? bibleQuotes : verseCast;
             // In a story with Tagalog in it (Taglish too) every character, and the storyteller, keep the Tagalog voice:
             // a character whose line has English words in it used to switch to the English voice and back.
             boolean para = fil || taglishStory || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
@@ -1291,10 +1296,10 @@ final class TextPrep {
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
                 sentenceCount++;
                 String laughWho = null, laughSaid = "";
-                if (laughOn && storyText && !verse && !hasVerse && LAUGH.matcher(sentence).find()) {
-                    String[] lw = laugher(sentence, cast[li]);
-                    String stripped = withoutLaugh(sentence);
-                    if (!stripped.equals(sentence)) {
+                if (laughOn && feat && !hasVerse && LAUGH.matcher(sentence).find()) {
+                    String[] lw = laugher(sentence, cl);
+                    String stripped = verse ? sentence : withoutLaugh(sentence); // (Scripture keeps its words: the laugh is heard after them)
+                    if (verse ? !lw[2].startsWith("cd") : !stripped.equals(sentence)) {
                         String key = lw[2].isEmpty() ? "narrator" : Cast.voice(lw[2]);
                         Integer was = LAUGHED_AT.get(key);
                         // Not at every mention: a character laughs aloud at most once in a few sentences.
@@ -1306,28 +1311,28 @@ final class TextPrep {
                         String lgLang = para ? FIL : langOf(sentence, screenFil);
                         sentence = stripped;
                         if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) {
-                            if (laughWho != null) out.add(laughSeg(laughWho, laughSaid, lgLang, li, cast[li], mood));
+                            if (laughWho != null) out.add(laughSeg(laughWho, laughSaid, lgLang, li, cl, mood));
                             continue;
                         }
                     }
                 }
                 // The sounds people make without words (a sigh, a gasp, a groan): made by the character, as the author wrote it.
                 Seg soundAfter = null;
-                if (soundsOn && storyText && !verse && !hasVerse) {
+                if (soundsOn && feat && !hasVerse) {
                     String kind = NonVerbal.kindOf(sentence);
-                    if (kind != null) {
-                        String[] who2 = laugher(sentence, cast[li]);
+                    String[] who2 = kind == null ? null : laugher(sentence, cl);
+                    if (kind != null && !(verse && who2[2].startsWith("cd"))) {
                         String key = (who2[2].isEmpty() ? "narrator" : Cast.voice(who2[2])) + ":" + kind;
                         Integer was = SOUNDED_AT.get(key);
                         boolean allowed = was == null || sentenceCount - was >= 6; // not at every mention
                         String stripped = NonVerbal.without(sentence, kind);
-                        boolean quotedTag = !stripped.equals(sentence) && NonVerbal.hasQuote(sentence);
-                        boolean only = NonVerbal.onlySound(sentence, kind);
+                        boolean quotedTag = !verse && !stripped.equals(sentence) && NonVerbal.hasQuote(sentence);
+                        boolean only = !verse && NonVerbal.onlySound(sentence, kind);
                         if (allowed) {
                             SOUNDED_AT.put(key, sentenceCount);
                             String[] sd = NonVerbal.say(kind, sentence);
                             String sLang = para ? FIL : langOf(sentence, screenFil);
-                            Seg sg = soundSeg(who2[2], sd[0], sd[1], sLang, li, cast[li], mood);
+                            Seg sg = soundSeg(who2[2], sd[0], sd[1], sLang, li, cl, mood);
                             if (only) {
                                 out.add(sg); // the author wrote little more than the sound: the sound is all that is heard
                                 continue;
@@ -1343,13 +1348,13 @@ final class TextPrep {
                 // Sound effects in a story: a sound written out ("Ring, ring!") is played instead of said; a sentence
                 // that tells of one (a knock, a door, thunder) plays it as it is read.
                 String fx = "";
-                if (sfxOn && storyText && !verse && !hasVerse && Bible.firstRef(sentence) == null) {
-                    String solo = Sfx.solo(sentence);
+                if (sfxOn && feat && !hasVerse && Bible.firstRef(sentence) == null) {
+                    String solo = verse ? null : Sfx.solo(sentence);
                     if (solo != null) {
-                        pendingFx = personal(solo, sentence, cast[li]);
+                        pendingFx = personal(solo, sentence, cl);
                         continue;
                     }
-                    fx = personal(Sfx.detect(sentence), sentence, cast[li]);
+                    fx = personal(Sfx.detect(sentence), sentence, cl);
                 }
                 if (fx.isEmpty()) {
                     fx = pendingFx;
@@ -1367,7 +1372,7 @@ final class TextPrep {
                     g.story = cast != null && !Cast.lastLight;
                     g.sfx = fx;
                     fx = "";
-                    if (storyText && feelOn) g.narrFeel = Mood.ofNarration(sentence);
+                    if (feat && feelOn) g.narrFeel = Mood.ofNarration(sentence);
                     if (pendingScene) {
                         g.scene = true;
                         if (storyText && g.sfx.isEmpty()) g.sfx = "scene";
@@ -1376,7 +1381,7 @@ final class TextPrep {
                     out.add(g);
                 }
                 if (soundAfter != null) out.add(soundAfter);
-                if (laughWho != null && !out.isEmpty()) out.add(laughSeg(laughWho, laughSaid, out.get(out.size() - 1).lang, li, cast[li], mood));
+                if (laughWho != null && !out.isEmpty()) out.add(laughSeg(laughWho, laughSaid, out.get(out.size() - 1).lang, li, cl, mood));
             }
         }
         lastDropped = dropped;
