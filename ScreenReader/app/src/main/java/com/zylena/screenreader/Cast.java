@@ -122,6 +122,14 @@ final class Cast {
         }
     }
 
+    /** What is known of a character by name in this app's story: {"m"/"f"/"u", age: child, teen, adult or elder}; null if not met. */
+    static synchronized String[] infoOf(String scope, String name) {
+        LinkedHashMap<String, Person> people = STORIES.get(scope);
+        Person p = people == null ? null : people.get(name.toLowerCase(Locale.ROOT));
+        if (p == null) return null;
+        return new String[]{p.gender.isEmpty() ? "u" : p.gender, Persona.ageOf(p.style)};
+    }
+
     /** The characters met in any story so far, for the Characters screen: {name, "m"/"f"/"u", style}. */
     static synchronized List<String[]> knownList() {
         List<String[]> out = new ArrayList<>();

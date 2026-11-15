@@ -148,6 +148,16 @@ final class Sfx {
 
     // ------------------------------------------------------------------ playing
 
+    /** The sounds a person makes: they come in a man's, a woman's, a child's, an old person's way. */
+    static boolean person(String name) {
+        return PERSON.contains(name);
+    }
+
+    /** "laugh@f@child": the effect, for a woman (m, f or u: not known) of an age (child, teen, adult, elder). */
+    static String variant(String name, char gender, String age) {
+        return name + "@" + gender + "@" + age;
+    }
+
     private static final java.util.Set<String> PERSON = new java.util.HashSet<>(java.util.Arrays.asList(
             "laugh", "giggle", "scream", "gasp", "cough", "sneeze", "sigh", "whistle", "kiss", "dog", "cat", "bird"));
     private static final Map<String, short[]> made = new HashMap<>();
@@ -159,12 +169,13 @@ final class Sfx {
     static void play(Context c, String name) {
         if (!on || name == null || name.isEmpty() || Prefs.testMode(c)) return;
         long now = System.currentTimeMillis();
+        final String base = name.indexOf('@') < 0 ? name : name.substring(0, name.indexOf('@'));
         synchronized (lastAt) {
-            Long was = lastAt.get(name);
+            Long was = lastAt.get(base);
             // The same sound again and again is tiresome; the sounds of a person ("laughed", "sighed") come up the most.
-            if (was != null && now - was < (PERSON.contains(name) ? 14000 : 6000)) return;
+            if (was != null && now - was < (PERSON.contains(base) ? 14000 : 6000)) return;
             if (now - lastAny < 900) return;
-            lastAt.put(name, now);
+            lastAt.put(base, now);
             lastAny = now;
         }
         final float vol = Math.max(0f, Math.min(1f, volume));
@@ -209,7 +220,41 @@ final class Sfx {
 
     // ------------------------------------------------------------------ making the sounds
 
-    private static short[] make(String name) {
+    /** Who is making a person's sound: pitch (f0), how long the vocal tract is (vt: a child's formants are higher), old voices shake. */
+    private static final class Who {
+        float f0 = 175f, vt = 1.03f;
+        boolean elder, child;
+    }
+
+    private static Who who(String g, String age) {
+        Who w = new Who();
+        boolean m = g.equals("m"), f = g.equals("f");
+        switch (age) {
+            case "child":
+                w.f0 = m ? 360f : f ? 380f : 370f;
+                w.vt = 1.28f;
+                w.child = true;
+                break;
+            case "teen":
+                w.f0 = m ? 165f : f ? 255f : 210f;
+                w.vt = m ? 1.05f : 1.14f;
+                break;
+            case "elder":
+                w.f0 = m ? 105f : f ? 190f : 150f;
+                w.vt = m ? 0.98f : 1.06f;
+                w.elder = true;
+                break;
+            default:
+                w.f0 = m ? 125f : f ? 225f : 175f;
+                w.vt = m ? 0.95f : f ? 1.12f : 1.03f;
+        }
+        return w;
+    }
+
+    private static short[] make(String full) {
+        String[] parts = full.split("@");
+        String name = parts[0];
+        Who w = who(parts.length > 1 ? parts[1] : "u", parts.length > 2 ? parts[2] : "adult");
         float[] b;
         switch (name) {
             case "scene":
@@ -327,39 +372,60 @@ final class Sfx {
                     tone(b, i * 0.5f, i % 2 == 0 ? 1800f : 1400f, 0.03f, 0.3f);
                 }
                 break;
-            case "laugh":
-                b = buf(1.4f);
-                for (int i = 0; i < 5; i++) voice(b, 0.02f + i * 0.21f, 0.15f, 250f - i * 12f, 220f - i * 14f, 800f, 1250f, 0.9f - i * 0.1f, 0.35f, 0f);
+            case "laugh": {
+                // "ha-ha-ha": a few short bursts of breath and a vowel, each a little lower and softer than the one before.
+                int n = w.child ? 6 : w.elder ? 4 : 5;
+                float gap = w.child ? 0.155f : w.elder ? 0.24f : 0.19f;
+                b = buf(0.1f + n * gap + 0.45f);
+                for (int i = 0; i < n; i++) {
+                    float at = 0.03f + i * gap + ((i * 7) % 5 - 2) * 0.004f;
+                    float amp = (float) Math.pow(0.84, i);
+                    float f0a = w.f0 * (1.07f - 0.035f * i), f0b = w.f0 * (0.92f - 0.035f * i);
+                    bandNoise(b, Math.max(0f, at - 0.012f), 0.035f, 1500f, 5000f, 0.22f * amp, 0f);
+                    voice(b, at, 0.115f, f0a, f0b, 760f * w.vt, 1250f * w.vt, amp, 0.10f, w.elder ? 6f : 0f);
+                }
+                bandNoise(b, 0.03f + n * gap, 0.22f, 800f, 3500f, 0.09f, 0.3f);
                 break;
-            case "giggle":
-                b = buf(1.1f);
-                for (int i = 0; i < 6; i++) voice(b, 0.02f + i * 0.14f + (i % 2) * 0.02f, 0.09f, 430f + (i % 3) * 25f, 400f, 330f, 2400f, 0.8f, 0.2f, 0f);
+            }
+            case "giggle": {
+                int n = w.child ? 8 : 6;
+                b = buf(0.1f + n * 0.105f + 0.3f);
+                for (int i = 0; i < n; i++) {
+                    float at = 0.02f + i * 0.105f + (i % 2) * 0.012f;
+                    float f0 = w.f0 * (w.child ? 1.25f : 1.4f) * (1f + 0.04f * (i % 3));
+                    bandNoise(b, Math.max(0f, at - 0.008f), 0.02f, 3000f, 7000f, 0.12f, 0f);
+                    voice(b, at, 0.075f, f0, f0 * 0.93f, 330f * w.vt, 2300f * w.vt, 0.8f * (float) Math.pow(0.93, i), 0.08f, 0f);
+                }
                 break;
-            case "scream":
+            }
+            case "scream": {
                 b = buf(1.2f);
-                voice(b, 0.0f, 1.1f, 620f, 980f, 850f, 1400f, 1f, 0.25f, 7f);
+                float k = w.child ? 2.0f : 2.6f;
+                voice(b, 0.0f, 1.1f, w.f0 * k, w.f0 * k * 1.35f, 850f * w.vt, 1400f * w.vt, 1f, 0.2f, 7f);
                 break;
+            }
             case "gasp":
                 b = buf(0.6f);
-                bandNoise(b, 0.0f, 0.45f, 900f, 2800f, 0.9f, 0.4f);
+                bandNoise(b, 0.0f, 0.45f, 800f * w.vt, 2800f * w.vt, 0.9f, 0.4f);
+                voice(b, 0.36f, 0.12f, w.f0 * 1.1f, w.f0, 600f * w.vt, 1100f * w.vt, 0.2f, 0.8f, 0f);
                 break;
             case "cough":
                 b = buf(0.9f);
                 for (int i = 0; i < 2; i++) {
-                    voice(b, 0.03f + i * 0.28f, 0.1f, 140f, 110f, 550f, 1500f, 0.8f, 0.9f, 0f);
-                    bandNoise(b, 0.03f + i * 0.28f, 0.1f, 600f, 3000f, 0.5f, 0.1f);
+                    voice(b, 0.03f + i * 0.28f, 0.1f, w.f0 * 0.9f, w.f0 * 0.7f, 550f * w.vt, 1500f * w.vt, 0.8f, 0.9f, 0f);
+                    bandNoise(b, 0.03f + i * 0.28f, 0.1f, 600f * w.vt, 3000f * w.vt, 0.5f, 0.1f);
                 }
                 break;
             case "sneeze":
                 b = buf(1.1f);
-                bandNoise(b, 0.0f, 0.55f, 800f, 2500f, 0.5f, 0.85f);
+                bandNoise(b, 0.0f, 0.55f, 800f * w.vt, 2500f * w.vt, 0.5f, 0.85f);
                 bandNoise(b, 0.55f, 0.18f, 1500f, 7000f, 1f, 0.05f);
-                voice(b, 0.56f, 0.18f, 300f, 200f, 650f, 1300f, 0.6f, 0.8f, 0f);
+                voice(b, 0.56f, 0.18f, w.f0 * 1.3f, w.f0, 650f * w.vt, 1300f * w.vt, 0.6f, 0.8f, 0f);
                 break;
             case "sigh":
                 b = buf(1.3f);
-                bandNoise(b, 0.0f, 1.1f, 500f, 2200f, 0.7f, 0.5f);
-                voice(b, 0.05f, 1.0f, 190f, 150f, 600f, 1100f, 0.25f, 0.9f, 0f);
+                bandNoise(b, 0.0f, 1.1f, 500f * w.vt, 2200f * w.vt, 0.7f, 0.5f);
+                voice(b, 0.05f, 1.0f, w.f0 * 0.85f, w.f0 * 0.7f, 600f * w.vt, 1100f * w.vt, 0.25f, 0.9f, 0f);
                 break;
             case "whistle":
                 b = buf(1.0f);
@@ -565,19 +631,26 @@ final class Sfx {
         float[] src = new float[n];
         Random r = new Random(s + 13);
         double ph = 0;
+        float prev = 0;
         for (int i = 0; i < n; i++) {
             float t = i / (float) n;
             double f = f0a + (f0b - f0a) * t;
             if (vib > 0) f *= 1 + 0.03 * Math.sin(2 * Math.PI * vib * i / RATE);
             ph += f / RATE;
-            float saw = (float) (ph - Math.floor(ph)) * 2 - 1;
-            src[i] = saw * (1 - breath * 0.6f) + (r.nextFloat() * 2 - 1) * breath;
+            double x = ph - Math.floor(ph);
+            // The pulse of air through the vocal cords: opens slowly, closes quickly (smoother and softer than a sawtooth).
+            float g = x < 0.55 ? 0.5f * (1f - (float) Math.cos(Math.PI * x / 0.55)) : x < 0.75 ? (float) Math.cos(Math.PI / 2 * (x - 0.55) / 0.2) : 0f;
+            float d = g - prev; // the sound at the lips is the change in the airflow
+            prev = g;
+            src[i] = d * (1 - breath * 0.5f) * 6f + (r.nextFloat() * 2 - 1) * breath * 0.6f;
         }
-        float[] y1 = band(src, f1, f1 * 0.18f + 60f), y2 = band(src, f2, f2 * 0.12f + 90f);
+        float f3 = Math.max(2600f, f2 * 1.9f);
+        float[] y1 = band(src, f1, f1 * 0.12f + 40f), y2 = band(src, f2, f2 * 0.08f + 60f), y3 = band(src, f3, f3 * 0.06f + 80f);
         for (int i = 0; i < n; i++) {
             float t = i / (float) n;
-            float env = Math.min(1f, i / (RATE * 0.012f)) * (float) Math.pow(Math.sin(Math.PI * Math.pow(t, 0.7)), 0.6);
-            b[s + i] += amp * env * 0.9f * (y1[i] + 0.6f * y2[i]);
+            float attack = Math.min(1f, i / (RATE * 0.008f));
+            float release = t < 0.55f ? 1f : (float) Math.pow(1f - (t - 0.55f) / 0.45f, 1.5);
+            b[s + i] += amp * attack * release * 0.9f * (y1[i] + 0.7f * y2[i] + 0.4f * y3[i]);
         }
     }
 

@@ -1254,10 +1254,10 @@ final class TextPrep {
                 if (sfxOn && cast != null && !verse && !hasVerse && Bible.firstRef(sentence) == null) {
                     String solo = Sfx.solo(sentence);
                     if (solo != null) {
-                        pendingFx = solo;
+                        pendingFx = personal(solo, sentence, cast[li]);
                         continue;
                     }
-                    fx = Sfx.detect(sentence);
+                    fx = personal(Sfx.detect(sentence), sentence, cast[li]);
                 }
                 if (fx.isEmpty()) {
                     fx = pendingFx;
@@ -1285,6 +1285,48 @@ final class TextPrep {
         lastDropped = dropped;
         if (povOn) povCarry = who;
         return out;
+    }
+
+    private static final Pattern SHE = Pattern.compile("(?i)\\b(?:she|her|hers|herself)\\b"), HE = Pattern.compile("(?i)\\b(?:he|his|him|himself)\\b");
+
+    /**
+     * The sound of a person (a laugh, a sigh) made by the one the sentence is about: a named character, else "she" / "he",
+     * else whoever speaks in the line; with their gender and age. The effect's name followed by "@gender@age".
+     */
+    private static String personal(String fx, String sentence, String[] lineCast) {
+        if (!Sfx.person(fx)) return fx;
+        char g = 'u';
+        String age = "adult";
+        boolean found = false;
+        java.util.regex.Matcher m = Pattern.compile("(?<![\\p{L}'])\\p{Lu}\\p{Ll}[\\p{L}']+").matcher(sentence);
+        while (m.find() && !found) {
+            String[] info = Cast.infoOf(povScope, m.group());
+            if (info != null && !info[0].equals("u")) {
+                g = info[0].charAt(0);
+                age = info[1];
+                found = true;
+            }
+        }
+        if (!found) {
+            if (SHE.matcher(sentence).find()) {
+                g = 'f';
+                found = true;
+            } else if (HE.matcher(sentence).find()) {
+                g = 'm';
+                found = true;
+            }
+        }
+        if (lineCast != null) {
+            for (int k = lineCast.length - 1; k >= 0; k--) {
+                String c = lineCast[k];
+                if (c == null || !Cast.isCode(Cast.voice(c))) continue;
+                char cg = Cast.genderOf(Cast.voice(c));
+                if (!found && (cg == 'm' || cg == 'f')) g = cg;
+                if (Persona.ageOf(Cast.styleOf(c)).equals("child") || Persona.ageOf(Cast.styleOf(c)).equals("elder") || Persona.ageOf(Cast.styleOf(c)).equals("teen")) age = Persona.ageOf(Cast.styleOf(c));
+                break;
+            }
+        }
+        return Sfx.variant(fx, g, age);
     }
 
     /** Breaks very long sentences at commas or spaces so a voice never has to hold one for ages. */

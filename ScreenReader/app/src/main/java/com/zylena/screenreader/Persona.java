@@ -114,4 +114,20 @@ final class Persona {
         if (GENTLE.matcher(s).find()) return "gentle";
         return "";
     }
+
+    /** A VoiceFx style's age for the sounds a person makes: "child", "teen", "elder" or "adult". */
+    static String ageOf(String style) {
+        switch (style == null ? "" : style) {
+            case "child":
+            case "squeaky":
+            case "cute":
+                return "child";
+            case "teen":
+                return "teen";
+            case "elder":
+                return "elder";
+            default:
+                return "adult";
+        }
+    }
 }
