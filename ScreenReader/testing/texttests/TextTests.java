@@ -190,6 +190,25 @@ public class TextTests {
             check("a cry is shouted", cr != null && cr.codes[0].endsWith("~s"), cr == null ? "none" : cr.codes[0]);
             BibleCast.forget();
         }
+        // Mark 9, Mark 4, a prophet's parable, the thief's prayer, and a new chapter.
+        {
+            BibleCast.forget();
+            BibleCast.Result rb = BibleCast.annotate("25 When Jesus saw that the people came running together, he rebuked the foul spirit, saying unto him, Thou dumb and deaf spirit, I charge thee, come out of him. 28 And when he was come into the house, his disciples asked him privately, Why could not we cast him out?");
+            check("rebuke: Jesus speaks to the spirit", rb != null && rb.codes.length >= 1 && rb.codes[0].equals("cd1") && !rb.summary.contains("villain"), rb == null ? "none" : rb.summary);
+            BibleCast.Result rt = BibleCast.annotate("25 When Jesus saw that the people came running together, he rebuked the foul spirit, saying unto him, Thou dumb and deaf spirit, come out of him. 27 And the spirit cried, and rent him sore, and came out of him.");
+            check("rebuke: no villain for Jesus", rt != null && !rt.summary.contains("villain"), rt == null ? "none" : rt.summary);
+            BibleCast.Result ex = BibleCast.annotate("13 And Jesus said unto them, Know ye not this parable? 14 The sower soweth the word. 15 And these are they by the way side, where the word is sown; but when they have heard, Satan cometh immediately. 16 And these are they likewise which are sown on stony ground; who receive it with gladness; 17 And have no root in themselves, and so endure but for a time.");
+            check("Jesus tells what the parable means", ex != null && ex.text.replace("\u201C", "").replace("\u201D", "").contains("And have no root") && ex.text.lastIndexOf('\u201C') > ex.text.indexOf("And these are they"), ex == null ? "none" : ex.text);
+            BibleCast.forget();
+            BibleCast.Result bl = BibleCast.annotate("And he took up his parable, and said, Balak the king of Moab hath brought me from Aram, out of the mountains of the east.");
+            check("a prophet's parable is not Jesus's", bl != null && !bl.codes[0].startsWith("cd"), bl == null ? "none" : bl.codes[0]);
+            BibleCast.Result th = BibleCast.annotate("42 And he said unto Jesus, Lord, remember me when thou comest into thy kingdom.");
+            check("said unto Jesus is not Jesus", th != null && !th.codes[0].startsWith("cd"), th == null ? "none" : th.codes[0]);
+            BibleCast.annotate("1 The same day went Jesus out of the house, and sat by the sea side.");
+            BibleCast.Result ch1 = BibleCast.annotate("1 And he said, Behold, a man went forth to sow.");
+            check("a new chapter forgets who was read about", ch1 != null && !ch1.codes[0].startsWith("cd"), ch1 == null ? "none" : ch1.codes[0]);
+            BibleCast.forget();
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");

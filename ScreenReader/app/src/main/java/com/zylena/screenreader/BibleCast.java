@@ -43,7 +43,7 @@ final class BibleCast {
     /** Up to here somebody's words are a short saying in a conversation; longer, they are a discourse that tells things itself. */
     private static final int SHORT = 140;
     private static final Pattern LET = Pattern.compile("(?i)^(?:and|at)\\s+(?:let|magkaroon|maging|lumitaw|bukalan|tubuan)(?![\\p{L}]).*");
-    private static final Pattern PARABLE = Pattern.compile("(?i)^\\W*(?:behold,\\s+)?(?:a\\s+certain|what\\s+man|what\\s+woman|sino\\s+sa\\s+inyo|aling\\s+tao|there\\s+was\\s+a|a\\s+sower|the\\s+kingdom\\s+of|may\\s+isang|isang|ang\\s+kaharian|narito,\\s+ang\\s+manghahasik)(?![\\p{L}])");
+    private static final Pattern PARABLE = Pattern.compile("(?i)^\\W*(?:behold,\\s+)?(?:a\\s+certain|what\\s+man|what\\s+woman|sino\\s+sa\\s+inyo|aling\\s+tao|there\\s+was\\s+a|a\\s+sower|the\\s+kingdom\\s+of|may\\s+isang|isang|ang\\s+kaharian|narito,\\s+ang\\s+manghahasik|so\\s+is\\s+the\\s+kingdom|it\\s+is\\s+like\\s+a|ganyan\\s+ang\\s+kaharian|ito'y\\s+tulad\\s+sa)(?![\\p{L}])");
     private static final char Q = '\uE000'; // where the page itself has a quotation mark
     private static final Pattern HE = Pattern.compile("(?i)(?<![\\p{L}'])(?:he|siya|niya|kaniyang|sya)(?![\\p{L}])");
     private static final Pattern SOMEONE = Pattern.compile("(?i)(?<![\\p{L}])(?:certain|isang|ilang|someone|a\\s+(?:man|woman|lawyer|ruler|scribe|centurion)|isa\\s+sa)(?![\\p{L}])");
@@ -85,6 +85,7 @@ final class BibleCast {
     /** An unclean spirit is not the Holy Spirit: it speaks as the tempter does. */
     private static final Pattern EVIL_SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:unclean|evil|foul|dumb|deaf|wicked|lying|familiar|masamang|masasamang|karumaldumal\\s+na|maruming|"
             + "karumaldumal)\\s+(?:spirits?|espiritu)(?![\\p{L}])");
+    private static final Pattern SPIRIT_SPOKEN_TO = Pattern.compile("(?i)(?<![\\p{L}])(?:rebuk\\w*|charg\\w*|command\\w*|adjur\\w*|pinagwika\\w*|pinagutus\\w*|inutusan|sinaway|sinasaway|saway|sa|kay|unto|to)(?:\\s+(?:niya|nila|ni\\s+\\p{Lu}\\p{L}+))?\\s+(?:the\\s+|ang\\s+|that\\s+|those\\s+)?(?:" + EVIL_SPIRIT.pattern().replace("(?i)", "").replace("(?<![\\p{L}])", "").replace("(?![\\p{L}])", "") + ")(?![\\p{L}])");
     /** The one who tempts or opposes: Satan speaks in a voice of his own, not Jesus's. */
     private static final Pattern VILLAIN = Pattern.compile("(?i)(?<![\\p{L}])(?:satan|satanas|devil|diablo|lucifer|demon|demonyo|manunukso|tempter|serpent|ahas)(?![\\p{L}])");
     private static final Pattern FEMALE_CUE = Pattern.compile("(?i)(?<![\\p{L}])(?:babae|woman|women|reyna|queen|dalaga|maiden|damsel|ina|mother|she|siya'y babae|virgin|birhen)(?![\\p{L}])");
@@ -104,6 +105,8 @@ final class BibleCast {
      */
     static Result annotate(String line) {
         String t = Bible.normalize(line);
+        // A page that begins at verse 1 is the beginning of a chapter: nothing of what was read before belongs to it.
+        if (t.matches("(?s)^\\s*1(?![\\d:.,])\\s*[\\p{L}\\u201C\"'(\\[].*")) forget();
         Matcher lead = LEAD.matcher(t);
         if (lead.find()) t = t.substring(lead.end());
         List<String> verses = new ArrayList<>();
@@ -140,13 +143,15 @@ final class BibleCast {
         }
         String carry = "";
         boolean parable = false; // Jesus is telling a story: what happens in it is his to tell, verse after verse
+        boolean explainMode = false; // Jesus is saying what his parable means
+        boolean evilSeen = false; // an unclean spirit has been spoken of: "the spirit" after it is that one
         boolean quoteOpen = false; // the page opened a quotation and has not closed it yet
         int context = contextVerses;
         int said = 0; // how much the one speaking has said so far
         State st = new State();
         // A page is often one verse of a chapter: who the last page was about carries on to the next, for a little while.
         synchronized (BibleCast.class) {
-            if (memory != null && System.currentTimeMillis() - memoryAt < 180000L) st.mentioned = memory;
+            if (memory != null && contextVerses == 0 && System.currentTimeMillis() - memoryAt < 180000L) st.mentioned = memory;
         }
         StringBuilder outAll = new StringBuilder();
         List<String> codesAll = new ArrayList<>();
@@ -180,7 +185,8 @@ final class BibleCast {
             // Who is spoken of lately: an unnamed "he" later in the passage is most likely this one.
             String mk = JESUS.matcher(v).find() ? "jesus" : FATHER.matcher(v).find() ? "father" : null;
             if (mk != null) st.mentioned = mk;
-            st.hintJesus = PARABLE_WORD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
+            if (EVIL_SPIRIT.matcher(v).find()) st.evilSeen = true;
+            st.hintJesus = PARABLE_TOLD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
             final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
             String narr = v, speech = null;
@@ -197,6 +203,7 @@ final class BibleCast {
             final String carried = carry;
             carry = "";
             final boolean discourse = inSpeech && said > SHORT;
+            st.jesusTeaching = inSpeech && Cast.JESUS_CODE.equals(speaker) && (parable || discourse || explainMode);
             final Matcher rsm = RESTART.matcher(v);
             final boolean restart = rsm.find() && !TALK.matcher(v.substring(0, rsm.end())).find();
             // The page's own quotation marks, when it has them in pairs, say exactly which words are spoken
@@ -253,6 +260,7 @@ final class BibleCast {
                 String intro = m.group();
                 if (FIRST_PERSON.matcher(intro).find()) continue; // "sinabi ko sa inyo": the speaker's own words
                 String rest = v.substring(m.end()).trim();
+                if (m.group().matches("(?is).*(?<![\\p{L}])(?:cried|crying|cry)\\W*$") && DID.matcher(rest).find() && !FIRST_PERSON.matcher(rest.length() > 40 ? rest.substring(0, 40) : rest).find()) continue; // (what was done, not said)
                 if (rest.length() < 3 || rest.chars().noneMatch(Character::isLetter)) {
                     // "…and taught them, saying," at the end of a verse: the words themselves begin with the next verse.
                     if (rest.chars().noneMatch(Character::isLetter) && pendingWho == null) {
@@ -301,7 +309,11 @@ final class BibleCast {
                     || (JESUS.matcher(v).find() && !Cast.JESUS_CODE.equals(speaker)));
             // ("And he said, So is the kingdom of God…" after his own long teaching: he goes on.)
             final boolean goesOnTeaching = divineSpeech && Cast.JESUS_CODE.equals(speaker) && discourse && v.length() > 20 && HE_SAID.matcher(v).find();
-            final boolean ends = tellsOf || restart || (!parable && !goesOnTeaching && narrates(v));
+            // ("And these are they by the way side… And have no root in themselves…": Jesus tells what the story means, verse after verse.)
+            if (!inSpeech || INTRO.matcher(v).find() || restart || JESUS.matcher(v).find()) explainMode = false;
+            if (inSpeech && Cast.JESUS_CODE.equals(speaker) && EXPLAINS.matcher(v).find()) explainMode = true;
+            final boolean explains = inSpeech && Cast.JESUS_CODE.equals(speaker) && explainMode;
+            final boolean ends = (tellsOf && !explains) || restart || (!parable && !goesOnTeaching && !explains && narrates(v));
             if (speech == null && inSpeech && (quoteOpen || !ends)) {
                 narr = "";
                 speech = v; // the speech goes on into this verse
@@ -382,7 +394,7 @@ final class BibleCast {
             inSpeech = !closed;
             speaker = who;
             said = (narr.isEmpty() ? said : 0) + speech.length();
-            if (PARABLE.matcher(speech).find() || (!narr.isEmpty() && PARABLE_WORD.matcher(narr).find())) {
+            if (PARABLE.matcher(HE_SAID_LEAD.matcher(speech).replaceFirst("")).find() || (!narr.isEmpty() && PARABLE_WORD.matcher(narr).find())) {
                 said += SHORT; // a story he tells: the people in it are his to tell of
                 parable = true;
             }
@@ -464,10 +476,17 @@ final class BibleCast {
     private static final Pattern RESTART = Pattern.compile("(?i)^(?:and|then|now|but|so|at|nang|datapuwa't|pagkatapos|when)\\b[^.!?]{0,40}?(?<![\\p{L}])(?:jesus|hesus|(?:the|his)\\s+disciples|ang\\s+(?:kaniyang\\s+)?mga\\s+alagad|pharisees|fariseo|multitude|karamihan|it\\s+came\\s+to\\s+pass|nangyari)(?![\\p{L}])"
             // In Tagalog the story's own sentences begin with the word of saying: "Sinabi nga ng mga alagad sa kaniya,", "Sinalita nga ni Jesus…".
             + "|^(?:sinabi|sumagot|nagsabi|sinalita|nagtanong|tinanong|sinagot|sumigaw|nagsalita)(?![\\p{L}])[^,:.!?]{0,40}");
+    private static final Pattern HOLY = Pattern.compile("(?i)(?<![\\p{L}])(?:holy|banal|santo|ghost)(?![\\p{L}])");
+    /** "and rent him sore, and came out of him": what the spirit did, not words it says. */
+    private static final Pattern DID = Pattern.compile("(?i)^\\W*and\\s+(?:\\p{L}+ed|rent|tare|came|fell|ran|went|took|rose|arose|saw|was|were|had|brake|departed|threw|cast)(?![\\p{L}])");
+    private static final Pattern EXPLAINS = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:these|those)\\s+(?:are|be)\\s+they|^\\W*(?:and\\s+|at\\s+)?(?:ito|ang\\s+mga\\s+ito|ang\\s+mga\\s+nasa)\\s+(?:ang|ay|yaong)\\s+");
+    private static final Pattern HE_SAID_LEAD = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)\\s*(?:unto\\s+them|sa\\s+kanila)?\\s*[,:]?\\s*");
     private static final Pattern HE_SAID = Pattern.compile("(?i)^\\W*(?:and|at|then)?\\s*(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)(?![\\p{L}])");
-    private static final Pattern TELLS_PARABLE = Pattern.compile("(?i)(?:behold,?\\s+a\\s+sower|a\\s+certain\\s+(?:man|king|householder|rich\\s+man)\\s+(?:had|made|planted|which)|the\\s+kingdom\\s+of\\s+(?:heaven|god)\\s+is\\s+(?:like|likened)|manghahasik|ang\\s+kaharian\\s+ng\\s+(?:langit|dios|diyos)\\s+ay\\s+(?:katulad|gaya|nagiging\\s+gaya))");
+    /** "spake a parable unto them", "in parables": Jesus's way of teaching (not "he took up his parable and said", which is a prophet's). */
+    private static final Pattern PARABLE_TOLD = Pattern.compile("(?i)(?:spake|spoke|told|taught|speaks|sinalita|pinagsalitaan)\\W+(?:\\w+\\W+){0,6}?(?:a\\s+parable\\s+unto|parables|in\\s+parables|mga\\s+talinghaga|isang\\s+talinghaga)|in\\s+parables|sa\\s+mga\\s+talinghaga|isang\\s+talinghaga\\s+sa\\s+kanila");
+    private static final Pattern TELLS_PARABLE = Pattern.compile("(?i)(?:behold,?\\s+a\\s+sower|a\\s+certain\\s+(?:man|king|householder|rich\\s+man)\\s+(?:had|made|planted|which)|the\\s+kingdom\\s+of\\s+(?:heaven|god)\\s+is\\s+(?:like|likened)|unto\\s+what\\s+is\\s+the\\s+kingdom|whereunto\\s+shall\\s+(?:we|i)\\s+(?:liken|resemble)|manghahasik|ang\\s+kaharian\\s+ng\\s+(?:langit|dios|diyos)\\s+ay\\s+(?:katulad|gaya|nagiging\\s+gaya))");
     /** Somebody other than the one the page is about is named in front of the saying. */
-    private static final Pattern PRONOUN_ONLY_OTHER = Pattern.compile("(?i)(?<![\\p{L}])(?:the\\s+(?:scribes?|pharisees?|lawyer|devil|tempter|disciples?)|ang\\s+(?:mga\\s+)?(?:eskriba|fariseo|alagad|diablo))(?![\\p{L}])");
+    private static final Pattern PRONOUN_ONLY_OTHER = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:the|his|her|their|my)\\s+(?:scribes?|pharisees?|lawyer|devil|tempter|disciples?|mother|brethren|apostles?|people|multitude)|they|ang\\s+(?:kaniyang\\s+)?(?:mga\\s+)?(?:eskriba|fariseo|alagad|diablo|tao|karamihan))(?![\\p{L}])");
     private static final Pattern PARABLE_WORD = Pattern.compile("(?i)(?<![\\p{L}])(?:parable|parables|talinghaga)(?![\\p{L}])");
     private static final Pattern SI_NAME = Pattern.compile("^(?:At\\s+|Nguni't\\s+|Datapuwa't\\s+|Kaya't\\s+)?[Ss]i\\s+(\\p{Lu}\\p{Ll}[\\p{L}]+)(?![\\p{L}])(?!\\s+ay\\s+(?:sinabihan|tinanong))");
     private static final Pattern NOUN_SAID = Pattern.compile("(?i)(?<![\\p{L}])(?:the\\s+(woman|man|father|mother|son|servant|king|queen|centurion|young\\s+man|blind\\s+man|lawyer|ruler|angel|people|multitude|disciples|pharisees|scribes)\\s+(?:said|saith|answered|asked|replied|cried)"
@@ -491,6 +510,8 @@ final class BibleCast {
         int men = 0, women = 0, anon;
         String spokenTo; // who the last words were said to, when that is told
         String mentioned; // "jesus" or "father" when the verses have spoken of him lately
+        boolean evilSeen;
+        boolean jesusTeaching; // Jesus is in the middle of a long teaching or a parable: "And he said," goes on with the same one
         boolean hintJesus; // the verse being read tells a parable or says what only he says: an unnamed "he" is Jesus
 
         String who(String nearIntro, String before) {
@@ -518,10 +539,14 @@ final class BibleCast {
             }
             nearIntro = TO_SOMEONE.matcher(nearIntro).replaceAll(" ");
             nearIntro = OF_GOD.matcher(nearIntro).replaceAll(" ");
+            // "he rebuked the foul spirit, saying unto him, Thou dumb and deaf spirit": the spirit is spoken to, not the one speaking.
+            if (SPIRIT_SPOKEN_TO.matcher(before + " " + nearIntro).find()) nearIntro = EVIL_SPIRIT.matcher(SPIRIT_SPOKEN_TO.matcher(nearIntro).replaceAll(" ")).replaceAll(" ");
             if (EVIL_SPIRIT.matcher(nearIntro).find()) {
                 key = "villain";
             } else if (JESUS.matcher(nearIntro).find()) {
                 key = "jesus";
+            } else if (evilSeen && !HOLY.matcher(nearIntro).find() && SPIRIT.matcher(nearIntro).find()) {
+                key = "villain"; // "And the spirit cried, and rent him sore": the unclean one
             } else if (SPIRIT.matcher(nearIntro).find()) {
                 key = "spirit";
             } else if (FATHER.matcher(nearIntro).find()) {
@@ -561,13 +586,14 @@ final class BibleCast {
                 if (key == null && "villain".equals(lastKey)) key = "jesus";
                 // "Now the serpent was more subtil… And he said unto the woman,": the first to speak is the one the verse is about.
                 if (key == null && history.isEmpty() && VILLAIN.matcher(before).find() && !JESUS.matcher(before).find()) key = "villain";
+                // "And he spake many things unto them in parables, saying, Behold, a sower went forth to sow": nobody else tells parables.
+                if (key == null && (hintJesus || jesusTeaching) && !"jesus".equals(toWhom) && HE.matcher(nearIntro).find() && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()
+                        && !(nearIntro).replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus"; // (somebody named is not he)
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey) && !history.get(k).equals(toWhom)) key = history.get(k);
                 // "And he opened his mouth, and taught them, saying": the "he" is who the chapter has been about, when nobody else is
                 // named, nobody has spoken yet, and it is not "a certain lawyer … tempted him".
-                if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find()) key = mentioned;
-                // "And he spake many things unto them in parables, saying, Behold, a sower went forth to sow": nobody else tells parables.
-                if (key == null && hintJesus && HE.matcher(before + " " + nearIntro).find() && !PRONOUN_ONLY_OTHER.matcher(before).find()
-                        && !(before + " " + nearIntro).replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus"; // (somebody named is not he)
+                if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find() && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()) key = mentioned;
+
                 if (key == null) {
                     key = "#" + (++anon);
                     String cue = before + " " + nearIntro;
