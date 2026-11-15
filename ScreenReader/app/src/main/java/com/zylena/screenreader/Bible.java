@@ -256,6 +256,7 @@ final class Bible {
             int book = bookNumber(m.group("n"), m.group("b"));
             boolean tl = fil || TAGALOG_NAMES.contains(m.group("b"));
             String words = v == null || book == 0 ? null : passage(src, tl, book, Integer.parseInt(m.group("c")), v);
+            if (words != null && alreadyRead(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) words = null;
             String out = m.group();
             if (words != null) {
                 words = words.replaceAll("[\\s,;:]+$", "");
@@ -268,6 +269,43 @@ final class Bible {
         m.appendTail(sb);
         // The separator after a quoted verse (";" or ")") would only be read as an odd pause.
         return any ? sb.toString().replaceAll("\u0003[\\s;,.)]*", " ").trim() : text;
+    }
+
+    /** Verses whose words were read since the reading began: the page they were read on (its lines' hashes). */
+    private static final java.util.Map<String, java.util.Set<Integer>> readVerses = new java.util.HashMap<>();
+    private static java.util.Set<Integer> pageNow = new java.util.HashSet<>();
+    private static final java.util.Set<String> readNow = new java.util.HashSet<>();
+
+    /** A new reading begins (the button): every verse may be read once again. */
+    static synchronized void newReading() {
+        readVerses.clear();
+    }
+
+    /** The page about to be prepared. The same page prepared again (a rescan) keeps its verses. */
+    static synchronized void page(java.util.List<String> lines) {
+        pageNow = new java.util.HashSet<>();
+        for (String l : lines) pageNow.add(l.trim().hashCode());
+        readNow.clear();
+    }
+
+    /**
+     * A verse is read once until the reading ends: a second time, on the page or on a later page, only the
+     * reference is said. True when this verse was read already somewhere else.
+     */
+    private static synchronized boolean alreadyRead(String id) {
+        java.util.Set<Integer> at = readVerses.get(id);
+        if (at == null) {
+            readVerses.put(id, pageNow);
+            readNow.add(id);
+            return false;
+        }
+        boolean samePage = false;
+        for (Integer h : pageNow) if (at.contains(h)) {
+            samePage = true;
+            break;
+        }
+        if (samePage && readNow.add(id)) return false; // this page's own, read again
+        return true;
     }
 
     /**

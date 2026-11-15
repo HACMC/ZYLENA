@@ -3553,7 +3553,10 @@ public class ReaderService extends AccessibilityService {
             sp.stop();
         }
         else if (sp.isPaused()) sp.resume();
-        else readScreen();
+        else {
+            Bible.newReading(); // verses are read once until the reading ends
+            readScreen();
+        }
     }
 
     private void updateButtonIcon() {

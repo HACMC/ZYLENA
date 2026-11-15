@@ -1042,6 +1042,7 @@ final class TextPrep {
         int dropped = 0;
         lastCodes = "";
         lastRefLine = "";
+        Bible.page(lines);
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
