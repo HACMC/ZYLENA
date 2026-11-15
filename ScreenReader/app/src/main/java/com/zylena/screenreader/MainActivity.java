@@ -551,6 +551,9 @@ public class MainActivity extends Activity {
         Ui.add(st, castEnRow.view);
         Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a drama sample",
                 "A short story with a mob boss, a child, a maid, an old woman, Jesus, sound effects and a scene change, to check how voices and sounds come out on this phone", this::hearSample).view);
+        Ui.add(st, Ui.nav(this, R.drawable.ic_tune, "Voice lab",
+                "Try a kind of voice (God's, a child's, a boss's) with exact settings, apart from the real ones, then send me the numbers", () ->
+                        startActivity(new android.content.Intent(this, VoiceLabActivity.class))).view);
         Ui.add(st, Ui.nav(this, R.drawable.ic_person, "Fix a character's voice",
                 "Every character the reader has met: pick man or woman, and a kind of voice (child, elder, husky, boss, maid\u2026)", this::pickCharacter).view);
         castRow = Ui.nav(this, R.drawable.ic_person, "Story characters", "", this::editPovNames);

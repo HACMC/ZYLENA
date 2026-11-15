@@ -41,6 +41,11 @@
             android:name=".LogActivity"
             android:exported="false" />
 
+        <!-- The voice lab: try a kind of voice with exact settings, apart from the real ones. -->
+        <activity
+            android:name=".VoiceLabActivity"
+            android:exported="false" />
+
         <!-- "Fix a word": opened over the app being read, on the words the voice just said. -->
         <activity
             android:name=".FixActivity"

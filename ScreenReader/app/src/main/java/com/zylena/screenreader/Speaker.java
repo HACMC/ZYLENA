@@ -1272,7 +1272,7 @@ final class Speaker {
     }
 
     /** {sample rate, channels, where the sound starts, how long it is} of a WAV file the voice made; null if it is not one. */
-    private static int[] wavInfo(byte[] b) {
+    static int[] wavInfo(byte[] b) {
         if (b.length < 44 || b[0] != 'R' || b[1] != 'I' || b[2] != 'F' || b[3] != 'F') return null;
         int pos = 12, sr = 0, ch = 0, bits = 16;
         while (pos + 8 <= b.length) {

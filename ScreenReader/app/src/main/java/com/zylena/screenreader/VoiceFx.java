@@ -78,8 +78,20 @@ final class VoiceFx {
         return name == null || name.isEmpty() ? null : STYLES.get(name);
     }
 
+    /** The names of the kinds of voice, for the voice lab. */
+    static java.util.List<String> names() {
+        java.util.List<String> n = new java.util.ArrayList<>(STYLES.keySet());
+        java.util.Collections.sort(n);
+        return n;
+    }
+
     /** The recording made into the character's voice. mono, 16-bit, at the rate it came in. */
     static short[] process(short[] in, int rate, Style st) {
+        return process(in, rate, st, 0.17f, 0f);
+    }
+
+    /** As above, with the loudness it is brought to (speech is about 0.1 to 0.2) and some extra upper-middle range (0 to 1). */
+    static short[] process(short[] in, int rate, Style st, float targetRms, float presenceExtra) {
         int n = in.length;
         if (n < 16) return in;
         float[] x = new float[n];
@@ -131,7 +143,7 @@ final class VoiceFx {
             for (int i = 0; i < m; i++) z[i] = (float) Math.tanh(g * z[i] / peak) / norm * peak;
         }
         // A lowered voice loses what carries on a small speaker: a little of the upper-middle range is brought back.
-        float pres = Math.max(0f, 0.95f - st.pf) * 2.5f;
+        float pres = Math.max(0f, 0.95f - st.pf) * 2.5f + presenceExtra;
         if (pres > 0) {
             float[] pb = band(z, 2200f, 1800f, rate);
             for (int i = 0; i < m; i++) z[i] += pres * pb[i];
@@ -140,7 +152,7 @@ final class VoiceFx {
         double sum = 0;
         for (int i = 0; i < m; i++) sum += z[i] * z[i];
         float rms = (float) Math.sqrt(sum / Math.max(1, m)) + 1e-6f;
-        float gain = Math.min(6f, 0.17f / rms);
+        float gain = Math.min(6f, targetRms / rms);
         short[] out = new short[m];
         for (int i = 0; i < m; i++) out[i] = (short) (0.95f * (float) Math.tanh(z[i] * gain) * 32767);
         return out;
