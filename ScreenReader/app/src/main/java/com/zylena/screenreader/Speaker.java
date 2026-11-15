@@ -860,6 +860,10 @@ final class Speaker {
             Logs.d(ctx, "voice for " + s.lang + ": " + (used == null ? "(default locale)" : used.getName()));
         }
         boolean last = i == runs.size() - 1;
+        // A less machine-like rhythm: each sentence a little different (the same each time it is read), and uneven pauses.
+        final boolean natural = Prefs.flag(ctx, "natural", true) && !Prefs.testMode(ctx);
+        final int nh = ((i + 1) * 0x9E3779B1) >>> 16;
+        final float natR = natural ? 1f + ((nh % 7) - 3) * 0.01f : 1f, natP = natural ? 1f + (((nh / 7) % 5) - 2) * 0.01f : 1f;
         if (i > 0 && runs.get(i - 1).lastLine != s.line) {
             // A short breath between paragraphs, a little longer around a heading. The online voice already
             // waits a moment before each piece, so it gets no extra breath between paragraphs.
@@ -870,6 +874,14 @@ final class Speaker {
             long breath = online ? Math.max(0, want - 300) : want;
             // People answering each other quickly: a shorter gap than between narration paragraphs.
             if (quickTalk(runs.get(i - 1)) && quickTalk(s)) breath = breath * 55 / 100;
+            // Not the same length every time; longer after a long paragraph, a question or an exclamation.
+            if (natural && breath > 0) {
+                String before = runs.get(i - 1).text.trim();
+                float f = 0.8f + (nh % 9) * 0.05f;
+                if (before.length() > 220) f += 0.15f;
+                if (before.endsWith("?") || before.endsWith("!")) f += 0.1f;
+                breath = (long) (breath * f);
+            }
             if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
         // A scene change: a longer pause first, the way a narrator would take a breath before it.
@@ -962,6 +974,12 @@ final class Speaker {
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
+            if (natural) {
+                p *= natP;
+                r *= natR;
+                // The storyteller (not a character) tells the story a touch slower.
+                if (s.story && !Cast.isCode(Cast.voice(parts.get(k)[3]))) r *= 0.97f;
+            }
             // A character with a voice of their own kind (God's, a child's, an old person's, a husky one, a boss's, a maid's)
             // is made by processing the sound; see VoiceFx.
             // How the line is said (shouted, angry, sad, afraid, laughing, whispered…) is made audible the same way: an online voice

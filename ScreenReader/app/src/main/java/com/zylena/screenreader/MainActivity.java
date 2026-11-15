@@ -552,6 +552,9 @@ public class MainActivity extends Activity {
                 "A child's voice, an old person's, a husky one, a mob boss's, a maid's: found from how the story describes them (\"a seven-year-old girl\", "
                         + "\"in a husky voice\", \"the maid\"). God, Jesus and the Holy Spirit are deep and slow. Made by changing the sound, so it works with any "
                         + "voice. Off: only the voice's own pitch is asked for, which some online voices ignore.", "voice_fx", true));
+        Ui.add(st, flagRow(R.drawable.ic_person, "More natural rhythm",
+                "Each sentence is said a few percent faster or slower and a little higher or lower, and the pauses between paragraphs and sentences are not all "
+                        + "the same, so it sounds less like a machine reading. A story's narration is told a touch slower. Off: every sentence is said the same way.", "natural", true));
         castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
         Ui.add(st, castFilRow.view);
         castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
