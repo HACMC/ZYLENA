@@ -58,6 +58,23 @@ final class Sfx {
         cue("footsteps", "\\bfootsteps?\\b|\\bfootfalls?\\b|\\btiptoed?\\b|\\bheels (?:clicked|clacked|echoed)\\b|\\b(?:boots|shoes) (?:thudded|echoed|clicked|scuffed)\\b|\\bpaa?ng yabag\\b|\\byabag\\b");
         cue("rain", "\\brain (?:pattered|poured|fell|drummed|pounded|began to fall)\\b|\\bpouring rain\\b|\\bdownpour\\b|\\braindrops\\b|\\bumuulan\\b|\\bbumuhos ang ulan\\b");
         cue("wind", "\\bwind (?:howled|whistled|roared|blew|rushed|whipped|moaned)\\b|\\bgust of wind\\b|\\bhuni ng hangin\\b|\\bhumangin nang malakas\\b");
+        cue("laugh", "\\b(?:laugh(?:ed|s|ing|ter)?|chuckl\\w+|cackl\\w+|guffaw\\w*|howled with laughter|burst out laughing|tumawa|humalakhak|tawanan)\\b");
+        cue("giggle", "\\b(?:giggl\\w+|snicker\\w*|tittered|humagikgik|hagikgik)\\b");
+        cue("scream", "\\b(?:scream(?:ed|s|ing)?|shriek\\w*|screech\\w*|tumili|tili|sumigaw nang malakas)\\b");
+        cue("gasp", "\\b(?:gasp(?:ed|s|ing)?|napasinghap|singhap)\\b");
+        cue("cough", "\\b(?:cough(?:ed|s|ing)?|cleared (?:his|her|their) throat|umubo|ubo)\\b|\\bahem\\b");
+        cue("sneeze", "\\b(?:sneez\\w+|bumahing|hatsing)\\b");
+        cue("sigh", "\\b(?:sigh(?:ed|s|ing)?|buntong-?hininga|huminga nang malalim)\\b");
+        cue("whistle", "\\b(?:whistl(?:ed|es|ing)|sumipol|pito)\\b");
+        cue("kiss", "\\b(?:kiss(?:ed|es|ing)?|hinalikan|humalik|halik)\\b");
+        cue("sword", "\\bswords?\\b[^.!?]{0,20}\\b(?:clashed|clanged|drew|swung|rang|struck)\\b|\\bunsheathed\\b|\\bclash of (?:swords|steel)\\b");
+        cue("engine", "\\b(?:engine|motor|motorcycle|car|truck)\\b[^.!?]{0,20}\\b(?:roared|revved|rumbled|purred|sputtered|started up|came to life)\\b|\\brevved\\b");
+        cue("siren", "\\bsirens?\\b|\\bsumirena\\b");
+        cue("drip", "\\bdrip(?:ped|ping|s)?\\b");
+        cue("fire", "\\b(?:fire|flames?|logs?|fireplace)\\b[^.!?]{0,20}\\b(?:crackled|crackling|roared|popped)\\b|\\bcrackling fire\\b");
+        cue("bird", "\\bbirds? (?:chirped|sang|twittered|chirping|singing|tweeted|called)\\b|\\bchirp(?:ed|ing|s)?\\b|\\bhuni ng ibon\\b");
+        cue("dog", "\\b(?:dog|puppy|hound)\\b[^.!?]{0,15}\\b(?:barked|barking|growled|howled|yapped)\\b|\\bbarked\\b|\\bumatungal\\b|\\btumahol\\b");
+        cue("cat", "\\b(?:cat|kitten)\\b[^.!?]{0,15}\\b(?:meowed|mewed|purred|hissed)\\b|\\bmeow\\w*|\\bngiyaw\\b");
         cue("clock", "\\btick(?:ing)?\\b[^.!?]{0,10}\\bclock\\b|\\bclock\\b[^.!?]{0,10}\\btick(?:ed|ing)\\b|\\bticking\\b");
     }
 
@@ -82,12 +99,26 @@ final class Sfx {
         for (String w : new String[]{"thud", "thump", "stomp"}) SOUND_WORDS.put(w, "footsteps");
         for (String w : new String[]{"crash", "smash", "clatter"}) SOUND_WORDS.put(w, "glass");
         for (String w : new String[]{"click", "clack"}) SOUND_WORDS.put(w, "door_close");
-        for (String w : new String[]{"buzz", "bzzt", "bzz", "vroom"}) SOUND_WORDS.put(w, "phone");
+        for (String w : new String[]{"buzz", "bzzt", "bzz"}) SOUND_WORDS.put(w, "phone");
         for (String w : new String[]{"creak", "squeak"}) SOUND_WORDS.put(w, "door_open");
         for (String w : new String[]{"clap"}) SOUND_WORDS.put(w, "applause");
         for (String w : new String[]{"tick", "tock", "tick-tock", "ticktock"}) SOUND_WORDS.put(w, "clock");
         for (String w : new String[]{"rumble"}) SOUND_WORDS.put(w, "thunder");
         for (String w : new String[]{"bam", "pow", "bang!"}) SOUND_WORDS.put(w, "gunshot");
+        for (String w : new String[]{"ha", "hah", "heh", "haha", "hahaha", "hahahaha", "bwahaha", "muahaha", "lol"}) SOUND_WORDS.put(w, "laugh");
+        for (String w : new String[]{"hehe", "hihi", "tehee", "teehee", "hehehe", "hihihi"}) SOUND_WORDS.put(w, "giggle");
+        for (String w : new String[]{"aah", "aa", "ahhh", "eek"}) SOUND_WORDS.put(w, "scream");
+        for (String w : new String[]{"gasp", "hah-"}) SOUND_WORDS.put(w, "gasp");
+        for (String w : new String[]{"cough", "ahem", "ahm"}) SOUND_WORDS.put(w, "cough");
+        for (String w : new String[]{"achoo", "ahchoo", "atchoo", "hatsing"}) SOUND_WORDS.put(w, "sneeze");
+        for (String w : new String[]{"sigh", "hay", "haay", "haaay"}) SOUND_WORDS.put(w, "sigh");
+        for (String w : new String[]{"muah", "mwah", "smooch", "mwuah"}) SOUND_WORDS.put(w, "kiss");
+        for (String w : new String[]{"meow", "miao", "ngiyaw", "mew"}) SOUND_WORDS.put(w, "cat");
+        for (String w : new String[]{"woof", "arf", "bark", "bow-wow", "aw-aw", "ruff"}) SOUND_WORDS.put(w, "dog");
+        for (String w : new String[]{"tweet", "chirp", "tweet-tweet", "chirp-chirp"}) SOUND_WORDS.put(w, "bird");
+        for (String w : new String[]{"drip", "plip"}) SOUND_WORDS.put(w, "drip");
+        for (String w : new String[]{"whistle", "tweeet"}) SOUND_WORDS.put(w, "whistle");
+        for (String w : new String[]{"vroom", "brum", "brrm"}) SOUND_WORDS.put(w, "engine");
     }
 
     private static final Pattern SOLO = Pattern.compile("^[\\s*_\"“”'‘’(\\[\\-–—]*[A-Za-z][A-Za-z\\-]{1,14}(?:[\\s,.!?*_\\-–—\"”'’)\\]]+[A-Za-z][A-Za-z\\-]{1,14})*[\\s,.!?*_\\-–—\"”'’)\\]]*$");
@@ -117,6 +148,8 @@ final class Sfx {
 
     // ------------------------------------------------------------------ playing
 
+    private static final java.util.Set<String> PERSON = new java.util.HashSet<>(java.util.Arrays.asList(
+            "laugh", "giggle", "scream", "gasp", "cough", "sneeze", "sigh", "whistle", "kiss", "dog", "cat", "bird"));
     private static final Map<String, short[]> made = new HashMap<>();
     private static final Map<String, Long> lastAt = new HashMap<>();
     private static long lastAny;
@@ -128,7 +161,8 @@ final class Sfx {
         long now = System.currentTimeMillis();
         synchronized (lastAt) {
             Long was = lastAt.get(name);
-            if (was != null && now - was < 6000) return; // the same sound again and again is tiresome
+            // The same sound again and again is tiresome; the sounds of a person ("laughed", "sighed") come up the most.
+            if (was != null && now - was < (PERSON.contains(name) ? 14000 : 6000)) return;
             if (now - lastAny < 900) return;
             lastAt.put(name, now);
             lastAny = now;
@@ -288,13 +322,99 @@ final class Sfx {
                     tone(b, i * 0.5f, i % 2 == 0 ? 1800f : 1400f, 0.03f, 0.3f);
                 }
                 break;
+            case "laugh":
+                b = buf(1.4f);
+                for (int i = 0; i < 5; i++) voice(b, 0.02f + i * 0.21f, 0.15f, 250f - i * 12f, 220f - i * 14f, 800f, 1250f, 0.9f - i * 0.1f, 0.35f, 0f);
+                break;
+            case "giggle":
+                b = buf(1.1f);
+                for (int i = 0; i < 6; i++) voice(b, 0.02f + i * 0.14f + (i % 2) * 0.02f, 0.09f, 430f + (i % 3) * 25f, 400f, 330f, 2400f, 0.8f, 0.2f, 0f);
+                break;
+            case "scream":
+                b = buf(1.2f);
+                voice(b, 0.0f, 1.1f, 620f, 980f, 850f, 1400f, 1f, 0.25f, 7f);
+                break;
+            case "gasp":
+                b = buf(0.6f);
+                bandNoise(b, 0.0f, 0.45f, 900f, 2800f, 0.9f, 0.4f);
+                break;
+            case "cough":
+                b = buf(0.9f);
+                for (int i = 0; i < 2; i++) {
+                    voice(b, 0.03f + i * 0.28f, 0.1f, 140f, 110f, 550f, 1500f, 0.8f, 0.9f, 0f);
+                    bandNoise(b, 0.03f + i * 0.28f, 0.1f, 600f, 3000f, 0.5f, 0.1f);
+                }
+                break;
+            case "sneeze":
+                b = buf(1.1f);
+                bandNoise(b, 0.0f, 0.55f, 800f, 2500f, 0.5f, 0.85f);
+                bandNoise(b, 0.55f, 0.18f, 1500f, 7000f, 1f, 0.05f);
+                voice(b, 0.56f, 0.18f, 300f, 200f, 650f, 1300f, 0.6f, 0.8f, 0f);
+                break;
+            case "sigh":
+                b = buf(1.3f);
+                bandNoise(b, 0.0f, 1.1f, 500f, 2200f, 0.7f, 0.5f);
+                voice(b, 0.05f, 1.0f, 190f, 150f, 600f, 1100f, 0.25f, 0.9f, 0f);
+                break;
+            case "whistle":
+                b = buf(1.0f);
+                sweep(b, 0.0f, 0.35f, 1500f, 2600f, 0.55f);
+                sweep(b, 0.4f, 0.4f, 2600f, 1400f, 0.55f);
+                break;
+            case "kiss":
+                b = buf(0.4f);
+                sweep(b, 0.0f, 0.07f, 700f, 1500f, 0.35f);
+                bandNoise(b, 0.06f, 0.05f, 3000f, 9000f, 0.8f, 0f);
+                break;
+            case "sword":
+                b = buf(1.2f);
+                bandNoise(b, 0.0f, 0.18f, 3500f, 9000f, 1f, 0f);
+                for (float f : new float[]{2100f, 3300f, 5200f}) tone(b, 0.02f, f, 0.9f, 0.25f);
+                break;
+            case "engine":
+                b = buf(2f);
+                engine(b, 0f, 2f);
+                break;
+            case "siren":
+                b = buf(3f);
+                for (int i = 0; i < 2; i++) {
+                    sweep(b, i * 1.5f, 0.75f, 700f, 1000f, 0.4f);
+                    sweep(b, i * 1.5f + 0.75f, 0.75f, 1000f, 700f, 0.4f);
+                }
+                break;
+            case "drip":
+                b = buf(1.4f);
+                for (int i = 0; i < 3; i++) sweep(b, 0.05f + i * 0.45f, 0.07f, 1900f, 900f, 0.5f - i * 0.1f);
+                break;
+            case "fire":
+                b = buf(2.6f);
+                noise(b, 0.0f, 2.6f, 0.3f, 500f, 0.8f);
+                Random fr = new Random(5);
+                for (int i = 0; i < 40; i++) noise(b, fr.nextFloat() * 2.4f, 0.012f, 0.4f + fr.nextFloat() * 0.5f, 5000f, 0f);
+                break;
+            case "bird":
+                b = buf(1.4f);
+                for (int i = 0; i < 4; i++) {
+                    sweep(b, 0.05f + i * 0.3f, 0.07f, 3000f + i * 150f, 4300f, 0.35f);
+                    sweep(b, 0.13f + i * 0.3f, 0.06f, 4200f, 3300f, 0.3f);
+                }
+                break;
+            case "dog":
+                b = buf(1.1f);
+                voice(b, 0.0f, 0.2f, 170f, 120f, 650f, 1050f, 1f, 0.5f, 0f);
+                voice(b, 0.45f, 0.22f, 160f, 110f, 650f, 1050f, 1f, 0.5f, 0f);
+                break;
+            case "cat":
+                b = buf(0.9f);
+                voice(b, 0.0f, 0.75f, 420f, 650f, 500f, 2100f, 0.8f, 0.15f, 5f);
+                break;
             default:
                 return null;
         }
         short[] out = new short[b.length];
         float peak = 0.0001f;
         for (float v : b) peak = Math.max(peak, Math.abs(v));
-        float g = peak > 0.9f ? 0.9f / peak : 1f;
+        float g = Math.min(4f, 0.85f / peak); // every effect about as loud as the others at the volume chosen
         for (int i = 0; i < b.length; i++) out[i] = (short) (Math.max(-1f, Math.min(1f, b[i] * g)) * 30000);
         return out;
     }
@@ -407,6 +527,97 @@ final class Sfx {
             float env = Math.min(1f, i / 300f) * Math.min(1f, (n - i) / 600f);
             float v = (float) (Math.signum(Math.sin(2 * Math.PI * 400 * t)) * 0.5 + Math.signum(Math.sin(2 * Math.PI * 500 * t)) * 0.5);
             b[s + i] += 0.3f * env * v;
+        }
+    }
+
+    // ------------------------------------------------------------------ voices, whistles, engines
+
+    /** A resonance at hz with the given width, applied to the whole signal. */
+    private static float[] band(float[] x, float hz, float width) {
+        double w0 = 2 * Math.PI * Math.min(hz, RATE * 0.45) / RATE, q = Math.max(0.5, hz / Math.max(40f, width));
+        double al = Math.sin(w0) / (2 * q), a0 = 1 + al, a1 = -2 * Math.cos(w0) / a0, a2 = (1 - al) / a0, b0 = al / a0;
+        float[] y = new float[x.length];
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (int i = 0; i < x.length; i++) {
+            double v = b0 * x[i] - b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1;
+            x1 = x[i];
+            y2 = y1;
+            y1 = v;
+            y[i] = (float) v;
+        }
+        return y;
+    }
+
+    /**
+     * A voiced sound ("ha", a scream, a bark, a meow): a buzzing tone whose pitch goes from f0a to f0b, shaped
+     * by two resonances (the vowel), with some breath mixed in. vib: a wobble in the pitch, in Hz.
+     */
+    private static void voice(float[] b, float at, float len, float f0a, float f0b, float f1, float f2, float amp, float breath, float vib) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        if (s >= b.length) return;
+        n = Math.min(n, b.length - s);
+        float[] src = new float[n];
+        Random r = new Random(s + 13);
+        double ph = 0;
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) n;
+            double f = f0a + (f0b - f0a) * t;
+            if (vib > 0) f *= 1 + 0.03 * Math.sin(2 * Math.PI * vib * i / RATE);
+            ph += f / RATE;
+            float saw = (float) (ph - Math.floor(ph)) * 2 - 1;
+            src[i] = saw * (1 - breath * 0.6f) + (r.nextFloat() * 2 - 1) * breath;
+        }
+        float[] y1 = band(src, f1, f1 * 0.18f + 60f), y2 = band(src, f2, f2 * 0.12f + 90f);
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) n;
+            float env = Math.min(1f, i / (RATE * 0.012f)) * (float) Math.pow(Math.sin(Math.PI * Math.pow(t, 0.7)), 0.6);
+            b[s + i] += amp * env * 0.9f * (y1[i] + 0.6f * y2[i]);
+        }
+    }
+
+    /** Noise between lo and hi Hz that swells in and out: breath, a gasp, a sneeze's start. peakAt: where in it the loudest part is (0..1). */
+    private static void bandNoise(float[] b, float at, float len, float lo, float hi, float amp, float peakAt) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        if (s >= b.length) return;
+        n = Math.min(n, b.length - s);
+        Random r = new Random(s + 29);
+        float[] src = new float[n];
+        for (int i = 0; i < n; i++) src[i] = r.nextFloat() * 2 - 1;
+        float[] y = band(src, (float) Math.sqrt(lo * hi), hi - lo);
+        for (int i = 0; i < n; i++) {
+            float t = i / (float) n;
+            float env = peakAt <= 0.01f ? (float) Math.exp(-5.0 * t) * Math.min(1f, i / 40f)
+                    : t < peakAt ? (float) Math.sin(0.5 * Math.PI * t / peakAt) : (float) Math.cos(0.5 * Math.PI * (t - peakAt) / (1 - peakAt));
+            b[s + i] += amp * env * y[i] * 1.6f;
+        }
+    }
+
+    /** A pure tone that glides from one pitch to another (a whistle, a drip, a bird, a siren). */
+    private static void sweep(float[] b, float at, float len, float from, float to, float amp) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        double ph = 0;
+        for (int i = 0; i < n && s + i < b.length; i++) {
+            float t = i / (float) n;
+            ph += 2 * Math.PI * (from + (to - from) * t) / RATE;
+            float env = Math.min(1f, i / 120f) * Math.min(1f, (n - i) / 160f);
+            b[s + i] += amp * env * (float) Math.sin(ph);
+        }
+    }
+
+    /** A car or motorcycle engine starting and idling: a low rough tone that rises and settles. */
+    private static void engine(float[] b, float at, float len) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        Random r = new Random(17);
+        double ph = 0;
+        float y = 0;
+        for (int i = 0; i < n && s + i < b.length; i++) {
+            float t = i / (float) n;
+            double f = 38 + 60 * Math.exp(-4 * t) * (t < 0.15 ? t / 0.15 : 1) + 6 * Math.sin(2 * Math.PI * 7 * t);
+            ph += f / RATE;
+            float pulse = (float) Math.pow(Math.max(0, Math.sin(2 * Math.PI * ph)), 3) * 2 - 0.6f;
+            y += 0.12f * (pulse + (r.nextFloat() - 0.5f) * 0.6f - y);
+            b[s + i] += 0.9f * y * Math.min(1f, i / 400f) * Math.min(1f, (n - i) / 3000f);
         }
     }
 }

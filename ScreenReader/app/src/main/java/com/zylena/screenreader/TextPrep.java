@@ -346,6 +346,18 @@ final class TextPrep {
     }
 
     /** Whether most of the screen is Tagalog, so titles like "Pahayag at Inspirasyon" get the Tagalog voice. */
+    /** A page that has a good share of Tagalog words, not only a majority: a Taglish story. */
+    static boolean hasTagalog(List<String> lines) {
+        int fil = 0, en = 0;
+        for (String l : lines) {
+            for (String w : l.toLowerCase(Locale.ROOT).split("[^\\p{L}']+")) {
+                if (TAGALOG.contains(w)) fil++;
+                else if (ENGLISH.contains(w)) en++;
+            }
+        }
+        return fil >= 12 && fil * 4 >= (fil + en);
+    }
+
     static boolean mostlyTagalog(List<String> lines) {
         int fil = 0, en = 0;
         for (String l : lines) {
@@ -1068,6 +1080,7 @@ final class TextPrep {
         }
         // A story's characters each get a voice of their own for what they say.
         String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
+        final boolean taglishStory = cast != null && hasTagalog(lines);
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
         lastMood = moodMode.equals("auto") ? Mood.lastWhy : "";
@@ -1145,7 +1158,9 @@ final class TextPrep {
             // A Tagalog or Taglish paragraph keeps one voice throughout, the way one person would read it,
             // instead of flipping to the English voice for each English sentence.
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
-            boolean para = fil || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
+            // In a story with Tagalog in it (Taglish too) every character, and the storyteller, keep the Tagalog voice:
+            // a character whose line has English words in it used to switch to the English voice and back.
+            boolean para = fil || taglishStory || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
             // A kept verse is never cut into sentences or chunks: its spaces are hidden meanwhile.
             if (hasVerse) cleaned = hideVerseSpaces(cleaned);
             for (String sentence : SENTENCE_END.split(cleaned)) {

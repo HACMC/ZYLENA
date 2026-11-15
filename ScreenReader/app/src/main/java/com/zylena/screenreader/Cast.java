@@ -58,6 +58,7 @@ final class Cast {
         String gender = "";
         String code;
         boolean sure; // the gender is from the user's list or a well-known name, not a guess
+        boolean frozen; // the voice was given on an earlier page: it stays, whatever is learned about the character later
 
         Person(String name) {
             this.name = name;
@@ -272,7 +273,7 @@ final class Cast {
         if (p != null && title != null && !p.sure) {
             p.gender = title;
             p.sure = true;
-            p.code = null;
+            if (!p.frozen) p.code = null;
         }
         if (p == null) {
             p = new Person(name);
@@ -296,7 +297,11 @@ final class Cast {
         learned = false;
         String[][] out = speakers0(lines, scope);
         // "he replied" further down told what a name didn't: the page is gone through again with that known.
-        return learned && out != null ? speakers0(lines, scope) : out;
+        if (learned && out != null) out = speakers0(lines, scope);
+        // From here on each character keeps the voice they have: it was heard (or about to be) on this page.
+        LinkedHashMap<String, Person> people = STORIES.get(scope);
+        if (out != null && people != null) for (Person p : people.values()) if (p.code != null) p.frozen = true;
+        return out;
     }
 
     private static boolean learned;
@@ -417,7 +422,7 @@ final class Cast {
                     if (p.gender.equals(g) || !p.sure) {
                         if (!p.gender.equals(g)) {
                             p.gender = g; // "she asked" tells what the name didn't
-                            p.code = null;
+                            if (!p.frozen) p.code = null; // (a voice already heard is kept)
                             learned = true;
                         }
                         p.sure = true;

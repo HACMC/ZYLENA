@@ -906,13 +906,32 @@ final class Speaker {
             applyUsual(lang);
             return g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length];
         }
-        Voice v = pool.get(n % pool.size());
+        // A character keeps the voice they were first given for as long as ZYLENA runs, even when the list of
+        // voices is reordered (a voice downloading, the connection coming and going).
+        String pin = lang + "|" + Cast.voice(who);
+        Voice v = null;
+        String had = castPinned.get(pin);
+        if (had != null) for (Voice c : pool) if (base(c.getName()).equals(had)) v = c;
+        if (v == null) {
+            java.util.Set<String> taken = new java.util.HashSet<>();
+            for (java.util.Map.Entry<String, String> e : castPinned.entrySet()) {
+                if (e.getKey().startsWith(lang + "|c" + g) && !e.getKey().equals(pin)) taken.add(e.getValue());
+            }
+            for (int k = 0; k < pool.size() && v == null; k++) {
+                Voice c = pool.get((n + k) % pool.size());
+                if (!taken.contains(base(c.getName()))) v = c;
+            }
+            if (v == null) v = pool.get(n % pool.size());
+            castPinned.put(pin, base(v.getName()));
+        }
         if (!v.equals(lastSet)) tts.setVoice(v);
         lastSet = v;
         return AGAIN[(n / pool.size()) % AGAIN.length];
     }
 
     private final java.util.Map<String, List<Voice>> castPools = new java.util.HashMap<>();
+    /** Each character's voice ("en|cf1" → the voice's name), kept so a character never changes voice. */
+    private final java.util.Map<String, String> castPinned = new java.util.HashMap<>();
     private long castPoolsAt;
 
     /** A voice's name without "-local" / "-network": the two are one voice, on the phone and online. */
@@ -983,6 +1002,7 @@ final class Speaker {
 
     void voicesChanged() {
         castPools.clear();
+        castPinned.clear();
     }
 
     /**
