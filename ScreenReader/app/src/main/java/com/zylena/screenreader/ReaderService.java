@@ -373,6 +373,7 @@ public class ReaderService extends AccessibilityService {
         if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
         if (!TextPrep.lastMood.isEmpty()) Logs.d(this, "kind of text: " + TextPrep.lastMood);
         if (!TextPrep.lastCast.isEmpty()) Logs.d(this, "story characters: " + TextPrep.lastCast);
+        if (!TextPrep.lastBibleCast.isEmpty()) Logs.d(this, "Bible speakers: " + TextPrep.lastBibleCast);
         if (!TextPrep.lastRefLine.isEmpty()) Logs.d(this, "a line with Bible references that is read: " + TextPrep.lastRefLine);
         return out;
     }

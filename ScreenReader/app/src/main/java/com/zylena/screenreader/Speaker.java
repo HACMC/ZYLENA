@@ -977,6 +977,12 @@ final class Speaker {
                 pool.add(twin(v, all));
             }
             pool.sort((a, b) -> castScore(b, lang) - castScore(a, lang));
+            // The Bible voice (the narrator of Bible text) is not also a character's, while other voices are left.
+            Voice bible = secondVoice(lang);
+            if (bible != null && pool.size() > 1) {
+                String bb = base(bible.getName());
+                pool.removeIf(v -> base(v.getName()).equals(bb));
+            }
         }
         castPools.put(key, pool);
         return pool;

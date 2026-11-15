@@ -892,6 +892,8 @@ final class TextPrep {
     static volatile boolean povOn = true;
     /** In a story, each character's quoted words are read in a voice of their own. */
     static volatile boolean castOn = true;
+    /** For the log: who talks in the Bible text of the page just prepared. */
+    static volatile String lastBibleCast = "";
     /** Sound effects in stories (Settings, Voice). */
     static volatile boolean sfxOn = true;
     /** For the log: the characters found on the page just prepared. */
@@ -1058,6 +1060,7 @@ final class TextPrep {
         List<Seg> out = new ArrayList<>();
         int dropped = 0;
         lastCodes = "";
+        lastBibleCast = "";
         lastRefLine = "";
         Bible.page(lines);
         String pendingFx = "";
@@ -1143,6 +1146,16 @@ final class TextPrep {
             // Before sentence splitting, so "Gen. 1:1-5" isn't cut at the abbreviation's full stop.
             boolean fil = Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL);
             cleaned = Bible.expand(cleaned, fil);
+            String[] bibleQuotes = null;
+            if (verse && castOn && !heading) {
+                // Bible text has people in it who talk: the words each says get their own voice, the narrator keeps the Bible voice.
+                BibleCast.Result bc = BibleCast.annotate(cleaned);
+                if (bc != null) {
+                    cleaned = bc.text;
+                    bibleQuotes = bc.codes;
+                    if (lastBibleCast.length() < 300) lastBibleCast += (lastBibleCast.isEmpty() ? "" : " | ") + bc.summary;
+                }
+            }
             if (verse) {
                 cleaned = Bible.stripVerseNumbers(cleaned);
                 if (cleaned.isEmpty() || cleaned.chars().noneMatch(Character::isLetterOrDigit)) continue;
@@ -1185,6 +1198,7 @@ final class TextPrep {
                     Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     if (cast != null) g.cast = cast[li];
+                    else if (bibleQuotes != null) g.cast = bibleQuotes;
                     g.mood = mood;
                     g.story = cast != null;
                     g.sfx = fx;
