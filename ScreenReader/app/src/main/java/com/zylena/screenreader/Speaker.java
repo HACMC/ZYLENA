@@ -258,6 +258,26 @@ final class Speaker {
         return (long) (r.text.length() * 1000L / (11f * Math.max(0.3f, rateFor(r.lang))));
     }
 
+    /**
+     * For the "sounded wrong" mark: everything the reader decided for the sentence being said (and the one before), so what sounded
+     * wrong can be found and fixed, with no need to describe it.
+     */
+    String describeCurrent() {
+        List<TextPrep.Seg> rs = currentRuns;
+        if (rs == null || rs.isEmpty()) return "nothing is being read";
+        int i = Math.max(0, Math.min(curRun, rs.size() - 1));
+        StringBuilder sb = new StringBuilder();
+        if (i > 0) sb.append("before: ").append(rs.get(i - 1).text.replace('\n', ' ')).append(" || ");
+        TextPrep.Seg s = rs.get(i);
+        sb.append("run ").append(i).append(" [").append(s.lang).append("] voices=").append(s.cast == null ? "none" : java.util.Arrays.toString(s.cast))
+                .append(" who=").append(s.who).append(" mood=").append(s.mood).append(" narrFeel=").append(s.narrFeel).append(" sfx=").append(s.sfx)
+                .append(" story=").append(s.story).append(" scene=").append(s.scene).append(" ref=").append(s.ref)
+                .append(" | settings: fx=").append(Prefs.flag(ctx, "voice_fx", true)).append(" natural=").append(Prefs.flag(ctx, "natural", true))
+                .append(" sfx=").append(Prefs.flag(ctx, "sfx", true)).append(" rate=").append(Prefs.rate(ctx)).append(" pitch=").append(Prefs.pitch(ctx))
+                .append(" || text: ").append(s.text.replace('\n', ' '));
+        return sb.toString();
+    }
+
     /** The first paragraphs of what will be read next are translated ahead, so reading can start at once. */
     void warm(List<TextPrep.Seg> segs) {
         if (!Prefs.translate(ctx) || segs.isEmpty() || Prefs.testMode(ctx)) return;

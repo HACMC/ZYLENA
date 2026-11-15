@@ -67,6 +67,25 @@ jobs:
       name: ${{ env.ZYLENA_NAME }}
       signed: ${{ env.HAS_KEY }}
 
+  # The rules that decide who speaks, how a line is said and which sound plays, run on cases that once went wrong
+  # (ScreenReader/testing/texttests). Not part of what holds a release back: look at this job's result in the run.
+  text-rules:
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Run the text rules
+        working-directory: ScreenReader
+        run: |
+          JAR=$(ls -d "$ANDROID_HOME"/platforms/android-*/android.jar | sort -V | tail -1)
+          mkdir -p /tmp/tt
+          javac -cp "$JAR" -d /tmp/tt -sourcepath app/src/main/java testing/texttests/TextTests.java
+          java -cp "/tmp/tt:$JAR" com.zylena.screenreader.TextTests
+
   # A virtual phone reads a practice lesson built like Sabbath School; the check fails if the
   # paragraph being read is ever cut off or the outline is not on it. Only a passing build is released.
   # Small changes that don't touch reading or scrolling skip it: put [no phone test] in the commit message.

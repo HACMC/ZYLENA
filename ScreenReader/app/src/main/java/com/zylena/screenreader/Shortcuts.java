@@ -22,7 +22,8 @@ final class Shortcuts {
             {"top", "⤒", "From top"},
             {"picture", "🖼", "Picture text"},
             {"audio", "💾", "Save audio"},
-            {"fix", "✎", "Fix a word"}};
+            {"fix", "✎", "Fix a word"},
+            {"wrong", "⚑", "Sounded wrong"}};
 
     static final int SLOTS = 4;
 

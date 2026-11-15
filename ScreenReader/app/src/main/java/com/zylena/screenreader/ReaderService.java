@@ -3440,6 +3440,11 @@ public class ReaderService extends AccessibilityService {
             case "fix":
                 fixWord();
                 break;
+            case "wrong":
+                // Everything the reader decided for what is being said goes into the log, so it can be found and fixed.
+                Logs.d(this, "MARK sounded wrong: " + sp.describeCurrent());
+                android.widget.Toast.makeText(this, "Marked in the log. Send the log when you are done listening.", android.widget.Toast.LENGTH_SHORT).show();
+                break;
         }
     }
 
@@ -3453,6 +3458,7 @@ public class ReaderService extends AccessibilityService {
     private void showFan() {
         if (fan != null || button == null) return;
         List<String[]> items = new ArrayList<>(Shortcuts.chosen(this));
+        items.add(new String[]{"wrong", "\u2691", "Sounded wrong"});
         items.add(new String[]{"panel", "\u2630", "All controls"});
         items.add(new String[]{"search", "\uD83D\uDD0D", "Search settings"});
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
