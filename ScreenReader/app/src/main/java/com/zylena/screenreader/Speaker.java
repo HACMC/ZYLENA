@@ -828,7 +828,7 @@ final class Speaker {
         // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
         // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
         String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
-        final boolean dsp = !translating && !Prefs.testMode(ctx) && Prefs.flag(ctx, "deep_dsp", true);
+        final boolean dsp = !translating && !Prefs.testMode(ctx) && Prefs.flag(ctx, "voice_fx", true);
         float partsTotal = 1f, partsDone = 0f;
         {
             int tot = 0;
@@ -845,12 +845,15 @@ final class Speaker {
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
-            final boolean deep = divineLine && dsp;
-            if (divineLine && !deep) r *= 0.92f; // slower, with weight
+            // A character with a voice of their own kind (God's, a child's, an old person's, a husky one, a boss's, a maid's)
+            // is made by processing the sound; see VoiceFx.
+            final VoiceFx.Style fx = dsp ? styleFor(parts.get(k)[3]) : null;
+            if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
+            else if (divineLine) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             float vm = applyVoice(lang, parts.get(k)[3]);
-            // (Made deep by processing the sound after the voice has said it: only a little lower from the engine itself.)
-            p *= deep ? vm / DEEP * ENGINE_DEEP : vm;
+            if (fx != null) p *= divineLine ? vm / DEEP : vm; // the pitch is changed afterwards
+            else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
             p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
@@ -884,7 +887,7 @@ final class Speaker {
                 applyVoice(fl2, who);
                 tts.setSpeechRate(fr);
                 tts.setPitch(fp);
-                if (deep) synthDeep(say, id, fr, fp, fl, run, part, lastPart, gen);
+                if (fx != null) synthDeep(say, id, fr, fp, fl * fx.vol, run, part, lastPart, gen, fx);
                 else tts.speak(say, TextToSpeech.QUEUE_ADD, fhow, id);
                 if (think) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
             };
@@ -904,17 +907,25 @@ final class Speaker {
      * (the sound drops about three semitones): a voice with weight, whatever voice the phone uses.
      * What follows waits until they have been played.
      */
-    private static final float DEEP = 0.78f, ENGINE_DEEP = 0.92f, DEEP_PLAY = 0.84f;
+    private static final float DEEP = 0.78f;
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
     private final java.util.Map<String, Object[]> deepReq = new java.util.concurrent.ConcurrentHashMap<>();
     private android.media.AudioTrack deepTrack;
     private Runnable deepFinishTask;
 
-    private void synthDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen) {
+    /** The kind of voice a character has, from the voice code: God's, or what the story says they are like; null for the plain voice. */
+    private static VoiceFx.Style styleFor(String who) {
+        String v = Cast.voice(who);
+        if (v == null || !Cast.isCode(v)) return null;
+        if (v.startsWith("cd")) return VoiceFx.get("deep");
+        return VoiceFx.get(Cast.styleOf(who));
+    }
+
+    private void synthDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen, VoiceFx.Style fx) {
         final String rid = "deep:" + id;
         java.io.File f = new java.io.File(ctx.getCacheDir(), "deep-" + id.replace(':', '_') + ".wav");
-        deepReq.put(rid, new Object[]{f, loud, run, part, last, text, rate, pitch, gen, id});
+        deepReq.put(rid, new Object[]{f, loud, run, part, last, text, rate, pitch, gen, id, fx});
         deepHold = true;
         int rc = tts.synthesizeToFile(text, null, f, rid);
         if (rc != TextToSpeech.SUCCESS) {
@@ -938,8 +949,8 @@ final class Speaker {
         }
         if (gen != generation || tts == null) return;
         Logs.d(ctx, "deep voice: the sound could not be made, reading it the ordinary way");
-        tts.setSpeechRate((Float) d[6]);
-        tts.setPitch((Float) d[7] / ENGINE_DEEP * DEEP);
+        tts.setSpeechRate((Float) d[6] * ((VoiceFx.Style) d[10]).pf);
+        tts.setPitch((Float) d[7] * ((VoiceFx.Style) d[10]).pf);
         android.os.Bundle how = new android.os.Bundle();
         how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, (Float) d[1]);
         tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, how, (String) d[9]);
@@ -966,22 +977,28 @@ final class Speaker {
             f.delete();
             int[] w = wavInfo(b);
             if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
-            int sr = w[0], ch = w[1], frames = w[3] / 2 / ch;
+            int sr = w[0], ch = w[1];
             short[] pcm = new short[w[3] / 2];
             java.nio.ByteBuffer.wrap(b, w[2], w[3]).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm);
+            if (ch == 2) { // mono
+                short[] mono = new short[pcm.length / 2];
+                for (int i = 0; i < mono.length; i++) mono[i] = (short) ((pcm[2 * i] + pcm[2 * i + 1]) / 2);
+                pcm = mono;
+            }
+            pcm = VoiceFx.process(pcm, sr, (VoiceFx.Style) d[10]);
+            final int frames = pcm.length;
             android.media.AudioTrack tr = new android.media.AudioTrack.Builder()
                     .setAudioAttributes(attrs)
                     .setAudioFormat(new android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
-                            .setSampleRate(sr).setChannelMask(ch == 2 ? android.media.AudioFormat.CHANNEL_OUT_STEREO : android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                            .setSampleRate(sr).setChannelMask(android.media.AudioFormat.CHANNEL_OUT_MONO).build())
                     .setTransferMode(android.media.AudioTrack.MODE_STATIC)
                     .setBufferSizeInBytes(pcm.length * 2).build();
             tr.write(pcm, 0, pcm.length);
-            tr.setVolume((Float) d[1]);
-            tr.setPlaybackRate(Math.round(sr * DEEP_PLAY));
+            tr.setVolume(Math.min(1f, (Float) d[1]));
             if (part == 0) runStarted(run, gen);
             deepTrack = tr;
             tr.play();
-            Logs.d(ctx, "deep voice: played " + Math.round(frames * 1000f / (sr * DEEP_PLAY)) + " ms, " + Math.round((1 - DEEP_PLAY) * 100) + "% slower and lower");
+            Logs.d(ctx, "voice fx: " + ((VoiceFx.Style) d[10]).name + ", " + Math.round(frames * 1000f / sr) + " ms");
             deepFinishTask = () -> {
                 try {
                     tr.stop();
@@ -993,14 +1010,14 @@ final class Speaker {
                 releaseHeld(gen);
                 if (last) allDone(gen);
             };
-            main.postDelayed(deepFinishTask, (long) (frames * 1000L / (sr * DEEP_PLAY)) + 250);
+            main.postDelayed(deepFinishTask, frames * 1000L / sr + 250);
         } catch (Throwable e) {
             Logs.d(ctx, "deep voice failed: " + e);
             f.delete();
             if (gen == generation) {
                 // Read it the ordinary way instead.
-                tts.setSpeechRate((Float) d[6]);
-                tts.setPitch((Float) d[7] / ENGINE_DEEP * DEEP);
+                tts.setSpeechRate((Float) d[6] * ((VoiceFx.Style) d[10]).pf);
+                tts.setPitch((Float) d[7] * ((VoiceFx.Style) d[10]).pf);
                 tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, null, (String) d[9]);
                 releaseHeld(gen);
             }

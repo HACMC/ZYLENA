@@ -33,16 +33,26 @@ final class Cast {
                 && Character.isDigit(who.charAt(2));
     }
 
-    /** The voice part of "cf1~w" (a character's voice, whispered): "cf1". */
+    /** The voice part of "cf1^husky~w" (a character's voice, husky, whispered): "cf1". */
     static String voice(String who) {
-        int at = who == null ? -1 : who.indexOf('~');
+        if (who == null) return null;
+        int a = who.indexOf('~'), b = who.indexOf('^');
+        int at = a < 0 ? b : b < 0 ? a : Math.min(a, b);
         return at < 0 ? who : who.substring(0, at);
     }
 
-    /** The feeling part of "cf1~w": "w"; "" when it is said plainly. */
+    /** The feeling part of "cf1^husky~w": "w"; "" when it is said plainly. */
     static String feel(String who) {
         int at = who == null ? -1 : who.indexOf('~');
         return at < 0 ? "" : who.substring(at + 1);
+    }
+
+    /** The kind of voice of "cf1^husky~w": "husky"; "" for the character's plain voice. */
+    static String styleOf(String who) {
+        int b = who == null ? -1 : who.indexOf('^');
+        if (b < 0) return "";
+        int e = who.indexOf('~', b);
+        return who.substring(b + 1, e < 0 ? who.length() : e);
     }
 
     static char genderOf(String who) {
@@ -63,6 +73,8 @@ final class Cast {
         String gender = "";
         String code;
         boolean sure; // the gender is from the user's list or a well-known name, not a guess
+        String style = ""; // what kind of person the story says this is (a VoiceFx style), "" when it says nothing
+        final Map<String, Integer> voiceHits = new HashMap<>(); // how often the story describes their voice a certain way
         boolean frozen; // the voice was given on an earlier page: it stays, whatever is learned about the character later
 
         Person(String name) {
@@ -241,6 +253,11 @@ final class Cast {
         return w.length > 1 && HONOR.containsKey(w[0]) ? w[1] : w[0];
     }
 
+    private static String honorWord(String name) {
+        String[] w = name.toLowerCase(Locale.ROOT).split("[ -]");
+        return w.length > 1 && HONOR.containsKey(w[0]) ? w[0] : null;
+    }
+
     private static String honor(String name) {
         String[] w = name.toLowerCase(Locale.ROOT).split("[ -]");
         return w.length > 1 ? HONOR.get(w[0]) : null;
@@ -291,6 +308,7 @@ final class Cast {
             }
             people.put(name, p);
         }
+        if (p.style.isEmpty() && honorWord(full) != null) p.style = Persona.ofHonor(honorWord(full));
         return p;
     }
 
@@ -300,16 +318,44 @@ final class Cast {
      */
     static synchronized String[][] speakers(List<String> lines, String scope) {
         learned = false;
+        rerun = false;
         String[][] out = speakers0(lines, scope);
         // "he replied" further down told what a name didn't: the page is gone through again with that known.
-        if (learned && out != null) out = speakers0(lines, scope);
+        if (learned && out != null) {
+            rerun = true;
+            out = speakers0(lines, scope);
+            rerun = false;
+        }
         // From here on each character keeps the voice they have: it was heard (or about to be) on this page.
         LinkedHashMap<String, Person> people = STORIES.get(scope);
         if (out != null && people != null) for (Person p : people.values()) if (p.code != null) p.frozen = true;
         return out;
     }
 
-    private static boolean learned;
+    private static boolean learned, rerun;
+
+    private static final Pattern RELATIVE = Pattern.compile("(?i)\\b(?:her|his|their|my|your|our|its)\\s+(?:boss|maid|nanny|yaya|butler|grandma|grandmother|grandfather|grandpa|lola|lolo|servant|mother|father|baby|kid|child)\\b");
+
+    /** A sentence that says who one named character is (a maid, a boy of seven, an old woman): they are that from now on. */
+    private static void learnRoles(String narration, Map<String, Person> people) {
+        for (String sentence : narration.split("(?<=[.!?\u2026])\\s+")) {
+            // "her boss", "his grandma": somebody else's relation, not who this character is.
+            String role = Persona.ofRole(RELATIVE.matcher(sentence).replaceAll(" "));
+            if (role.isEmpty()) continue;
+            Set<String> named = new HashSet<>();
+            Matcher m = CAP_WORD.matcher(sentence);
+            while (m.find()) {
+                String w = m.group().toLowerCase(Locale.ROOT).replaceAll("['\u2019]s?$", "");
+                if (people.containsKey(w)) named.add(w);
+            }
+            if (named.size() != 1) continue;
+            Person p = people.get(named.iterator().next());
+            if (!p.style.equals(role)) {
+                p.style = role;
+                learned = true;
+            }
+        }
+    }
 
     private static String[][] speakers0(List<String> lines, String scope) {
         int n = lines.size();
@@ -372,6 +418,7 @@ final class Cast {
             boolean any = false;
             for (int[] s : sp) any |= spoken(l, s);
             String narration = narr[i].replace('\u0001', ' ').trim();
+            learnRoles(narration, people);
             if (!any) {
                 // Who this piece of the story is about: the one a following line without a "said" most likely belongs to.
                 lastNarrationPerson = null;
@@ -448,6 +495,15 @@ final class Cast {
             }
             String code = speaker.isEmpty() || speaker.equals("I") ? "" : speaker.startsWith("\u0002") ? "c" + speaker.charAt(1) + "0"
                     : codeFor(people, people.get(speaker));
+            // What kind of voice they have: "in a husky voice" for this line, or what the story says of them all along.
+            String vs = Persona.ofVoice(narration);
+            Person sp0 = people.get(speaker);
+            if (!vs.isEmpty() && sp0 != null && !rerun && sp0.voiceHits.merge(vs, 1, Integer::sum) >= 2 && !sp0.style.equals(vs)) {
+                sp0.style = vs;
+                learned = true;
+            }
+            String style = !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
+            String styleTag = style.isEmpty() || code.isEmpty() || code.equals(DIVINE_CODE) ? "" : "^" + style;
             out[i] = new String[sp.size()];
             for (int k = 0; k < sp.size(); k++) {
                 if (!spoken(l, sp.get(k))) {
@@ -456,7 +512,7 @@ final class Cast {
                 }
                 // How it is said: "she whispered", "pasigaw na sabi niya", or ALL IN CAPITALS.
                 String feel = TextPrep.feelOn ? Mood.feeling(narration, l.substring(sp.get(k)[0], sp.get(k)[1])) : "";
-                out[i][k] = code + (feel.isEmpty() ? "" : "~" + feel);
+                out[i][k] = code + styleTag + (feel.isEmpty() ? "" : "~" + feel);
             }
             // Names said in this line: who may answer, and who "she" may be next.
             Matcher m = CAP_WORD.matcher(l);

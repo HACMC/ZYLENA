@@ -531,9 +531,10 @@ public class MainActivity extends Activity {
                 "A knock, a door, a ringing phone, thunder and the like are played as the story tells of them. A sound written out "
                         + "(\"Ring, ring!\") is played instead of said. Made on the phone, nothing to download.", "sfx", true));
         Ui.add(st, numSlider(R.drawable.ic_eq, "Sound effects volume", 0f, 1f, 0.05f, "sfx_volume", 0.7f, "%.2f"));
-        Ui.add(st, flagRow(R.drawable.ic_person, "Deep voice for God and Jesus",
-                "What God, Jesus and the Holy Spirit say is played lower and slower, whatever voice the phone uses, so the authority is heard. "
-                        + "Off: the voice is only asked to speak lower, which some online voices ignore.", "deep_dsp", true));
+        Ui.add(st, flagRow(R.drawable.ic_person, "Voices that suit the character",
+                "A child's voice, an old person's, a husky one, a mob boss's, a maid's: found from how the story describes them (\"a seven-year-old girl\", "
+                        + "\"in a husky voice\", \"the maid\"). God, Jesus and the Holy Spirit are deep and slow. Made by changing the sound, so it works with any "
+                        + "voice. Off: only the voice's own pitch is asked for, which some online voices ignore.", "voice_fx", true));
         castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
         Ui.add(st, castFilRow.view);
         castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
