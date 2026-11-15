@@ -1066,7 +1066,7 @@ final class Speaker {
             String base = v.equals(Cast.JESUS_CODE) ? "jesus" : v.equals(Cast.SPIRIT_CODE) ? "spirit" : "deep";
             return VoiceFx.get(base + (lang.equals(TextPrep.FIL) ? "_fil" : ""));
         }
-        String st = Cast.styleOf(who);
+        String st = Persona.kindOf(Cast.styleOf(who));
         if (st.equals("plain")) return null;
         if (!st.isEmpty()) return VoiceFx.get(st);
         char g = Cast.genderOf(v);
@@ -1471,6 +1471,16 @@ final class Speaker {
         final boolean divine = g == 'd';
         if (divine) g = 'm';
         final float deep = divine ? DEEP : 1f;
+        // A character with an accent (British, Irish, Australian, Indian) is given a voice of that country, when the phone has one.
+        final String accent = divine ? "" : Cast.accentOf(who);
+        if (!accent.isEmpty() && !lang.equals(TextPrep.FIL)) {
+            Voice av = accentVoice(lang, g, accent, who);
+            if (av != null) {
+                if (!av.equals(lastSet)) tts.setVoice(av);
+                lastSet = av;
+                return 1f;
+            }
+        }
         List<Voice> all = castPool(lang, g);
         // The best man's voice is kept for God and Jesus when there is another to give the rest.
         // The best men's voices are kept for the Father, the Son and the Spirit when there are others to give the rest.
@@ -1506,6 +1516,46 @@ final class Speaker {
     }
 
 
+
+    private final java.util.Set<String> accentMissing = new java.util.HashSet<>();
+
+    /** A voice of the country (GB, IE, AU, IN) for this character, kept for as long as ZYLENA runs; null when the phone has none. */
+    private Voice accentVoice(String lang, char g, String accent, String who) {
+        String country = accent.toUpperCase(Locale.ROOT);
+        String pin = lang + "|" + Cast.voice(who) + "@" + accent;
+        List<Voice> all = voicesFor(lang);
+        Voice found = null;
+        String had = castPinned.get(pin);
+        if (had != null) for (Voice c : all) if (base(c.getName()).equals(had)) found = c;
+        if (found == null) {
+            Voice best = null, bestAny = null;
+            int bestScore = Integer.MIN_VALUE, bestAnyScore = Integer.MIN_VALUE;
+            for (Voice v : all) {
+                if (!v.getLocale().getCountry().equalsIgnoreCase(country)) continue;
+                char vg = genderOf(v);
+                if (vg == 'x') continue;
+                int sc = v.getQuality();
+                if (vg == g || vg == '?') {
+                    if (vg == g) sc += 500;
+                    if (sc > bestScore) {
+                        bestScore = sc;
+                        best = v;
+                    }
+                } else if (sc > bestAnyScore) {
+                    bestAnyScore = sc;
+                    bestAny = v;
+                }
+            }
+            found = best != null ? twin(best, all) : null;
+            if (found == null && bestAny != null) found = twin(bestAny, all);
+            if (found == null) {
+                if (accentMissing.add(lang + accent)) Logs.d(ctx, "no " + country + " voice on this phone for the " + accent + " accent: the usual voices are used");
+                return null;
+            }
+            castPinned.put(pin, base(found.getName()));
+        }
+        return found;
+    }
 
     private final java.util.Map<String, List<Voice>> castPools = new java.util.HashMap<>();
     /** Each character's voice ("en|cf1" → the voice's name), kept so a character never changes voice. */

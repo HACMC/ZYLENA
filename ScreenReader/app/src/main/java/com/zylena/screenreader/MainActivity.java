@@ -990,9 +990,12 @@ public class MainActivity extends Activity {
         Speaker.get(this).speak(segs, false);
     }
 
-    private static final String[] CHAR_STYLE_IDS = {"", "none", "child", "teen", "elder", "husky", "gruff", "boss", "villain", "maid", "butler", "gentle", "cute", "squeaky", "bass"};
+    private static final String[] CHAR_STYLE_IDS = {"", "none", "child", "teen", "elder", "husky", "gruff", "boss", "villain", "maid", "butler", "gentle", "cute", "squeaky", "bass", "maarte"};
     private static final String[] CHAR_STYLE_NAMES = {"Automatic (from the story)", "Plain voice", "Child", "Teen", "Elder (old person)", "Husky", "Gruff", "Boss (mob boss)", "Villain",
-            "Maid", "Butler", "Gentle", "Cute", "Squeaky", "Deep bass"};
+            "Maid", "Butler", "Gentle", "Cute", "Squeaky", "Deep bass", "Maarte (sosyal, conyo)"};
+
+    private static final String[] ACCENT_IDS = {"", "gb", "ie", "au", "in"};
+    private static final String[] ACCENT_NAMES = {"Automatic / the usual accent", "British", "Irish", "Australian", "Indian"};
 
     /** Every character met so far; a tap lets the user say man or woman and what kind of voice. */
     private void pickCharacter() {
@@ -1039,17 +1042,19 @@ public class MainActivity extends Activity {
                 .setTitle(name + ": a man or a woman?")
                 .setItems(genders, (d, g) -> new AlertDialog.Builder(this)
                         .setTitle(name + ": what kind of voice?")
-                        .setItems(CHAR_STYLE_NAMES, (d2, st) -> {
+                        .setItems(CHAR_STYLE_NAMES, (d2, st) -> new AlertDialog.Builder(this)
+                        .setTitle(name + ": what accent?")
+                        .setItems(ACCENT_NAMES, (d3, ac) -> {
                             String key = name.trim().toLowerCase(java.util.Locale.ROOT);
                             StringBuilder out = new StringBuilder();
                             for (String line : Prefs.castOverrides(this).split("\n")) {
                                 if (line.isEmpty() || line.toLowerCase(java.util.Locale.ROOT).startsWith(key + "|")) continue;
                                 out.append(line).append('\n');
                             }
-                            if (!gid[g].isEmpty() || !CHAR_STYLE_IDS[st].isEmpty()) out.append(key).append('|').append(gid[g]).append('|').append(CHAR_STYLE_IDS[st]).append('\n');
+                            if (!gid[g].isEmpty() || !CHAR_STYLE_IDS[st].isEmpty() || !ACCENT_IDS[ac].isEmpty()) out.append(key).append('|').append(gid[g]).append('|').append(CHAR_STYLE_IDS[st]).append(ACCENT_IDS[ac].isEmpty() ? "" : "@" + ACCENT_IDS[ac]).append('\n');
                             Prefs.setCastOverrides(this, out.toString().trim());
                             android.widget.Toast.makeText(this, name + ": saved. It is used the next time the reader reaches them.", android.widget.Toast.LENGTH_LONG).show();
-                        }).show())
+                        }).show()).show())
                 .show();
     }
 

@@ -73,6 +73,7 @@ final class VoiceFx {
         add("villain", 0.88f, 0.90f, 0f, 0.06f, 0.12f, 1f, true);
         add("maid", 1.08f, 0.98f, 0f, 0.03f, 0f, 0.92f, false); // polite, light
         add("butler", 0.94f, 0.94f, 0f, 0.02f, 0f, 0.95f, false);
+        add("maarte", 1.10f, 0.95f, 0f, 0f, 0f, 1f, false); // affected, "sosyal": a little higher and slower, with care
         add("gentle", 1.05f, 0.95f, 0f, 0.07f, 0f, 0.85f, false);
     }
 

@@ -23,6 +23,8 @@ final class Persona {
             + "the don|boss)\\b");
     private static final Pattern MAID = p("\\b(?:maid|housemaid|servant|housekeeper|nanny|katulong|kasambahay|yaya)\\b");
     private static final Pattern BUTLER = p("\\b(?:butler|valet)\\b");
+    /** Affected, pretentious, "sosyal" or "conyo" speech: said higher and a little slower, with care. */
+    private static final Pattern MAARTE = p("\\b(?:maarte|maarteng|pa-?sosyal|sosyal|conyo|pa-?conyo|snob|snobby|snobbish|bratinella|spoiled brat)\\b");
     private static final Pattern VILLAIN = p("\\b(?:villain|witch|sorcerer|sorceress|demon|devil|satan|satanas|lucifer|manunukso|tempter|tyrant|warlock|dark lord)\\b");
     private static final Pattern ELDER = p("\\b(?:old (?:man|woman|lady|gentleman|farmer|fisherman)|elderly|grandma|grandpa|grandmother|grandfather|granny|grandpa|lola|lolo|"
             + "matanda|gray-haired|grey-haired|white-haired|wrinkled|aged)\\b");
@@ -57,6 +59,7 @@ final class Persona {
             if (age >= 65) return "elder";
         }
         if (BOSS.matcher(s).find()) return "boss";
+        if (MAARTE.matcher(s).find()) return "maarte";
         if (VILLAIN.matcher(s).find()) return "villain";
         if (BUTLER.matcher(s).find()) return "butler";
         if (MAID.matcher(s).find()) return "maid";
@@ -104,8 +107,53 @@ final class Persona {
     private static final Pattern GENTLE = p("\\b(?:soft|gentle|sweet|tender|soothing|calm|timid|shy|meek|silky|velvety|warm|kind)\\b(?:\\s+\\w+)?\\s+" + VOICE_NOUN
             + "|\\bmahinang boses\\b");
 
+    private static final Pattern MAARTE_VOICE = p("\\b(?:snobby|snobbish|posh|prissy|haughty|pretentious|affected|maarte|sosyal|conyo|nasal|bratty|diva)\\b(?:\\s+\\w+)?\\s+" + VOICE_NOUN
+            + "|\\b(?:maarteng|pa-?sosyal(?:ng)?|conyo)\\s+(?:boses|pananalita|accent)|\\b(?:sniffed|drawled|simpered|huffily|haughtily|snootily)\\b");
+
+    // ------------------------------------------------------------------ accents
+
+    private static final String PLACE = "(?:british|english|irish|scottish|welsh|australian|aussie|indian|american|london|england|britain|ireland|dublin|scotland|sydney|australia|india|mumbai|delhi)";
+    private static final Pattern ACCENT_SAID = p("\\b(" + PLACE + ")\\s+(?:accent|drawl|lilt|brogue|twang)\\b|\\baccent\\s+(?:of|from)\\s+(?:a\\s+)?(" + PLACE + ")\\b"
+            + "|\\b(?:with|in)\\s+an?\\s+(" + PLACE + ")\\s+(?:voice|accent)\\b");
+    private static final Pattern ACCENT_PERSON = p("\\b(?:an?\\s+|the\\s+)(british|irish|scottish|australian|aussie|indian|englishman|englishwoman|londoner|briton|scotsman|irishman|irishwoman)"
+            + "(?:\\s+(?:man|woman|guy|girl|gentleman|lady|boy|lord|duke|butler|agent|doctor|teacher|actor|actress|singer|model|student|businessman|prince|princess))?\\b"
+            + "|\\b(?:from|of)\\s+(london|england|britain|the uk|ireland|dublin|scotland|sydney|australia|india|mumbai|delhi)\\b");
+
+    /** The country of the accent a sentence gives somebody ("a British accent", "an Irish girl"): gb, ie, au, in; or "" when none is said. */
+    static String ofAccent(String s) {
+        String w = null;
+        Matcher m = ACCENT_SAID.matcher(s);
+        if (m.find()) for (int g = 1; g <= m.groupCount() && w == null; g++) w = m.group(g);
+        if (w == null) {
+            m = ACCENT_PERSON.matcher(s);
+            if (m.find()) for (int g = 1; g <= m.groupCount() && w == null; g++) w = m.group(g);
+        }
+        if (w == null) return "";
+        w = w.toLowerCase(Locale.ROOT);
+        if (w.matches("british|english|englishman|englishwoman|london|londoner|england|britain|briton|the uk|scottish|scotsman|scotland|welsh")) return "gb";
+        if (w.matches("irish|irishman|irishwoman|ireland|dublin")) return "ie";
+        if (w.matches("australian|aussie|sydney|australia")) return "au";
+        if (w.matches("indian|india|mumbai|delhi")) return "in";
+        return "";
+    }
+
+    /** The kind of voice in a style such as "child@gb" (the accent is not part of it): "child". */
+    static String kindOf(String style) {
+        if (style == null) return "";
+        int at = style.indexOf('@');
+        return at < 0 ? style : style.substring(0, at);
+    }
+
+    /** The accent in a style such as "child@gb": "gb"; "" for none. */
+    static String accentIn(String style) {
+        if (style == null) return "";
+        int at = style.indexOf('@');
+        return at < 0 ? "" : style.substring(at + 1);
+    }
+
     /** From a sentence that tells how somebody's voice sounds ("in a husky voice", "she squeaked"): a style, or "". */
     static String ofVoice(String s) {
+        if (MAARTE_VOICE.matcher(s).find()) return "maarte";
         if (HUSKY.matcher(s).find()) return "husky";
         if (GRUFF.matcher(s).find()) return "gruff";
         if (BASS.matcher(s).find()) return "bass";
@@ -117,7 +165,7 @@ final class Persona {
 
     /** A VoiceFx style's age for the sounds a person makes: "child", "teen", "elder" or "adult". */
     static String ageOf(String style) {
-        switch (style == null ? "" : style) {
+        switch (kindOf(style)) {
             case "child":
             case "squeaky":
             case "cute":

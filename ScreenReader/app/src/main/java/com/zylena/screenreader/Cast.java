@@ -60,6 +60,18 @@ final class Cast {
         return at < 0 ? who : who.substring(0, at);
     }
 
+    /** The accent of "cf1^husky@gb~w": "gb"; "" for none. */
+    static String accentOf(String who) {
+        return Persona.accentIn(styleOf(who));
+    }
+
+    /** What follows the ^ in a voice code: the kind of voice and the accent ("child@gb"); "^" and the rest, or "" for neither. */
+    private static String tagOf(Person p) {
+        String body = p.style.isEmpty() ? (p.styleFixed ? "plain" : "") : p.style;
+        if (!p.accent.isEmpty()) body += "@" + p.accent;
+        return body.isEmpty() ? "" : "^" + body;
+    }
+
     /** The feeling part of "cf1^husky~w": "w"; "" when it is said plainly. */
     static String feel(String who) {
         int at = who == null ? -1 : who.indexOf('~');
@@ -92,6 +104,7 @@ final class Cast {
         String gender = "";
         String code;
         boolean sure; // the gender is from the user's list or a well-known name, not a guess
+        String accent = ""; // the country of their accent (gb, ie, au, in) when the story or the user says so
         String style = ""; // what kind of person the story says this is (a VoiceFx style), "" when it says nothing
         final Map<String, Integer> voiceHits = new HashMap<>(); // how often the story describes their voice a certain way
         boolean styleFixed; // the user chose the voice style: the story's descriptions no longer change it
@@ -135,6 +148,10 @@ final class Cast {
                 p.frozen = false;
             }
             String st = f[2].trim();
+            // "child@gb": the kind of voice and an accent; "@gb": an accent alone.
+            int ac = st.indexOf('@');
+            p.accent = ac < 0 ? "" : st.substring(ac + 1);
+            if (ac >= 0) st = st.substring(0, ac);
             p.styleFixed = !st.isEmpty();
             if (st.equals("none")) p.style = "";
             else if (!st.isEmpty()) p.style = st;
@@ -155,7 +172,7 @@ final class Cast {
         Person p = people == null ? null : people.get(name.toLowerCase(Locale.ROOT));
         if (p == null || p.code == null) return "";
         if (isDivine(p.code)) return p.code;
-        return p.code + (!p.style.isEmpty() ? "^" + p.style : p.styleFixed ? "^plain" : "");
+        return p.code + tagOf(p);
     }
 
     /** The characters met in any story so far, for the Characters screen: {name, "m"/"f"/"u", style}. */
@@ -444,7 +461,8 @@ final class Cast {
         for (String sentence : narration.split("(?<=[.!?\u2026])\\s+")) {
             // "her boss", "his grandma": somebody else's relation, not who this character is.
             String role = Persona.ofRole(RELATIVE.matcher(sentence).replaceAll(" "));
-            if (role.isEmpty()) continue;
+            String accent = Persona.ofAccent(sentence);
+            if (role.isEmpty() && accent.isEmpty()) continue;
             Set<String> named = new HashSet<>();
             Matcher m = CAP_WORD.matcher(sentence);
             while (m.find()) {
@@ -453,8 +471,12 @@ final class Cast {
             }
             if (named.size() != 1) continue;
             Person p = people.get(named.iterator().next());
-            if (!p.style.equals(role) && !p.styleFixed) {
+            if (!role.isEmpty() && !p.style.equals(role) && !p.styleFixed) {
                 p.style = role;
+                learned = true;
+            }
+            if (!accent.isEmpty() && !p.accent.equals(accent) && !p.styleFixed) {
+                p.accent = accent;
                 learned = true;
             }
         }
@@ -608,8 +630,16 @@ final class Cast {
             }
             String style = sp0 != null && sp0.styleFixed ? sp0.style : !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
             // (A character the user chose a plain voice for is marked, so that no style is given to them.)
-            String styleTag = code.isEmpty() || isDivine(code) ? ""
-                    : style.isEmpty() ? (sp0 != null && sp0.styleFixed ? "^plain" : "") : "^" + style;
+            // An accent said right at the line ("in a British accent") or learned from the story about the speaker.
+            String lineAccent = Persona.ofAccent(narration);
+            if (!lineAccent.isEmpty() && sp0 != null && !sp0.styleFixed && !rerun && sp0.accent.isEmpty()) {
+                sp0.accent = lineAccent;
+                learned = true;
+            }
+            String accent = sp0 != null && (sp0.styleFixed || lineAccent.isEmpty()) ? sp0.accent : lineAccent;
+            String body = style.isEmpty() ? (sp0 != null && sp0.styleFixed ? "plain" : "") : style;
+            if (!accent.isEmpty()) body += "@" + accent;
+            String styleTag = code.isEmpty() || isDivine(code) || body.isEmpty() ? "" : "^" + body;
             out[i] = new String[sp.size()];
             for (int k = 0; k < sp.size(); k++) {
                 if (!spoken(l, sp.get(k))) {
