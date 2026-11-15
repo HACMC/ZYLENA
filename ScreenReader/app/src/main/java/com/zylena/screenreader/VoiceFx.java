@@ -164,22 +164,8 @@ final class VoiceFx {
                 z[i] = s;
             }
         }
-        // Breath: soft noise from the middle-upper range, as loud as the voice is at that moment, so it is there only while
-        // speaking. Kept gentle: hiss pushed any louder (and then brought up with the rest) sounds like a broken speaker.
-        if (st.husk > 0) {
-            Random r = new Random(5);
-            float[] nzs = new float[m];
-            for (int i = 0; i < m; i++) nzs[i] = r.nextFloat() * 2 - 1;
-            float[] air = band(nzs, 2600f, 2400f, rate);
-            float env = 0;
-            float up = (float) (1 - Math.exp(-1.0 / (0.006 * rate))), down = (float) (1 - Math.exp(-1.0 / (0.08 * rate)));
-            float amount = Math.min(st.husk, 0.3f) * 1.1f;
-            for (int i = 0; i < m; i++) {
-                float a = Math.abs(z[i]);
-                env += (a > env ? up : down) * (a - env);
-                z[i] += amount * Math.min(env, 0.3f) * air[i] * 3f;
-            }
-        }
+        // (No added breath or hiss: noise mixed into the voice sounds like a radio losing its signal. A husky or whispered
+        // voice is made by pitch, tempo and loudness instead.)
         // Grit: pushed into a soft clip.
         float peak = 1e-4f;
         for (int i = 0; i < m; i++) peak = Math.max(peak, Math.abs(z[i]));
