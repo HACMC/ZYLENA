@@ -74,10 +74,13 @@ final class VoiceFx {
         // Milder in Tagalog, where the one man's voice is lowered less to stay natural.
         divine("deep", 0.86f, 0.88f, 1f, 0.18f, 0.05f, 0.45f, 0f, 0.20f, 1.5f);
         divine("deep_fil", 0.90f, 0.91f, 1f, 0.18f, 0.10f, 0.45f, 0f, 0.20f, 1.5f);
-        // The Son: warm, clear, musical and gentle, with authority behind it ("gracious words", "a sweet melody in His voice"):
-        // a little lower and unhurried, warm and clear, close by (hardly any room).
-        divine("jesus", 0.95f, 0.94f, 1f, 0.17f, 0.15f, 0.30f, 0f, 0.06f, 0.6f);
-        divine("jesus_fil", 0.96f, 0.95f, 1f, 0.17f, 0.15f, 0.30f, 0f, 0.06f, 0.6f);
+        // The Son took our nature, so His is a man's own voice and not the Father's made milder: natural in pitch, in the
+        // open air beside the hearer (no hall around it). What sets it apart is how He spoke: "musical", "never raised in
+        // high, strained notes", not "so rapidly that His words were crowded one upon another", "He distinctly enunciated
+        // every word" (Ellen White), "clear", calm and earnest; "He shall not cry, nor lift up" (Isaiah 42:2). So: unhurried,
+        // very clear, a little warm and bright, even in loudness.
+        divine("jesus", 0.98f, 0.92f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
+        divine("jesus_fil", 0.98f, 0.93f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
         // The Holy Spirit: soft, "a still small voice" (kept audible): a little lighter than the plain voice, slow, airy, with a soft glow around it.
         divine("spirit", 1.04f, 0.90f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
         divine("spirit_fil", 1.04f, 0.92f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);

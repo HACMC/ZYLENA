@@ -742,6 +742,25 @@ final class Speaker {
         return p;
     }
 
+    /** How many quoted parts these pieces of one paragraph hold together (one that runs on into the next piece is counted once). */
+    static int quotedParts(List<String> pieces, boolean inQuote) {
+        int n = 0;
+        boolean in = inQuote;
+        for (String t : pieces) {
+            List<int[]> spans = Cast.quoteSpans(t, in);
+            for (int[] q : spans) n += q[2];
+            if (!spans.isEmpty()) in = spans.get(spans.size() - 1)[2] == 0;
+        }
+        return n + (in ? 1 : 0);
+    }
+
+    /** Puts a run of a translation in the voice's queue, behind any words that are still being made and played. */
+    private void queueInTurn(List<TextPrep.Seg> runs, int gen, int i) {
+        // While God's words (or a character's made voice) are being played, what follows waits its turn behind them.
+        if (deepHold) deepHeld.add(() -> queue(runs, gen, i));
+        else queue(runs, gen, i);
+    }
+
     /**
      * Queues run i in the asked-for language and goes on with the next. A few paragraphs are translated at
      * once, ahead of the voice, so it is only the very first one that is waited for. A paragraph that can't be
@@ -751,7 +770,7 @@ final class Speaker {
         if (gen != generation || i >= runs.size()) return;
         TextPrep.Seg s = runs.get(i);
         if (inTarget(s)) { // already in the language asked for
-            queue(runs, gen, i);
+            queueInTurn(runs, gen, i);
             translateNext(runs, gen, i + 1);
             return;
         }
@@ -775,16 +794,33 @@ final class Speaker {
             if (out != null && !out.trim().isEmpty()) {
                 String to = Translate.other(s.lang);
                 List<String> parts = TextPrep.shareOut(out, last - i + 1);
+                // The characters' voices follow the quoted parts in order. The translation is cut into runs at other
+                // places than the original was, so each run's place among the quoted parts is counted anew; and when
+                // the translation has more or fewer quoted parts, who says which is not known any more.
+                List<String> before = new ArrayList<>();
+                for (int k = i; k <= last; k++) before.add(runs.get(k).text);
+                final boolean lost = s.cast != null && quotedParts(before, s.inQuote) != quotedParts(parts, s.inQuote);
+                int from = s.castFrom;
+                boolean inQ = s.inQuote;
                 for (int k = i; k <= last; k++) {
                     String part = parts.get(k - i);
                     TextPrep.Seg o = runs.get(k);
                     // Kept in the usual spelling (the log shows it so); respelled for the voice only when spoken.
-                    runs.set(k, new TextPrep.Seg(part, to, o.line, o.lastLine, o.heading, true).like(o));
+                    TextPrep.Seg tr = new TextPrep.Seg(part, to, o.line, o.lastLine, o.heading, true).like(o);
+                    if (o.cast != null) {
+                        tr.castFrom = from;
+                        tr.inQuote = inQ;
+                        tr.castLost = lost;
+                        List<int[]> spans = Cast.quoteSpans(part, inQ);
+                        for (int[] q : spans) from += q[2];
+                        if (!spans.isEmpty()) inQ = spans.get(spans.size() - 1)[2] == 0;
+                    }
+                    runs.set(k, tr);
                 }
             } else if (i == 0) {
                 toast("Couldn't translate. Reading as it is. The translation pack needs internet the first time.");
             }
-            for (int k = i; k <= last; k++) queue(runs, gen, k);
+            for (int k = i; k <= last; k++) queueInTurn(runs, gen, k);
             translateNext(runs, gen, last + 1);
         };
         if (p.done) {
@@ -977,7 +1013,7 @@ final class Speaker {
         // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
         // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
         String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
-        final boolean dsp = !translating && !Prefs.testMode(ctx) && Prefs.flag(ctx, "voice_fx", true);
+        final boolean dsp = !Prefs.testMode(ctx) && Prefs.flag(ctx, "voice_fx", true);
         float partsTotal = 1f, partsDone = 0f;
         {
             int tot = 0;
@@ -1087,11 +1123,11 @@ final class Speaker {
 
     /**
      * How much lower the voice itself is asked to speak when the sound is not processed (voice effects off, or the recording
-     * failed): the Father deep, the Son a little lower than the plain voice, the Holy Spirit hardly at all, so that the three
+     * failed): the Father deep, the Son, a man among men, only a little lower than the plain voice, the Holy Spirit hardly at all, so that the three
      * are still not one voice.
      */
     private static float divineDepth(String code) {
-        return Cast.JESUS_CODE.equals(code) ? 0.90f : Cast.SPIRIT_CODE.equals(code) ? 0.97f : DEEP;
+        return Cast.JESUS_CODE.equals(code) ? 0.93f : Cast.SPIRIT_CODE.equals(code) ? 0.97f : DEEP;
     }
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
@@ -1350,7 +1386,7 @@ final class Speaker {
         if (!deepHold && tts != null) {
             tts.setPitch(Prefs.pitch(ctx));
             List<TextPrep.Seg> runs = currentRuns;
-            queueAhead(runs, gen, Math.max(0, curRun));
+            if (!translating) queueAhead(runs, gen, Math.max(0, curRun)); // a translation queues its own runs as they come
         }
     }
 
@@ -1411,9 +1447,8 @@ final class Speaker {
         java.util.Arrays.fill(w, s.who);
         if (s.cast != null) {
             List<int[]> q = Cast.quoteSpans(t, s.inQuote);
-            // A translation may bring back more or fewer quotation marks: then only a paragraph where one
+            // A translation may bring back more or fewer quotation marks (castLost): then only a paragraph where one
             // character speaks keeps its voice.
-            boolean whole = s.castFrom == 0 && !s.inQuote;
             String only = null;
             boolean one = true;
             for (String c : s.cast) {
@@ -1421,7 +1456,7 @@ final class Speaker {
                 if (only == null) only = c;
                 else if (!only.equals(c)) one = false;
             }
-            boolean off = s.translated && whole && q.size() != s.cast.length;
+            boolean off = s.castLost;
             for (int k = 0; k < q.size(); k++) {
                 int idx = s.castFrom + k;
                 String c = off ? (one && only != null && q.get(k)[1] - q.get(k)[0] > 12 ? only : "")

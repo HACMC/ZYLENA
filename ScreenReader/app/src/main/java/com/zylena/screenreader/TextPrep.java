@@ -45,6 +45,8 @@ final class TextPrep {
         /** How many of those quoted parts came before this text, and whether it begins inside one. */
         int castFrom;
         boolean inQuote;
+        /** A translation gave the paragraph more or fewer quoted parts than it had: who says which is no longer known. */
+        boolean castLost;
 
         /** The same reader, verse and characters as that piece (a translation of it). */
         Seg like(Seg o) {
@@ -55,6 +57,7 @@ final class TextPrep {
             story = o.story;
             castFrom = o.castFrom;
             inQuote = o.inQuote;
+            castLost = o.castLost;
             sfx = o.sfx;
             scene = o.scene;
             narrFeel = o.narrFeel;
