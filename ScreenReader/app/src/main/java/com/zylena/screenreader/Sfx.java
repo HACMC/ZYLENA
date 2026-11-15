@@ -73,6 +73,13 @@ final class Sfx {
         cue("bird", "\\bbirds? (?:chirped|sang|twittered|chirping|singing|tweeted|called)\\b|\\bchirp(?:ed|ing|s)?\\b|\\bhuni ng ibon\\b");
         cue("dog", "\\b(?:dog|puppy|hound)\\b[^.!?]{0,15}\\b(?:barked|barking|growled|howled|yapped)\\b|\\bbarked\\b|\\bumatungal\\b|\\btumahol\\b");
         cue("cat", "\\b(?:cat|kitten)\\b[^.!?]{0,15}\\b(?:meowed|mewed|purred|hissed)\\b|\\bmeow\\w*|\\bngiyaw\\b");
+        // The sounds of things hitting things, whatever the object: strong verbs on their own, weak ones with something hard or the floor.
+        cue("crash", "\\b(?:car|truck|plane|vehicle|bus|motorcycle|bike|van|train)\\b[^.!?]{0,25}\\b(?:crashed|collided|rammed|skidded|smashed)\\b|\\b(?:crashed|rammed|smashed|plowed|slammed) into\\b"
+                + "|\\btires? screech\\w*|\\bscreeched to a halt\\b|\\bbumangga\\b|\\bnabangga\\b|\\bnagkabanggaan\\b|\\bsumalpok\\b");
+        cue("slap", "\\bslap(?:ped|ping|s)?\\b(?! (?:on|him on|her on|me on) the back)|\\bsmacked (?:his|her|my|their|him|her|me) (?:face|cheek)\\b|\\b(?:sinampal|sampal|tinampal|pinalo)\\b");
+        cue("thud", "\\b(?:thud(?:ded|s|ding)?|thump(?:ed|s|ing)?|clunk(?:ed|s)?)\\b|\\b(?:fell|dropped|collapsed|crumpled|tumbled|toppled|flopped|slumped|threw (?:himself|herself|themselves)|hurled)\\b[^.!?]{0,20}\\b(?:floor|ground|bed|chair|couch|sofa|stairs|pavement|mud|snow|heap|wall|table|desk)\\b"
+                + "|\\b(?:punch(?:ed|es|ing)?|kick(?:ed|s|ing)?|whack(?:ed|s)?|bonk(?:ed|s)?)\\b[^.!?]{0,20}\\b(?:him|her|me|them|stomach|chest|jaw|face|gut|ribs|door|tree|locker|bucket|can|chair|box)\\b"
+                + "|\\b(?:stomped|stomping)\\b|\\b(?:hinampas|sinuntok|sinipa|nabagsak|natumba|bumagsak)\\b");
         cue("clock", "\\btick(?:ing)?\\b[^.!?]{0,10}\\bclock\\b|\\bclock\\b[^.!?]{0,10}\\btick(?:ed|ing)\\b|\\bticking\\b");
     }
 
@@ -97,8 +104,10 @@ final class Sfx {
         for (String w : new String[]{"beep", "bleep", "ping"}) SOUND_WORDS.put(w, "message");
         for (String w : new String[]{"honk", "beep-beep"}) SOUND_WORDS.put(w, "horn");
         for (String w : new String[]{"splash", "plop", "plunk"}) SOUND_WORDS.put(w, "splash");
-        for (String w : new String[]{"thud", "thump", "stomp"}) SOUND_WORDS.put(w, "footsteps");
-        for (String w : new String[]{"crash", "smash", "clatter"}) SOUND_WORDS.put(w, "glass");
+        for (String w : new String[]{"thud", "thump", "stomp", "bonk", "clunk"}) SOUND_WORDS.put(w, "thud");
+        for (String w : new String[]{"slap", "smack", "whack"}) SOUND_WORDS.put(w, "slap");
+        for (String w : new String[]{"smash", "clatter"}) SOUND_WORDS.put(w, "glass");
+        for (String w : new String[]{"crash"}) SOUND_WORDS.put(w, "crash");
         for (String w : new String[]{"click", "clack"}) SOUND_WORDS.put(w, "door_close");
         for (String w : new String[]{"buzz", "bzzt", "bzz"}) SOUND_WORDS.put(w, "phone");
         for (String w : new String[]{"creak", "squeak"}) SOUND_WORDS.put(w, "door_open");
@@ -310,6 +319,22 @@ final class Sfx {
                 b = buf(0.9f);
                 thump(b, 0.0f, 80f, 0.4f, 1f);
                 noise(b, 0.0f, 0.3f, 0.9f, 2500f, 0f);
+                break;
+            case "crash":
+                b = buf(1.6f);
+                thump(b, 0.0f, 60f, 0.5f, 1f);
+                noise(b, 0.0f, 0.9f, 0.9f, 1800f, 0f);
+                noise(b, 0.18f, 0.6f, 0.5f, 3600f, 0f);
+                break;
+            case "slap":
+                b = buf(0.4f);
+                noise(b, 0.0f, 0.06f, 0.95f, 3800f, 0f);
+                thump(b, 0.0f, 200f, 0.07f, 0.5f);
+                break;
+            case "thud":
+                b = buf(0.6f);
+                thump(b, 0.0f, 70f, 0.28f, 0.95f);
+                noise(b, 0.0f, 0.07f, 0.4f, 500f, 0f);
                 break;
             case "phone":
                 b = buf(2.6f);
