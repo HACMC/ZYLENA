@@ -940,6 +940,7 @@ final class Speaker {
             // A story is read a little under full loudness, so that a shout can be louder than the rest.
             float base = s.story && TextPrep.feelOn ? 0.8f : 1f;
             float loud = Math.max(0.3f, Math.min(1f, base * (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
+            if (divineLine) loud = Math.max(loud, 0.9f); // God's words are never quiet
             android.os.Bundle how = null;
             if (loud < 0.99f) {
                 how = new android.os.Bundle();
@@ -1005,7 +1006,11 @@ final class Speaker {
     private VoiceFx.Style styleFor(String lang, String who) {
         String v = Cast.voice(who);
         if (v == null || !Cast.isCode(v)) return null;
-        if (v.startsWith("cd")) return VoiceFx.get("deep");
+        if (v.startsWith("cd")) {
+            // The Father, the Son, the Holy Spirit: each their own; gentler in Tagalog (only one man's voice there).
+            String base = v.equals(Cast.JESUS_CODE) ? "jesus" : v.equals(Cast.SPIRIT_CODE) ? "spirit" : "deep";
+            return VoiceFx.get(base + (lang.equals(TextPrep.FIL) ? "_fil" : ""));
+        }
         String st = Cast.styleOf(who);
         if (st.equals("plain")) return null;
         if (!st.isEmpty()) return VoiceFx.get(st);
@@ -1413,7 +1418,9 @@ final class Speaker {
         final float deep = divine ? DEEP : 1f;
         List<Voice> all = castPool(lang, g);
         // The best man's voice is kept for God and Jesus when there is another to give the rest.
-        List<Voice> pool = !divine && g == 'm' && all.size() >= 2 ? all.subList(1, all.size()) : all;
+        // The best men's voices are kept for the Father, the Son and the Spirit when there are others to give the rest.
+        int reserve = !divine && g == 'm' ? (all.size() >= 4 ? 3 : all.size() >= 2 ? 1 : 0) : 0;
+        List<Voice> pool = reserve > 0 ? all.subList(reserve, all.size()) : all;
         if (pool.isEmpty()) {
             applyUsual(lang);
             return deep * (divine ? 0.9f : 1f) * (g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length]);
@@ -1430,7 +1437,7 @@ final class Speaker {
                 if ((g == 'm' ? (e.getKey().startsWith(lang + "|cm") || e.getKey().startsWith(lang + "|cd")) : e.getKey().startsWith(lang + "|c" + g))
                         && !e.getKey().equals(pin)) taken.add(e.getValue());
             }
-            if (divine) v = all.get(0);
+            if (divine && !all.isEmpty()) v = all.get(n % all.size()); // the Father the best, the Son the next, the Spirit the one after
             for (int k = 0; k < pool.size() && v == null; k++) {
                 Voice c = pool.get((n + k) % pool.size());
                 if (!taken.contains(base(c.getName()))) v = c;

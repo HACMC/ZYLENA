@@ -21,8 +21,27 @@ final class Cast {
     private Cast() {
     }
 
-    /** The Father, the Son and the Holy Spirit: when they speak the voice is "cd0", deep and slow, so the authority is heard. */
-    static final String DIVINE_CODE = "cd0";
+    /**
+     * The Father ("cd0": majestic, deep and slow), the Son ("cd1": warm, gentle, clear) and the Holy Spirit ("cd2": soft,
+     * "a still small voice"): when they speak, each has a voice of their own.
+     */
+    static final String DIVINE_CODE = "cd0", JESUS_CODE = "cd1", SPIRIT_CODE = "cd2";
+
+    static boolean isDivine(String code) {
+        return code != null && code.startsWith("cd");
+    }
+
+    /** The voice code of a divine name: Jesus and Christ cd1, the Spirit cd2, God (the Father) cd0. */
+    private static String divineCodeOf(String name) {
+        switch (name) {
+            case "jesus": case "hesus": case "jesu": case "cristo": case "christ": case "messiah": case "mesias":
+                return JESUS_CODE;
+            case "espiritu": case "spirit": case "holy":
+                return SPIRIT_CODE;
+            default:
+                return DIVINE_CODE;
+        }
+    }
     private static final Set<String> DIVINE_NAMES = new HashSet<>(Arrays.asList(("jesus hesus jesu cristo christ messiah mesias god dios diyos panginoon lord "
             + "yahweh jehovah jehova ama espiritu spirit holy father").split(" ")));
 
@@ -561,7 +580,7 @@ final class Cast {
             }
             String style = sp0 != null && sp0.styleFixed ? sp0.style : !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
             // (A character the user chose a plain voice for is marked, so that no style is given to them.)
-            String styleTag = code.isEmpty() || code.equals(DIVINE_CODE) ? ""
+            String styleTag = code.isEmpty() || isDivine(code) ? ""
                     : style.isEmpty() ? (sp0 != null && sp0.styleFixed ? "^plain" : "") : "^" + style;
             out[i] = new String[sp.size()];
             for (int k = 0; k < sp.size(); k++) {
@@ -614,7 +633,7 @@ final class Cast {
         if (p == null) return "";
         if (p.code != null) return p.code;
         if (DIVINE_NAMES.contains(p.name)) {
-            p.code = DIVINE_CODE;
+            p.code = divineCodeOf(p.name);
             return p.code;
         }
         String g = p.gender.isEmpty() ? "u" : p.gender;

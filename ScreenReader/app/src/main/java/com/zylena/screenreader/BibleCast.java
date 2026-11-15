@@ -36,7 +36,9 @@ final class BibleCast {
     private static final Pattern TALK = Pattern.compile("(?i)(?<![\\p{L}'])(?:ako|ako'y|ko|akin|aking|ikaw|ka|mo|iyo|iyong|inyo|inyong|kayo|kayo'y|tayo|natin|namin|amin|"
             + "i|me|my|mine|thou|thee|thy|thine|you|ye|your|yours|we|us|our|hindi baga|ought)(?![\\p{L}])");
     private static final Pattern FIRST_PERSON = Pattern.compile("(?i)(?<![\\p{L}'])(?:ko|i|we|namin|natin|amin|tayo)(?![\\p{L}])");
-    private static final Pattern DIVINE = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|cristo|christ|mesias|messias|dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|señor)(?![\\p{L}])");
+    private static final Pattern JESUS = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|cristo|christ|mesias|messias)(?![\\p{L}])");
+    private static final Pattern SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:espiritu|spirit|ghost)(?![\\p{L}])");
+    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|ama|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
     /** The one who tempts or opposes: Satan speaks in a voice of his own, not Jesus's. */
     private static final Pattern VILLAIN = Pattern.compile("(?i)(?<![\\p{L}])(?:satan|satanas|devil|diablo|lucifer|demon|demonyo|manunukso|tempter|serpent|ahas)(?![\\p{L}])");
     private static final Pattern FEMALE_CUE = Pattern.compile("(?i)(?<![\\p{L}])(?:babae|woman|women|reyna|queen|dalaga|maiden|damsel|ina|mother|she|siya'y babae|virgin|birhen)(?![\\p{L}])");
@@ -148,9 +150,12 @@ final class BibleCast {
 
         String who(String nearIntro, String before) {
             String key = null;
-            Matcher d = DIVINE.matcher(nearIntro);
-            if (d.find()) {
-                key = "divine";
+            if (JESUS.matcher(nearIntro).find()) {
+                key = "jesus";
+            } else if (SPIRIT.matcher(nearIntro).find()) {
+                key = "spirit";
+            } else if (FATHER.matcher(nearIntro).find()) {
+                key = "father";
             } else if (VILLAIN.matcher(nearIntro).find()) {
                 key = "villain";
             } else {
@@ -172,7 +177,7 @@ final class BibleCast {
                 // Only "he" / "niya": the other one of the two who talk, else somebody new.
                 String lastKey = history.isEmpty() ? null : history.get(history.size() - 1);
                 // Whoever answers the tempter, unnamed, is Jesus (or God).
-                if ("villain".equals(lastKey)) key = "divine";
+                if ("villain".equals(lastKey)) key = "jesus";
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey)) key = history.get(k);
                 if (key == null) {
                     key = "#" + (++anon);
@@ -185,7 +190,9 @@ final class BibleCast {
             if (at < 0) {
                 keys.add(key);
                 String code;
-                if (key.equals("divine")) code = Cast.DIVINE_CODE;
+                if (key.equals("father")) code = Cast.DIVINE_CODE;
+                else if (key.equals("jesus")) code = Cast.JESUS_CODE;
+                else if (key.equals("spirit")) code = Cast.SPIRIT_CODE;
                 else if (key.equals("villain")) code = "cm" + (men++) + "^villain";
                 else if (femaleKeys.contains(key) || TextPrep.WOMEN.contains(key)) code = "cf" + (women++);
                 else code = "cm" + (men++);
@@ -201,7 +208,7 @@ final class BibleCast {
             StringBuilder sb = new StringBuilder();
             for (int i = 0; i < keys.size(); i++) {
                 String k = keys.get(i);
-                sb.append(sb.length() > 0 ? ", " : "").append(k.equals("divine") ? "Jesus/God" : k.startsWith("#") ? "someone" + k : Character.toUpperCase(k.charAt(0)) + k.substring(1))
+                sb.append(sb.length() > 0 ? ", " : "").append(k.equals("father") ? "God" : k.equals("jesus") ? "Jesus" : k.equals("spirit") ? "Holy Spirit" : k.startsWith("#") ? "someone" + k : Character.toUpperCase(k.charAt(0)) + k.substring(1))
                         .append(" (").append(codes.get(i)).append(")");
             }
             return sb.toString();

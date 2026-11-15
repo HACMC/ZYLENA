@@ -50,7 +50,15 @@ final class VoiceFx {
     }
 
     static {
-        add("deep", 0.84f, 0.84f, 0f, 0f, 0f, 1f, false); // God, Jesus, the Holy Spirit: weight and calm
+        // The Father: majestic and calm (a voice "as the sound of many waters"). Milder in Tagalog, where there is only one man's voice.
+        add("deep", 0.84f, 0.84f, 0f, 0f, 0f, 1f, false);
+        add("deep_fil", 0.90f, 0.92f, 0f, 0f, 0f, 1f, false);
+        // The Son: warm, clear, musical and gentle, with authority behind it ("gracious words", "a sweet melody in His voice").
+        add("jesus", 0.95f, 0.95f, 0f, 0.03f, 0f, 1f, false);
+        add("jesus_fil", 0.97f, 0.97f, 0f, 0.03f, 0f, 1f, false);
+        // The Holy Spirit: soft, "a still small voice" (kept audible).
+        add("spirit", 1.0f, 0.90f, 0f, 0.07f, 0f, 0.95f, false);
+        add("spirit_fil", 1.0f, 0.93f, 0f, 0.07f, 0f, 0.95f, false);
         add("child", 1.30f, 1.05f, 0f, 0f, 0f, 1f, false);
         add("squeaky", 1.38f, 1.08f, 0f, 0f, 0f, 1f, false);
         add("cute", 1.18f, 1.04f, 0f, 0f, 0f, 1f, false);
@@ -122,11 +130,36 @@ final class VoiceFx {
             float norm = (float) Math.tanh(g);
             for (int i = 0; i < m; i++) z[i] = (float) Math.tanh(g * z[i] / peak) / norm * peak;
         }
-        peak = 1e-4f;
-        for (int i = 0; i < m; i++) peak = Math.max(peak, Math.abs(z[i]));
-        float gain = 0.9f / peak;
+        // A lowered voice loses what carries on a small speaker: a little of the upper-middle range is brought back.
+        float pres = Math.max(0f, 0.95f - st.pf) * 2.5f;
+        if (pres > 0) {
+            float[] pb = band(z, 2200f, 1800f, rate);
+            for (int i = 0; i < m; i++) z[i] += pres * pb[i];
+        }
+        // Every voice made here is brought to the loudness of speech, with the peaks kept in check: a deep or soft voice stays audible.
+        double sum = 0;
+        for (int i = 0; i < m; i++) sum += z[i] * z[i];
+        float rms = (float) Math.sqrt(sum / Math.max(1, m)) + 1e-6f;
+        float gain = Math.min(6f, 0.17f / rms);
         short[] out = new short[m];
-        for (int i = 0; i < m; i++) out[i] = (short) (Math.max(-1f, Math.min(1f, z[i] * gain)) * 32767);
+        for (int i = 0; i < m; i++) out[i] = (short) (0.95f * (float) Math.tanh(z[i] * gain) * 32767);
         return out;
+    }
+
+    /** A resonance at hz with the given width, applied to the whole signal. */
+    private static float[] band(float[] x, float hz, float width, int rate) {
+        double w0 = 2 * Math.PI * Math.min(hz, rate * 0.45) / rate, q = Math.max(0.5, hz / Math.max(40f, width));
+        double al = Math.sin(w0) / (2 * q), a0 = 1 + al, a1 = -2 * Math.cos(w0) / a0, a2 = (1 - al) / a0, b0 = al / a0;
+        float[] y = new float[x.length];
+        double x1 = 0, x2 = 0, y1 = 0, y2 = 0;
+        for (int i = 0; i < x.length; i++) {
+            double v = b0 * x[i] - b0 * x2 - a1 * y1 - a2 * y2;
+            x2 = x1;
+            x1 = x[i];
+            y2 = y1;
+            y1 = v;
+            y[i] = (float) v;
+        }
+        return y;
     }
 }
