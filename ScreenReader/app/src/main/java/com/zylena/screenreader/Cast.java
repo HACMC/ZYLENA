@@ -149,6 +149,15 @@ final class Cast {
         return new String[]{p.gender.isEmpty() ? "u" : p.gender, Persona.ageOf(p.style)};
     }
 
+    /** The voice code of a character by name, with their kind of voice ("cf0^child"); "" if they have not spoken yet. */
+    static synchronized String voiceOf(String scope, String name) {
+        LinkedHashMap<String, Person> people = STORIES.get(scope);
+        Person p = people == null ? null : people.get(name.toLowerCase(Locale.ROOT));
+        if (p == null || p.code == null) return "";
+        if (isDivine(p.code)) return p.code;
+        return p.code + (!p.style.isEmpty() ? "^" + p.style : p.styleFixed ? "^plain" : "");
+    }
+
     /** The characters met in any story so far, for the Characters screen: {name, "m"/"f"/"u", style}. */
     static synchronized List<String[]> knownList() {
         List<String[]> out = new ArrayList<>();

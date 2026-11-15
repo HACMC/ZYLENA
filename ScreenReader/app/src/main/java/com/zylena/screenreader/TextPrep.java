@@ -1263,6 +1263,28 @@ final class TextPrep {
             for (String sentence : SENTENCE_END.split(cleaned)) {
                 sentence = sentence.trim();
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
+                sentenceCount++;
+                String laughWho = null, laughSaid = "";
+                if (laughOn && cast != null && !verse && !hasVerse && LAUGH.matcher(sentence).find()) {
+                    String[] lw = laugher(sentence, cast[li]);
+                    String stripped = withoutLaugh(sentence);
+                    if (!stripped.equals(sentence)) {
+                        String key = lw[2].isEmpty() ? "narrator" : Cast.voice(lw[2]);
+                        Integer was = LAUGHED_AT.get(key);
+                        // Not at every mention: a character laughs aloud at most once in a few sentences.
+                        if (was == null || sentenceCount - was >= 6) {
+                            LAUGHED_AT.put(key, sentenceCount);
+                            laughWho = lw[2];
+                            laughSaid = laughText(key, lw[0], lw[1], GIGGLE.matcher(sentence).find());
+                        }
+                        String lgLang = para ? FIL : langOf(sentence, screenFil);
+                        sentence = stripped;
+                        if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) {
+                            if (laughWho != null) out.add(laughSeg(laughWho, laughSaid, lgLang, li, cast[li], mood));
+                            continue;
+                        }
+                    }
+                }
                 // Sound effects in a story: a sound written out ("Ring, ring!") is played instead of said; a sentence
                 // that tells of one (a knock, a door, thunder) plays it as it is read.
                 String fx = "";
@@ -1296,11 +1318,104 @@ final class TextPrep {
                     }
                     out.add(g);
                 }
+                if (laughWho != null && !out.isEmpty()) out.add(laughSeg(laughWho, laughSaid, out.get(out.size() - 1).lang, li, cast[li], mood));
             }
         }
         lastDropped = dropped;
         if (povOn) povCarry = who;
         return out;
+    }
+
+    // ---- A laugh the story tells of ("she answered with a laugh", "Mia giggled") is laughed aloud by the character
+
+    static volatile boolean laughOn = true;
+    private static final Pattern LAUGH = Pattern.compile("(?i)(?<![\\p{L}])(?:laugh(?:ed|s|ing|ter)?|giggl\\w+|chuckl\\w+|cackl\\w+|snicker\\w*|guffaw\\w*|tumawa|humagikgik|humalakhak|natawa|natatawa)(?![\\p{L}])");
+    private static final Pattern GIGGLE = Pattern.compile("(?i)(?<![\\p{L}])(?:giggl\\w+|snicker\\w*|humagikgik|hagikgik)(?![\\p{L}])");
+    private static final Pattern WITH_LAUGH = Pattern.compile("(?i),?\\s*(?:and\\s+)?(?:with|in)\\s+(?:a|an|some)\\s+(?:\\w+\\s+){0,2}?(?:laugh|giggle|chuckle|snicker|cackle)\\w*");
+    private static final Pattern LAUGHING = Pattern.compile("(?i),?\\s*(?:laughing|giggling|chuckling|snickering)(?=[.!?,\"\u201D\u2019]|\\s*$)");
+    private static final Pattern LAUGH_VERB = Pattern.compile("(?i)(?<![\\p{L}])(?:laughed|giggled|chuckled|snickered|cackled)(?![\\p{L}])");
+    private static final java.util.Map<String, java.util.Random> LAUGHERS = new java.util.HashMap<>();
+    private static final java.util.Map<String, Integer> LAUGHED_AT = new java.util.HashMap<>();
+    private static int sentenceCount;
+
+    /** Each character has a laugh of their own, with some variety: one random sequence per voice code. */
+    private static String laughText(String code, String g, String age, boolean giggle) {
+        String[] list;
+        if (giggle) list = new String[]{"Hihihi!", "Hehe!", "Tehehe!", "Hihi!"};
+        else if (age.equals("child")) list = new String[]{"Hihihi!", "Hahaha!", "Hehehe!"};
+        else if (age.equals("elder")) list = new String[]{"Hehehe.", "Heh heh heh.", "Hohoho!"};
+        else if (age.equals("teen")) list = new String[]{"Hahaha!", "Hehe!", "Ha ha!"};
+        else if (g.equals("m")) list = new String[]{"Hahaha!", "Ha ha ha!", "Heh heh heh.", "Hoho!"};
+        else if (g.equals("f")) list = new String[]{"Hahaha!", "Ha ha ha!", "Hehehe!", "Ahaha!"};
+        else list = new String[]{"Hahaha!", "Ha ha ha!"};
+        synchronized (LAUGHERS) {
+            java.util.Random r = LAUGHERS.get(code);
+            if (r == null) {
+                r = new java.util.Random(code.hashCode() * 31L + 7);
+                LAUGHERS.put(code, r);
+            }
+            // Their own laugh most of the time, another now and then.
+            int own = Math.floorMod(code.hashCode(), list.length);
+            return r.nextInt(10) < 6 ? list[own] : list[r.nextInt(list.length)];
+        }
+    }
+
+    /**
+     * Who laughs in a sentence ("she answered with a laugh", "Luca laughed"): {gender, age, voice code}. The voice code is ""
+     * when it is not known who; then the storyteller laughs.
+     */
+    private static String[] laugher(String sentence, String[] lineCast) {
+        String g = "u", age = "adult", code = "";
+        java.util.regex.Matcher m = Pattern.compile("(?<![\\p{L}'])\\p{Lu}\\p{Ll}[\\p{L}']+").matcher(sentence);
+        while (m.find() && code.isEmpty()) {
+            String c = Cast.voiceOf(povScope, m.group());
+            if (!c.isEmpty()) code = c;
+        }
+        char want = SHE.matcher(sentence).find() ? 'f' : HE.matcher(sentence).find() ? 'm' : 'u';
+        if (code.isEmpty() && lineCast != null) {
+            for (int k = lineCast.length - 1; k >= 0 && code.isEmpty(); k--) {
+                String c = lineCast[k];
+                if (c == null || !Cast.isCode(Cast.voice(c))) continue;
+                char cg = Cast.genderOf(Cast.voice(c));
+                if (want == 'u' || cg == want) code = Cast.voice(c) + (Cast.styleOf(c).isEmpty() ? "" : "^" + Cast.styleOf(c));
+            }
+        }
+        if (!code.isEmpty()) {
+            char cg = Cast.genderOf(Cast.voice(code));
+            g = String.valueOf(cg == 'm' || cg == 'f' ? cg : 'u');
+            age = Persona.ageOf(Cast.styleOf(code));
+        } else {
+            g = want == 'u' ? "u" : String.valueOf(want);
+        }
+        return new String[]{g, age, code};
+    }
+
+    /**
+     * The sentence without the words that only tell of the laugh, so the laugh is heard instead of described:
+     * "…," she answered with a laugh. becomes "…," she answered. A sentence that is only the laugh ("Mia giggled.") is left empty.
+     */
+    private static String withoutLaugh(String sentence) {
+        String t = WITH_LAUGH.matcher(sentence).replaceAll("");
+        t = LAUGHING.matcher(t).replaceAll("");
+        if (LAUGH_VERB.matcher(t).find()) {
+            boolean quoted = t.indexOf('"') >= 0 || t.indexOf('\u201C') >= 0 || t.indexOf('\u201D') >= 0;
+            if (quoted) {
+                t = LAUGH_VERB.matcher(t).replaceFirst("said"); // a tag after what was said
+            } else if (t.trim().split("\\s+").length <= 5) {
+                return ""; // "Luca laughed." / "Mia giggled.": the laugh itself takes its place
+            }
+        }
+        return t.trim();
+    }
+
+    /** The laugh as a piece of its own, said by the one who laughs, with a laughing tone. */
+    private static Seg laughSeg(String who, String said, String lang, int li, String[] lineCast, String mood) {
+        Seg lg = new Seg(said, lang, li, li, false);
+        lg.who = who + "~l";
+        lg.cast = lineCast;
+        lg.mood = mood;
+        lg.story = true;
+        return lg;
     }
 
     private static final Pattern SHE = Pattern.compile("(?i)\\b(?:she|her|hers|herself)\\b"), HE = Pattern.compile("(?i)\\b(?:he|his|him|himself)\\b");

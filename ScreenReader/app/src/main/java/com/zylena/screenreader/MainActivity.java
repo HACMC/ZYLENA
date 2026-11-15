@@ -532,6 +532,9 @@ public class MainActivity extends Activity {
 
         col.addView(Ui.section(this, "Story and Bible voices"));
         LinearLayout st = Ui.group(this);
+        Ui.add(st, flagRow(R.drawable.ic_person, "Laugh aloud",
+                "When a story says someone laughs (\"she answered with a laugh\", \"Mia giggled\"), the character laughs (Hahaha, Hehehe) in their own voice "
+                        + "instead of the words being read. Each character has a laugh of their own.", "say_laughs", true));
         Ui.add(st, flagRow(R.drawable.ic_clock, "Mark scene changes",
                 "\"* * *\", \"Later that day\", \"The next morning\": a longer pause and, in a story, a soft chime", "scene_breaks", true));
         Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
