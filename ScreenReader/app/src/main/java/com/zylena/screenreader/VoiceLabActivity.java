@@ -46,7 +46,7 @@ public class VoiceLabActivity extends Activity {
     private String lang = TextPrep.EN;
     private String voiceName = "";
     private String preset = "deep";
-    private float pf = 0.84f, tf = 0.84f, vib = 0f, husk = 0f, drive = 0f, vol = 1f, level = 0.17f, presence = 0f;
+    private float pf = 0.84f, tf = 0.84f, vib = 0f, husk = 0f, drive = 0f, vol = 1f, level = 0.17f, presence = 0f, warm = 0f, air = 0f, space = 0f, room = 1f;
     private boolean dull;
 
     private EditText sample;
@@ -208,6 +208,10 @@ public class VoiceLabActivity extends Activity {
         dull = s.dull;
         level = s.level;
         presence = s.presence;
+        warm = s.warm;
+        air = s.air;
+        space = s.space;
+        room = s.room;
         if (!fresh && lab.contains("pf_" + name)) {
             pf = lab.getFloat("pf_" + name, pf);
             tf = lab.getFloat("tf_" + name, tf);
@@ -218,6 +222,10 @@ public class VoiceLabActivity extends Activity {
             dull = lab.getBoolean("dull_" + name, dull);
             level = lab.getFloat("level_" + name, level);
             presence = lab.getFloat("pres_" + name, presence);
+            warm = lab.getFloat("warm_" + name, warm);
+            air = lab.getFloat("air_" + name, air);
+            space = lab.getFloat("space_" + name, space);
+            room = lab.getFloat("room_" + name, room);
         }
     }
 
@@ -226,7 +234,8 @@ public class VoiceLabActivity extends Activity {
                 .putString("text_" + lang, sample.getText().toString())
                 .putFloat("pf_" + preset, pf).putFloat("tf_" + preset, tf).putFloat("vib_" + preset, vib).putFloat("husk_" + preset, husk)
                 .putFloat("drive_" + preset, drive).putFloat("vol_" + preset, vol).putBoolean("dull_" + preset, dull)
-                .putFloat("level_" + preset, level).putFloat("pres_" + preset, presence).apply();
+                .putFloat("level_" + preset, level).putFloat("pres_" + preset, presence)
+                .putFloat("warm_" + preset, warm).putFloat("air_" + preset, air).putFloat("space_" + preset, space).putFloat("room_" + preset, room).apply();
     }
 
     private void buildSliders() {
@@ -254,6 +263,22 @@ public class VoiceLabActivity extends Activity {
         }));
         Ui.add(g, Ui.slider(this, R.drawable.ic_eq, "Clarity (more upper-middle range, for understanding)", 0f, 1f, 0.05f, presence, "%.2f", v -> {
             presence = v;
+            refresh();
+        }));
+        Ui.add(g, Ui.slider(this, R.drawable.ic_eq, "Warmth (a fuller low end)", 0f, 1f, 0.05f, warm, "%.2f", v -> {
+            warm = v;
+            refresh();
+        }));
+        Ui.add(g, Ui.slider(this, R.drawable.ic_eq, "Air (a lighter, softer top)", 0f, 1f, 0.05f, air, "%.2f", v -> {
+            air = v;
+            refresh();
+        }));
+        Ui.add(g, Ui.slider(this, R.drawable.ic_tune, "Room (how much of a hall is heard around the voice)", 0f, 0.50f, 0.01f, space, "%.2f", v -> {
+            space = v;
+            refresh();
+        }));
+        Ui.add(g, Ui.slider(this, R.drawable.ic_tune, "Room size (how long it rings, in seconds)", 0.2f, 3f, 0.1f, room, "%.1f", v -> {
+            room = v;
             refresh();
         }));
         Ui.add(g, Ui.slider(this, R.drawable.ic_eq, "Level (how loud the sound is made; speech is 0.10 to 0.20)", 0.08f, 0.30f, 0.01f, level, "%.2f", v -> {
@@ -284,6 +309,7 @@ public class VoiceLabActivity extends Activity {
         sb.append("base voice: ").append(voiceLabel()).append('\n');
         sb.append(String.format(Locale.US, "pitch %.2f, tempo %.2f, tremble %.3f, breath %.2f, grit %.2f%n", pf, tf, vib, husk, drive));
         sb.append(String.format(Locale.US, "clarity %.2f, level %.2f, volume %.2f, muffle %s%n", presence, level, vol, dull ? "on" : "off"));
+        sb.append(String.format(Locale.US, "warmth %.2f, air %.2f, room %.2f, room size %.1f s%n", warm, air, space, room));
         VoiceFx.Style s = VoiceFx.get(preset);
         if (s != null) {
             sb.append(String.format(Locale.US, "(the preset's own: pitch %.2f, tempo %.2f, tremble %.3f, breath %.2f, grit %.2f, volume %.2f, muffle %s)%n",
@@ -368,7 +394,12 @@ public class VoiceLabActivity extends Activity {
     // ------------------------------------------------------------------ hearing it
 
     private VoiceFx.Style style() {
-        return new VoiceFx.Style("lab", pf, tf, vib, husk, drive, vol, dull);
+        VoiceFx.Style st = new VoiceFx.Style("lab", pf, tf, vib, husk, drive, vol, dull);
+        st.warm = warm;
+        st.air = air;
+        st.space = space;
+        st.room = room;
+        return st;
     }
 
     private void stopAll() {

@@ -32,6 +32,10 @@ final class VoiceFx {
         final boolean dull;
         /** How loud the sound is made (speech is 0.10 to 0.20), and some extra upper-middle range for clarity (0 to 1). */
         float level = 0.17f, presence = 0f;
+        /** Warmth: more of the low end (0 to 1). Air: more of the top, for a light, soft voice (0 to 1). */
+        float warm = 0f, air = 0f;
+        /** The room around the voice: how much of it is heard (0 none, 0.25 a great hall) and how long it rings, in seconds. */
+        float space = 0f, room = 1f;
 
         Style(String name, float pf, float tf, float vib, float husk, float drive, float vol, boolean dull) {
             this.name = name;
@@ -51,16 +55,32 @@ final class VoiceFx {
         STYLES.put(name, new Style(name, pf, tf, vib, husk, drive, vol, dull));
     }
 
+    /** A voice of the Father, the Son or the Holy Spirit: pitch and tempo, then its colour (clarity, warmth, air) and the room it is heard in. */
+    private static void divine(String name, float pf, float tf, float vol, float level, float presence, float warm, float air, float space, float room) {
+        add(name, pf, tf, 0f, 0f, 0f, vol, false);
+        Style st = STYLES.get(name);
+        st.level = level;
+        st.presence = presence;
+        st.warm = warm;
+        st.air = air;
+        st.space = space;
+        st.room = room;
+    }
+
     static {
-        // The Father: majestic and calm (a voice "as the sound of many waters"). Milder in Tagalog, where there is only one man's voice.
-        add("deep", 0.84f, 0.84f, 0f, 0f, 0f, 1f, false);
-        add("deep_fil", 0.90f, 0.92f, 0f, 0f, 0f, 1f, false);
-        // The Son: warm, clear, musical and gentle, with authority behind it ("gracious words", "a sweet melody in His voice").
-        add("jesus", 0.95f, 0.95f, 0f, 0.03f, 0f, 1f, false);
-        add("jesus_fil", 0.97f, 0.97f, 0f, 0.03f, 0f, 1f, false);
-        // The Holy Spirit: soft, "a still small voice" (kept audible).
-        add("spirit", 1.0f, 0.90f, 0f, 0.07f, 0f, 0.95f, false);
-        add("spirit_fil", 1.0f, 0.93f, 0f, 0.07f, 0f, 0.95f, false);
+        // The three are told apart by more than pitch, since a phone often has one man's voice for all of them (in Tagalog
+        // nearly always): each has a pitch, a colour and a room of its own.
+        // The Father: majestic and calm (a voice "as the sound of many waters"): deep, slow, full, and heard as in a great hall.
+        // Milder in Tagalog, where the one man's voice is lowered less to stay natural.
+        divine("deep", 0.86f, 0.88f, 1f, 0.18f, 0.05f, 0.45f, 0f, 0.20f, 1.5f);
+        divine("deep_fil", 0.90f, 0.91f, 1f, 0.18f, 0.10f, 0.45f, 0f, 0.20f, 1.5f);
+        // The Son: warm, clear, musical and gentle, with authority behind it ("gracious words", "a sweet melody in His voice"):
+        // a little lower and unhurried, warm and clear, close by (hardly any room).
+        divine("jesus", 0.95f, 0.94f, 1f, 0.17f, 0.15f, 0.30f, 0f, 0.06f, 0.6f);
+        divine("jesus_fil", 0.96f, 0.95f, 1f, 0.17f, 0.15f, 0.30f, 0f, 0.06f, 0.6f);
+        // The Holy Spirit: soft, "a still small voice" (kept audible): a little lighter than the plain voice, slow, airy, with a soft glow around it.
+        divine("spirit", 1.04f, 0.90f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
+        divine("spirit_fil", 1.04f, 0.92f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
         add("child", 1.30f, 1.05f, 0f, 0f, 0f, 1f, false);
         add("squeaky", 1.38f, 1.08f, 0f, 0f, 0f, 1f, false);
         add("cute", 1.18f, 1.04f, 0f, 0f, 0f, 1f, false);
@@ -116,6 +136,10 @@ final class VoiceFx {
                 kind.vol * f.vol, kind.dull);
         m.level = kind.level + (f.level - 0.17f);
         m.presence = kind.presence;
+        m.warm = kind.warm;
+        m.air = kind.air;
+        m.space = kind.space;
+        m.room = kind.room;
         return m;
     }
 
@@ -148,9 +172,11 @@ final class VoiceFx {
         double pos = 0;
         int m = 0;
         for (; m < outLen && pos < n - 1; m++) {
+            // (Read between the samples along a curve through four of them: a straight line dulls and roughens the top.)
             int i0 = (int) pos;
             float f = (float) (pos - i0);
-            y[m] = x[i0] * (1 - f) + x[i0 + 1] * f;
+            float a = x[i0 > 0 ? i0 - 1 : 0], b = x[i0], c = x[i0 + 1], d = x[i0 + 2 < n ? i0 + 2 : n - 1];
+            y[m] = b + 0.5f * f * (c - a + f * (2 * a - 5 * b + 4 * c - d + f * (3 * (b - c) + d - a)));
             double t = m / (double) rate;
             pos += st.pf * (1 + (st.vib > 0 ? st.vib * Math.sin(2 * Math.PI * 5.2 * t) : 0));
         }
@@ -181,14 +207,130 @@ final class VoiceFx {
             float[] pb = band(z, 2200f, 1800f, rate);
             for (int i = 0; i < m; i++) z[i] += pres * pb[i];
         }
+        // Warmth: more of the low end. Air: more of the top.
+        if (st.warm > 0) {
+            float a = (float) (1 - Math.exp(-2 * Math.PI * 260.0 / rate)), s = 0;
+            for (int i = 0; i < m; i++) {
+                s += a * (z[i] - s);
+                z[i] += st.warm * s;
+            }
+        }
+        if (st.air > 0) {
+            float a = (float) (1 - Math.exp(-2 * Math.PI * 4500.0 / rate)), s = 0;
+            for (int i = 0; i < m; i++) {
+                s += a * (z[i] - s);
+                z[i] += st.air * (z[i] - s);
+            }
+        }
         // Every voice made here is brought to the loudness of speech, with the peaks kept in check: a deep or soft voice stays audible.
         double sum = 0;
         for (int i = 0; i < m; i++) sum += z[i] * z[i];
         float rms = (float) Math.sqrt(sum / Math.max(1, m)) + 1e-6f;
         float gain = Math.min(6f, targetRms / rms);
-        short[] out = new short[m];
-        for (int i = 0; i < m; i++) out[i] = (short) (0.95f * (float) Math.tanh(z[i] * gain) * 32767);
+        for (int i = 0; i < m; i++) z[i] *= gain;
+        // The room the voice is heard in (it rings on a little after the last word).
+        if (st.space > 0) z = reverb(z, rate, Math.min(0.5f, st.space), Math.max(0.2f, Math.min(3f, st.room)));
+        limit(z, rate, 0.92f);
+        short[] out = new short[z.length];
+        for (int i = 0; i < z.length; i++) out[i] = (short) Math.round(Math.max(-1f, Math.min(1f, z[i])) * 32767);
         return out;
+    }
+
+    private static final int[] COMBS = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617}, ALLPASSES = {556, 441, 341, 225};
+
+    /**
+     * The voice with a room around it: `amount` is how loud the room is beside the voice (0.2: a fifth as loud), `seconds`
+     * how long it rings. The sound comes back longer by the part of the ringing that is still heard after the last word.
+     */
+    private static float[] reverb(float[] x, int rate, float amount, float seconds) {
+        int n = x.length, len = n + (int) (Math.min(0.8f, seconds * 0.45f) * rate), pre = (int) (0.018f * rate);
+        double sc = rate / 44100.0;
+        // What goes into the room: a moment later, and without the low end (a room full of bass is a muddy one).
+        float[] in = new float[len];
+        float hp = (float) (1 - Math.exp(-2 * Math.PI * 220.0 / rate)), s = 0;
+        for (int i = 0; i < n; i++) {
+            s += hp * (x[i] - s);
+            if (i + pre < len) in[i + pre] = x[i] - s;
+        }
+        float[] wet = new float[len];
+        for (int d : COMBS) {
+            int size = Math.max(8, (int) (d * sc));
+            float fb = (float) Math.pow(10, -3.0 * size / (seconds * rate)), damp = 0.28f, keep = 0;
+            float[] buf = new float[size];
+            for (int i = 0, k = 0; i < len; i++) {
+                float y = buf[k];
+                keep = y * (1 - damp) + keep * damp;
+                buf[k] = in[i] + keep * fb;
+                wet[i] += y;
+                if (++k == size) k = 0;
+            }
+        }
+        for (int d : ALLPASSES) {
+            int size = Math.max(4, (int) (d * sc));
+            float[] buf = new float[size];
+            for (int i = 0, k = 0; i < len; i++) {
+                float b = buf[k], v = wet[i];
+                wet[i] = b - v;
+                buf[k] = v + b * 0.5f;
+                if (++k == size) k = 0;
+            }
+        }
+        double dry = 0, room = 0;
+        for (int i = 0; i < n; i++) {
+            dry += x[i] * x[i];
+            room += wet[i] * wet[i];
+        }
+        float k = room <= 0 ? 0 : amount * (float) Math.sqrt(dry / room);
+        float[] out = new float[len];
+        int fade = Math.min(len - n, (int) (0.12f * rate));
+        for (int i = 0; i < len; i++) {
+            float w = k * wet[i];
+            if (i >= len - fade) w *= (len - i) / (float) fade;
+            out[i] = (i < n ? x[i] : 0) + w;
+        }
+        return out;
+    }
+
+    /**
+     * Keeps the peaks under the ceiling by turning the sound down for a moment around each one, smoothly (the sound is
+     * looked at a few thousandths of a second ahead), instead of bending the wave, which roughens a voice.
+     */
+    private static void limit(float[] z, int rate, float ceil) {
+        int n = z.length, look = Math.max(2, rate * 4 / 1000), half = look / 2;
+        float peak = 0;
+        for (float v : z) peak = Math.max(peak, Math.abs(v));
+        if (peak <= ceil) return;
+        // The gain each sample needs, then the least of them within `look` samples either side.
+        float[] need = new float[n], least = new float[n];
+        for (int i = 0; i < n; i++) {
+            float a = Math.abs(z[i]);
+            need[i] = a > ceil ? ceil / a : 1f;
+        }
+        int[] q = new int[n];
+        int head = 0, tail = 0, next = 0;
+        for (int i = 0; i < n; i++) {
+            for (int hi = Math.min(n - 1, i + look); next <= hi; next++) {
+                while (tail > head && need[q[tail - 1]] >= need[next]) tail--;
+                q[tail++] = next;
+            }
+            while (q[head] < i - look) head++;
+            least[i] = need[q[head]];
+        }
+        // It comes back up slowly (no pumping), and goes down over the look-ahead (no click).
+        float rel = (float) (1 - Math.exp(-1.0 / (0.08 * rate))), g = 1f;
+        for (int i = 0; i < n; i++) {
+            g = Math.min(least[i], g + (1f - g) * rel);
+            least[i] = g;
+        }
+        double run = 0;
+        int lo = 0, hi = 0; // the window [lo, hi) summed in `run`
+        for (int i = 0; i < n; i++) {
+            int a = Math.max(0, i - half), b = Math.min(n, i + half + 1);
+            while (hi < b) run += least[hi++];
+            while (lo < a) run -= least[lo++];
+            need[i] = (float) (run / (b - a));
+        }
+        for (int i = 0; i < n; i++) z[i] *= need[i];
     }
 
     /** A resonance at hz with the given width, applied to the whole signal. */

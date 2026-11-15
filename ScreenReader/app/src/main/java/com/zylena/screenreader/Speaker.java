@@ -1017,7 +1017,7 @@ final class Speaker {
             else if (divineLine) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             float vm = applyVoice(lang, parts.get(k)[3]);
-            if (fx != null) p *= divineLine ? vm / DEEP : vm; // the pitch is changed afterwards
+            if (fx != null) p *= divineLine ? vm / divineDepth(Cast.voice(parts.get(k)[3])) : vm; // the pitch is changed afterwards
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = feelFx != null ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
@@ -1079,11 +1079,20 @@ final class Speaker {
     /**
      * How the voice of God, Jesus and the Holy Spirit is made. Asking the engine for a lower pitch is not enough:
      * Google's online voices ignore it, so the words would sound like anyone's. So these words are first
-     * recorded to a file by the voice, then played by ZYLENA slower, which makes them lower and slower at once
-     * (the sound drops about three semitones): a voice with weight, whatever voice the phone uses.
+     * recorded to a file by the voice, then made into the Father's, the Son's or the Spirit's voice (each has a pitch,
+     * a colour and a room of its own; see VoiceFx) and played by ZYLENA, whatever voice the phone uses.
      * What follows waits until they have been played.
      */
     private static final float DEEP = 0.78f;
+
+    /**
+     * How much lower the voice itself is asked to speak when the sound is not processed (voice effects off, or the recording
+     * failed): the Father deep, the Son a little lower than the plain voice, the Holy Spirit hardly at all, so that the three
+     * are still not one voice.
+     */
+    private static float divineDepth(String code) {
+        return Cast.JESUS_CODE.equals(code) ? 0.90f : Cast.SPIRIT_CODE.equals(code) ? 0.97f : DEEP;
+    }
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
     private android.media.AudioTrack deepTrack;
@@ -1508,7 +1517,7 @@ final class Speaker {
         // God and Jesus: a man's voice, made deep.
         final boolean divine = g == 'd';
         if (divine) g = 'm';
-        final float deep = divine ? DEEP : 1f;
+        final float deep = divine ? divineDepth(who) : 1f;
         // A character with an accent (British, Irish, Australian, Indian) is given a voice of that country, when the phone has one.
         final String accent = divine ? "" : Cast.accentOf(who);
         if (!accent.isEmpty() && !lang.equals(TextPrep.FIL)) {

@@ -34,7 +34,7 @@ final class Cast {
     /** The voice code of a divine name: Jesus and Christ cd1, the Spirit cd2, God (the Father) cd0. */
     private static String divineCodeOf(String name) {
         switch (name) {
-            case "jesus": case "hesus": case "jesu": case "cristo": case "christ": case "messiah": case "mesias":
+            case "jesus": case "hesus": case "jesu": case "jesucristo": case "hesukristo": case "cristo": case "kristo": case "christ": case "messiah": case "mesias":
                 return JESUS_CODE;
             case "espiritu": case "spirit": case "holy":
                 return SPIRIT_CODE;
@@ -42,7 +42,7 @@ final class Cast {
                 return DIVINE_CODE;
         }
     }
-    private static final Set<String> DIVINE_NAMES = new HashSet<>(Arrays.asList(("jesus hesus jesu cristo christ messiah mesias god dios diyos panginoon lord "
+    private static final Set<String> DIVINE_NAMES = new HashSet<>(Arrays.asList(("jesus hesus jesu jesucristo hesukristo cristo kristo christ messiah mesias god dios diyos panginoon lord "
             + "yahweh jehovah jehova ama espiritu spirit holy father").split(" ")));
 
     /** A voice code: "cm0" the first man's voice, "cf1" the second woman's, "cu0" a character the reader can't tell. */
@@ -291,6 +291,15 @@ final class Cast {
             + "|pagmamakaawa|pangako|hirit|kontra|sabat|puna|pansin|taka|tukso|asar|sermon|bulyaw|singhal|sita|hikbi|iyak|tawa|ngiti|buntong-hininga";
     private static final Pattern TL_SAID = Pattern.compile(
             "(?<![\\p{L}])(?i:(?:na)?(?:pa)?(?:" + TL_VERBS + ")(?:ng)?|ani)\\s+(?:(?i:(ko|ako)|(niya|nito|siya))|(?i:ni|ng|si)\\s+(" + NAME + ")|(" + NAME + "))(?![\\p{L}])");
+    /**
+     * Tagalog as lessons and the Bible write it: "Sinabi ni Jesus, …", "Sumagot ang Panginoon", "nagtanong si Pedro",
+     * "sinabi niya sa kanila".
+     */
+    private static final Pattern TL_VERB_SAID = Pattern.compile(
+            "(?<![\\p{L}])(?i:sinabi|sinasabi|nagsabi|nagsasabi|winika|nagwika|sumagot|sumasagot|tumugon|nagtanong|itinanong|tinanong|sumigaw|isinigaw|bumulong|ibinulong|"
+                    + "nagsalita|nagsasalita|nag-?utos|iniutos|ipinahayag|nagpahayag|nangako|ipinangako|nagbabala|nagpaliwanag|ipinaliwanag|nanalangin|idinalangin)"
+                    + "(?:\\s+(?i:naman|din|rin|pa|muli|uli|sa\\s+(?:kaniya|kanya|kanila|akin|amin|atin|inyo)))*"
+                    + "\\s+(?:(?i:(ko)|(niya|nito))|(?i:ni|ng|si|ang)\\s+(" + NAME + "))(?![\\p{L}])");
     private static final Pattern TL_ANIYA = Pattern.compile("(?i)(?<![\\p{L}])aniya(?![\\p{L}])");
     /** The narrator's own name: "I'm Millie Ripley", "My name is Millie", "Ako si Millie". */
     private static final Pattern I_AM = Pattern.compile("(?:\\bI'm|\\bI’m|\\bI am|\\b[Mm]y name(?: is|'s|’s)|\\b[Aa]ko si|\\b[Aa]ko nga pala si)\\s+(" + NAME + ")");
@@ -310,7 +319,10 @@ final class Cast {
         Matcher m = SUBJECT_VERB.matcher(narration);
         while (m.find()) {
             String s = m.group(1);
-            if (s.length() > 3 && NOT_NAMES.contains(first(s))) continue;
+            // ("The Lord said to Moses, …" is God speaking; "Oh Lord," she said is not.)
+            boolean theLord = s.matches("(?i)the\\s+lord") || (s.equalsIgnoreCase("lord") && narration.substring(0, m.start(1)).matches("(?s).*\\b[Tt]he\\s+"));
+            if (theLord) s = "Lord";
+            if (s.length() > 3 && NOT_NAMES.contains(first(s)) && !theLord) continue;
             if (m.start() < best) {
                 best = m.start();
                 who = s;
@@ -337,6 +349,12 @@ final class Cast {
             who = m.group(1) != null ? "I" : m.group(2) != null ? "?" : m.group(3) != null ? m.group(3) : m.group(4);
             if (who != null && !who.equals("I") && !who.equals("?") && NOT_NAMES.contains(first(who))) who = "?";
         }
+        m = TL_VERB_SAID.matcher(narration);
+        if (m.find() && m.start() < best) {
+            best = m.start();
+            who = m.group(1) != null ? "I" : m.group(2) != null ? "?" : m.group(3);
+            if (!who.equals("I") && !who.equals("?") && NOT_NAMES.contains(first(who))) who = "?";
+        }
         m = TL_ANIYA.matcher(narration);
         if (m.find() && m.start() < best) {
             best = m.start();
@@ -362,7 +380,7 @@ final class Cast {
     private static final Map<String, String> HONOR = new HashMap<>();
 
     static {
-        for (String w : "mang manong kuya tito lolo tatay sir mr mister uncle lord king prince father brother don senor ginoong ginoo".split(" ")) HONOR.put(w, "m");
+        for (String w : "mang manong kuya tito lolo tatay sir mr mister uncle lord king prince father brother don senor ginoong ginoo panginoong".split(" ")) HONOR.put(w, "m");
         for (String w : ("aling manang ate tita lola nanay maam mrs ms miss aunt auntie lady queen princess mother sister donya dona senora "
                 + "ginang binibini").split(" ")) HONOR.put(w, "f");
     }

@@ -40,7 +40,7 @@ final class BibleCast {
             String w = (c.group(1) != null ? c.group(1) : c.group(2) != null ? c.group(2) : c.group(3)).toLowerCase(Locale.ROOT);
             if (!NOT_NAMES.contains(w)) return true;
         }
-        return VILLAIN.matcher(part).find() || SPIRIT.matcher(part).find();
+        return VILLAIN.matcher(part).find() || SPIRIT.matcher(OF_GOD.matcher(part).replaceAll(" ")).find();
     }
 
     /** A verse that tells what happened, not what is said. */
@@ -49,9 +49,27 @@ final class BibleCast {
     private static final Pattern TALK = Pattern.compile("(?i)(?<![\\p{L}'])(?:ako|ako'y|ko|akin|aking|ikaw|ka|mo|iyo|iyong|inyo|inyong|kayo|kayo'y|tayo|natin|namin|amin|"
             + "i|me|my|mine|thou|thee|thy|thine|you|ye|your|yours|we|us|our|hindi baga|ought)(?![\\p{L}])");
     private static final Pattern FIRST_PERSON = Pattern.compile("(?i)(?<![\\p{L}'])(?:ko|i|we|namin|natin|amin|tayo)(?![\\p{L}])");
-    private static final Pattern JESUS = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|cristo|christ|mesias|messias)(?![\\p{L}])");
+    private static final Pattern JESUS = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias)(?![\\p{L}])");
     private static final Pattern SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:espiritu|spirit|ghost)(?![\\p{L}])");
-    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|ama|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
+    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|(?-i:Ama)|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
+    private static final String DIVINE_WORDS = "jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias|dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|ama|father|"
+            + "(?:holy\\s+)?(?:spirit|ghost)|espiritu(?:\\s+santo)?|(?:banal\\s+na\\s+)?espiritu";
+    /**
+     * The one spoken to is not the one who speaks: "Peter said unto Jesus,", "sinabi ni Moises sa Panginoon,", "Satan answered
+     * the LORD, and said," (but "Then answered Jesus and said," is Jesus answering). Taken out of the words that bring the speech in before the speaker is looked for.
+     */
+    private static final Pattern ADDRESSED = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:unto|to|kay|sa)\\s+|(?<!\\b(?:then|and|but|so|now)\\s)(?:answered|answering|asked|told|besought|tinanong|sinagot)\\s+)"
+            + "(?:the\\s+|ang\\s+|si\\s+|our\\s+|his\\s+|their\\s+|ating\\s+|kaniyang\\s+|kanilang\\s+)?(?:lord\\s+|panginoong\\s+)?(?:" + DIVINE_WORDS + ")(?![\\p{L}])");
+    /**
+     * Somebody who only belongs to God, or is filled with the Spirit, is not God speaking: "the man of God said,", "ang anghel ng
+     * Panginoon", "Peter, filled with the Holy Ghost, said unto them,".
+     */
+    private static final Pattern OF_GOD = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:man|men|woman|servants?|prophets?|priests?|people|children|house|temple|ark|angels?|sons?|"
+            + "lingkod|alipin|propeta|saserdote|bayan|anghel|lalake|lalaki|bahay|templo|kaban|anak|mga\\s+anak)\\s+(?:of|ng)\\s+(?:the\\s+)?(?:lord|god|dios|diyos|panginoon)"
+            + "|(?:filled\\s+with|full\\s+of|in|by|through|puspos\\s+ng|napuspos\\s+ng|sa\\s+pamamagitan\\s+ng)\\s+(?:the\\s+)?(?:holy\\s+|banal\\s+na\\s+)?(?:spirit|ghost|espiritu)(?:\\s+santo)?)(?![\\p{L}])");
+    /** An unclean spirit is not the Holy Spirit: it speaks as the tempter does. */
+    private static final Pattern EVIL_SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:unclean|evil|foul|dumb|deaf|wicked|lying|familiar|masamang|masasamang|karumaldumal\\s+na|maruming|"
+            + "karumaldumal)\\s+(?:spirits?|espiritu)(?![\\p{L}])");
     /** The one who tempts or opposes: Satan speaks in a voice of his own, not Jesus's. */
     private static final Pattern VILLAIN = Pattern.compile("(?i)(?<![\\p{L}])(?:satan|satanas|devil|diablo|lucifer|demon|demonyo|manunukso|tempter|serpent|ahas)(?![\\p{L}])");
     private static final Pattern FEMALE_CUE = Pattern.compile("(?i)(?<![\\p{L}])(?:babae|woman|women|reyna|queen|dalaga|maiden|damsel|ina|mother|she|siya'y babae|virgin|birhen)(?![\\p{L}])");
@@ -239,7 +257,19 @@ final class BibleCast {
 
         String who(String nearIntro, String before) {
             String key = null;
-            if (JESUS.matcher(nearIntro).find()) {
+            // Who is spoken to ("said unto Jesus,", "sa Panginoon") is not who speaks, and neither is the one God's man belongs to.
+            String toWhom = null;
+            nearIntro = nearIntro.replaceAll("\\s+", " ");
+            Matcher ad = ADDRESSED.matcher(nearIntro);
+            if (ad.find()) {
+                String g = ad.group();
+                toWhom = JESUS.matcher(g).find() ? "jesus" : SPIRIT.matcher(g).find() ? "spirit" : "father";
+                nearIntro = ad.replaceAll(" ");
+            }
+            nearIntro = OF_GOD.matcher(nearIntro).replaceAll(" ");
+            if (EVIL_SPIRIT.matcher(nearIntro).find()) {
+                key = "villain";
+            } else if (JESUS.matcher(nearIntro).find()) {
                 key = "jesus";
             } else if (SPIRIT.matcher(nearIntro).find()) {
                 key = "spirit";
@@ -267,10 +297,10 @@ final class BibleCast {
                 String lastKey = history.isEmpty() ? null : history.get(history.size() - 1);
                 // Whoever answers the tempter, unnamed, is Jesus (or God).
                 if ("villain".equals(lastKey)) key = "jesus";
-                for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey)) key = history.get(k);
+                for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey) && !history.get(k).equals(toWhom)) key = history.get(k);
                 // "And he opened his mouth, and taught them, saying": the "he" is who the chapter has been about, when nobody else is
                 // named, nobody has spoken yet, and it is not "a certain lawyer … tempted him".
-                if (key == null && mentioned != null && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find()) key = mentioned;
+                if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find()) key = mentioned;
                 if (key == null) {
                     key = "#" + (++anon);
                     String cue = before + " " + nearIntro;

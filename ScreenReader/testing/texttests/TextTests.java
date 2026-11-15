@@ -108,6 +108,51 @@ public class TextTests {
         check("a loud cry is shouted", b3 != null && b3.codes[0].equals("cd1~s"), b3 == null ? "null" : Arrays.toString(b3.codes));
         check("the devil has a voice of his own", b3 != null && b3.codes.length == 2 && b3.codes[1].contains("villain"), b3 == null ? "null" : Arrays.toString(b3.codes));
 
+        // The Father, the Son and the Holy Spirit: their voices are for their own words only.
+        String[][] divine = {
+                // {verse, the voice code the first words spoken must begin with ("!cd": anything but a divine voice)}
+                {"And Peter answered and said to Jesus, Master, it is good for us to be here.", "!cd"},
+                {"And Moses said unto the LORD, O my Lord, I am not eloquent.", "!cd"},
+                {"At sinabi ni Pedro kay Jesus, Rabi, mabuti sa atin ang tayo'y dumito.", "!cd"},
+                {"At sinabi ni Moises sa Panginoon, Oh Panginoon, ako'y hindi marikit mangusap.", "!cd"},
+                {"Then Satan answered the LORD, and said, From going to and fro in the earth.", "cm0^villain"},
+                {"Nang magkagayo'y sumagot si Satanas sa Panginoon, at nagsabi, Sa pagpaparoo't parito sa lupa.", "cm0^villain"},
+                {"And the evil spirit answered and said, Jesus I know, and Paul I know; but who are ye?", "cm0^villain"},
+                {"At sumagot ang masamang espiritu at sa kanila'y sinabi, Nakikilala ko si Jesus, at nakikilala ko si Pablo.", "cm0^villain"},
+                {"Then Peter, filled with the Holy Ghost, said unto them, Ye rulers of the people, and elders of Israel.", "!cd"},
+                {"And the man of God said, Where fell it? And he shewed him the place.", "!cd"},
+                {"And he said unto Jesus, Lord, remember me when thou comest into thy kingdom.", "!cd"},
+                {"At sinabi ni Isaac na kaniyang ama, Sino ka, anak ko?", "!cd"},
+                {"Then answered Jesus and said unto them, Verily, verily, I say unto you, The Son can do nothing of himself.", "cd1"},
+                {"Then the Spirit said unto Philip, Go near, and join thyself to this chariot.", "cd2"},
+                {"Sinabi ng Espiritu Santo, Ibukod ninyo sa akin si Bernabe at si Saulo.", "cd2"},
+                {"And the LORD said unto Satan, Whence comest thou?", "cd0"},
+                {"At sinabi ng Dios, Magkaroon ng liwanag: at nagkaroon ng liwanag.", "cd0"},
+                {"And lo a voice from heaven, saying, This is my beloved Son, in whom I am well pleased.", "cd0"},
+                {"At sinabi ng Panginoong Jesus, Simon, Simon, narito.", "cd1"},
+                {"Sinabi sa kaniya ni Jesus, Ako ang daan, at ang katotohanan, at ang buhay.", "cd1"}};
+        for (String[] c : divine) {
+            BibleCast.Result br = BibleCast.annotateVerses(Arrays.asList(c[0]), '«', '»', true);
+            String got = br == null || br.codes.length == 0 ? "" : br.codes[0];
+            check("voice for: " + c[0], c[1].equals("!cd") ? !got.isEmpty() && !got.startsWith("cd") : got.startsWith(c[1]), "'" + got + "'");
+        }
+        // The same in a lesson's own words, with quotation marks.
+        String[][] lesson = {
+                {"Sinabi ni Jesus, \"Sumunod ka sa akin.\"", "cd1"},
+                {"Sumagot ang Panginoon, \"Ako ang Panginoon.\"", "cd0"},
+                {"Sinabi ng Panginoong Jesus, \"Sumunod ka sa akin.\"", "cd1"},
+                {"The Lord said to Moses, \"Go to Pharaoh.\"", "cd0"},
+                {"The Holy Spirit said, \"Set apart for me Barnabas and Saul.\"", "cd2"},
+                {"Sinabi ni Pedro kay Jesus, \"Panginoon, mabuti na tayo ay narito.\"", "!cd"},
+                {"Peter said to Jesus, \"Lord, it is good for us to be here.\"", "!cd"}};
+        for (String[] c : lesson) {
+            List<String> ll = new ArrayList<>(Arrays.asList(talk));
+            ll.add(c[0]);
+            TextPrep.Seg g = find(story(ll.toArray(new String[0])), c[0].substring(0, 10));
+            String got = g == null || g.cast == null || g.cast.length == 0 ? "" : g.cast[0];
+            check("voice for: " + c[0], c[1].equals("!cd") ? !got.isEmpty() && !got.startsWith("cd") : got.startsWith(c[1]), "'" + got + "'");
+        }
+
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }
