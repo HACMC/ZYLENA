@@ -453,6 +453,8 @@ final class Cast {
     }
 
     private static boolean learned, rerun;
+    /** The last text had only a few people speaking in it (a lesson, a book): voices for them, but it is not told as a story. */
+    static volatile boolean lastLight;
 
     private static final Pattern RELATIVE = Pattern.compile("(?i)\\b(?:her|his|their|my|your|our|its)\\s+(?:boss|maid|nanny|yaya|butler|grandma|grandmother|grandfather|grandpa|lola|lolo|servant|mother|father|baby|kid|child)\\b");
 
@@ -495,7 +497,10 @@ final class Cast {
             if (any) talk++;
         }
         // A story: people talk in it again and again. A lesson with a quotation or two is not one.
-        if (talk < 4 || talk * 6 < text) return null;
+        // Any text with somebody speaking gets voices: a story fully, a lesson or a book with a quotation or two lightly
+        // (the quoted person's voice; the rest is not told as a story).
+        if (talk < 1) return null;
+        lastLight = talk < 4 || talk * 6 < text;
         LinkedHashMap<String, Person> people = STORIES.get(scope);
         if (people == null) {
             people = new LinkedHashMap<>();
@@ -648,7 +653,22 @@ final class Cast {
                 }
                 // How it is said: "she whispered", "pasigaw na sabi niya", or ALL IN CAPITALS.
                 String feel = TextPrep.feelOn ? Mood.feeling(narration, l.substring(sp.get(k)[0], sp.get(k)[1])) : "";
-                out[i][k] = code + styleTag + (feel.isEmpty() ? "" : "~" + feel);
+                String codeK = code, tagK = styleTag;
+                // Two people in one line ("Peter asked, "…?" Jesus replied, "…""): each quotation goes to the one named right before it.
+                if (sp.size() >= 2) {
+                    int from = 0;
+                    for (int q = k - 1; q >= 0; q--) if (spoken(l, sp.get(q))) {
+                        from = sp.get(q)[1];
+                        break;
+                    }
+                    String w2 = attribution(l.substring(from, sp.get(k)[0]), people);
+                    Person p2 = w2 == null || w2.equals("I") || w2.equals("?") || w2.equals("he") || w2.equals("she") ? null : people.get(w2);
+                    if (p2 != null && !w2.equals(speaker)) {
+                        codeK = codeFor(people, p2);
+                        tagK = isDivine(codeK) ? "" : tagOf(p2);
+                    }
+                }
+                out[i][k] = codeK + tagK + (feel.isEmpty() ? "" : "~" + feel);
             }
             // Names said in this line: who may answer, and who "she" may be next.
             Matcher m = CAP_WORD.matcher(l);

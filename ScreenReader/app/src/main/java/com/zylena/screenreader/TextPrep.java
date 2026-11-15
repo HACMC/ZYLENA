@@ -1154,6 +1154,8 @@ final class TextPrep {
         }
         // A story's characters each get a voice of their own for what they say.
         String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
+        // A few quotations in a lesson or a book: the people get voices, but shouts, laughs, sounds and scene changes are for stories.
+        final boolean storyText = cast != null && !Cast.lastLight;
         final boolean taglishStory = cast != null && hasTagalog(lines);
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
@@ -1274,7 +1276,7 @@ final class TextPrep {
                 }
             }
             // (Judged on the line as it was printed: the words in capitals have been lowercased by now.)
-            final boolean shoutLine = cast != null && feelOn && !verse && lines.get(li).indexOf('"') < 0 && lines.get(li).indexOf('\u201C') < 0 && isShout(lines.get(li));
+            final boolean shoutLine = storyText && feelOn && !verse && lines.get(li).indexOf('"') < 0 && lines.get(li).indexOf('\u201C') < 0 && isShout(lines.get(li));
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
             // In a story with Tagalog in it (Taglish too) every character, and the storyteller, keep the Tagalog voice:
             // a character whose line has English words in it used to switch to the English voice and back.
@@ -1286,7 +1288,7 @@ final class TextPrep {
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
                 sentenceCount++;
                 String laughWho = null, laughSaid = "";
-                if (laughOn && cast != null && !verse && !hasVerse && LAUGH.matcher(sentence).find()) {
+                if (laughOn && storyText && !verse && !hasVerse && LAUGH.matcher(sentence).find()) {
                     String[] lw = laugher(sentence, cast[li]);
                     String stripped = withoutLaugh(sentence);
                     if (!stripped.equals(sentence)) {
@@ -1308,7 +1310,7 @@ final class TextPrep {
                 }
                 // The sounds people make without words (a sigh, a gasp, a groan): made by the character, as the author wrote it.
                 Seg soundAfter = null;
-                if (soundsOn && cast != null && !verse && !hasVerse) {
+                if (soundsOn && storyText && !verse && !hasVerse) {
                     String kind = NonVerbal.kindOf(sentence);
                     if (kind != null) {
                         String[] who2 = laugher(sentence, cast[li]);
@@ -1338,7 +1340,7 @@ final class TextPrep {
                 // Sound effects in a story: a sound written out ("Ring, ring!") is played instead of said; a sentence
                 // that tells of one (a knock, a door, thunder) plays it as it is read.
                 String fx = "";
-                if (sfxOn && cast != null && !verse && !hasVerse && Bible.firstRef(sentence) == null) {
+                if (sfxOn && storyText && !verse && !hasVerse && Bible.firstRef(sentence) == null) {
                     String solo = Sfx.solo(sentence);
                     if (solo != null) {
                         pendingFx = personal(solo, sentence, cast[li]);
@@ -1359,13 +1361,13 @@ final class TextPrep {
                     else if (bibleQuotes != null) g.cast = bibleQuotes;
                     else if (verseCast != null) g.cast = verseCast;
                     g.mood = mood;
-                    g.story = cast != null;
+                    g.story = cast != null && !Cast.lastLight;
                     g.sfx = fx;
                     fx = "";
-                    if (cast != null && feelOn) g.narrFeel = Mood.ofNarration(sentence);
+                    if (storyText && feelOn) g.narrFeel = Mood.ofNarration(sentence);
                     if (pendingScene) {
                         g.scene = true;
-                        if (cast != null && g.sfx.isEmpty()) g.sfx = "scene";
+                        if (storyText && g.sfx.isEmpty()) g.sfx = "scene";
                         pendingScene = false;
                     }
                     out.add(g);
