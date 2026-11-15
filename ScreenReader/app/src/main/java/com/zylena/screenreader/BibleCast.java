@@ -30,6 +30,16 @@ final class BibleCast {
     private static final Pattern INTRO = Pattern.compile("(?i)(?<![\\p{L}])(?:sinasabi|sinabi|nagsabi|nagsasabi|sabi|wika|sumagot|sumasagot|sagot|nagtanong|tinanong|nagtatanong|"
             + "sumigaw|sumisigaw|nagsisigaw|nagsigaw|bumulong|nagsalita|nagsasalita|nagutos|iniutos|ani|"
             + "said|saith|spake|spoke|answered|answering|asked|asking|cried|crying|replied|commanded|shouted|told|saying)(?![\\p{L}])[^.!?;:,]{0,60}?[,:]");
+    /** A part of a verse that names who speaks ("sinabi ni Pedro", "Peter said", the devil, the Spirit): somebody else takes over. */
+    private static boolean namesSomeone(String part) {
+        Matcher c = NAMED.matcher(part);
+        while (c.find()) {
+            String w = (c.group(1) != null ? c.group(1) : c.group(2) != null ? c.group(2) : c.group(3)).toLowerCase(Locale.ROOT);
+            if (!NOT_NAMES.contains(w)) return true;
+        }
+        return VILLAIN.matcher(part).find() || SPIRIT.matcher(part).find();
+    }
+
     /** A verse that tells what happened, not what is said. */
     private static final Pattern NARRATION = Pattern.compile("(?i)^(?:at|and|nang|when|then|now|so|datapuwa't|datapuwat|but|pagkatapos|noon|after|ngunit)\\b.*");
     /** First or second person: people talking to each other. */
@@ -82,13 +92,36 @@ final class BibleCast {
         boolean inSpeech = false;
         String speaker = "";
         boolean any = false;
+        boolean seenVerse = false;
+        // Does the passage begin inside Jesus's own words? (A marker only he uses within the first few verses, and nothing before it
+        // that tells what happened or brings somebody else's words in.)
+        boolean startsInJesus = false;
+        {
+            int firstReal = -1;
+            for (int k = 0; k < verses.size() && k <= 3; k++) {
+                String v = verses.get(k);
+                if (v.isEmpty()) continue;
+                if (firstReal < 0) firstReal = k;
+                if (JESUS_SAYS.matcher(v).find() && !narrates(v) && !INTRO.matcher(v.substring(0, Math.min(v.length(), 40))).find()) {
+                    startsInJesus = true;
+                    break;
+                }
+                if (narrates(v) || INTRO.matcher(v).find()) break;
+            }
+        }
         for (String v : verses) {
             if (v.isEmpty()) continue;
+            final boolean firstVerse = !seenVerse;
+            seenVerse = true;
             String narr = v, speech = null;
             String who = null;
+            // Inside Jesus's (or God's) words, "you have heard that it was said to those of old, …" quotes somebody else: it
+            // is still him speaking, unless somebody is named as speaking.
+            final boolean divineSpeech = inSpeech && speaker != null && speaker.startsWith("cd");
             Matcher m = INTRO.matcher(v);
             while (m.find()) {
                 if (inSpeech && m.start() > 50) break;
+                if (divineSpeech && m.start() <= 50 && !namesSomeone(v.substring(0, m.end()))) continue;
                 String intro = m.group();
                 if (FIRST_PERSON.matcher(intro).find()) continue; // "sinabi ko sa inyo": the speaker's own words
                 String rest = v.substring(m.end()).trim();
@@ -111,6 +144,13 @@ final class BibleCast {
                 who = st.who(v.substring(Math.max(0, m.start() - 40), m.start()) + " " + intro, v.substring(0, m.start()));
                 break;
             }
+            // A passage that begins inside Jesus's own words ("Sapagka't katotohanang sinasabi ko sa inyo…", "Verily I say unto you…"),
+            // as a lesson quotes the Sermon on the Mount from verse 17: no "Jesus said" before it, but only he says these things.
+            if (speech == null && !inSpeech && firstVerse && startsInJesus) {
+                narr = "";
+                speech = v;
+                who = st.who("Jesus said", "");
+            }
             if (speech == null && inSpeech && !narrates(v)) {
                 narr = "";
                 speech = v; // the speech goes on into this verse
@@ -126,7 +166,7 @@ final class BibleCast {
             speaker = who;
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
-            String feel = Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), speech);
+            String feel = Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech); // (what Jesus teaches is not made angry by its words)
             String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
             out.append(out.length() > 0 ? " " : "").append(open);
@@ -143,6 +183,10 @@ final class BibleCast {
     }
 
     private static final Pattern SAYING = Pattern.compile("(?i)^(?:saying|na nagsasabi|nagsasabi|na sinasabi|sinasabi)\\s*[,:]\\s*");
+    /** Words only Jesus says, as the Gospels have him: "I say unto you", "you have heard that it was said". */
+    private static final Pattern JESUS_SAYS = Pattern.compile("(?i)(?:katotohanang\\s+sinasabi\\s+ko\\s+sa\\s+inyo|sinasabi\\s+ko\\s+sa\\s+inyo|narinig\\s+ninyo\\s+na\\s+sinabi|"
+            + "i\\s+say\\s+unto\\s+you|verily,?\\s+(?:verily,?\\s+)?i\\s+say|ye\\s+have\\s+heard\\s+that\\s+it\\s+was\\s+said|but\\s+i\\s+say|"
+            + "i\\s+am\\s+the\\s+(?:way|light|bread|door|good\\s+shepherd|vine|resurrection)|ako\\s+ang\\s+(?:daan|ilaw|tinapay|pintuan|puno\\s+ng\\s+ubas|pagkabuhay))");
     private static final Pattern AGAIN = Pattern.compile("(?i)^(?:at|and)\\s+(?:sinabi|nagsabi|said|saith|sumagot|answered)\\b[^,:]{0,40}[,:]\\s*");
 
     /** A verse that tells what happened: it begins like a story and nobody in it says "I" or "you". */
