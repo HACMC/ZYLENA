@@ -1201,6 +1201,7 @@ public class ReaderService extends AccessibilityService {
     private static final class Spot {
         int top = Integer.MIN_VALUE, bottom = Integer.MIN_VALUE; // exact, once an edge has been seen
         int minTop = Integer.MAX_VALUE, maxBottom = Integer.MIN_VALUE; // what showed of it, when an edge never did
+        int step, seenTop; // the scan step it was first seen in, and where on that screen it was
     }
 
     private boolean scanning, scanned;
@@ -1928,6 +1929,8 @@ public class ReaderService extends AccessibilityService {
             Spot sp = spots.get(k);
             if (sp == null) {
                 sp = new Spot();
+                sp.step = scanSteps;
+                sp.seenTop = r.top;
                 spots.put(k, sp);
                 scanOrder.add(sh.lines.get(i));
             }
@@ -1966,7 +1969,14 @@ public class ReaderService extends AccessibilityService {
         }
         List<String> ordered = new ArrayList<>(scanOrder);
         // (Stable sort; after a step that couldn't be measured the order found is kept as it is.)
-        if (!scanDoubt) ordered.sort((x, y) -> Integer.compare(topOf(x), topOf(y)));
+        // The order is the order the page was met in: screen by screen, and on one screen by where each paragraph sat there.
+        // (Not by each paragraph's place on the whole page: one scan whose first step was measured off, because the page
+        // was still settling after the jump to the top, put "Hello?" and the first paragraphs out of order.)
+        if (!scanDoubt) ordered.sort((x, y) -> {
+            Spot a = spots.get(key(x)), b = spots.get(key(y));
+            if (a == null || b == null) return Integer.compare(topOf(x), topOf(y));
+            return a.step != b.step ? Integer.compare(a.step, b.step) : Integer.compare(a.seenTop, b.seenTop);
+        });
         lines = ordered;
         rects = new ArrayList<>();
         for (int i = 0; i < lines.size(); i++) rects.add(new Rect());
