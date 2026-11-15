@@ -100,6 +100,12 @@ final class BibleCast {
                     rest = rest.substring(again.end()).trim();
                     if (rest.length() < 3) continue;
                 }
+                // "cried with a loud voice, saying, Lazarus…": the "saying" belongs to what introduces the words.
+                java.util.regex.Matcher sy = SAYING.matcher(rest);
+                if (sy.find() && rest.length() - sy.end() >= 3) {
+                    intro = intro + " " + sy.group().replaceAll("[\\s,:]+$", "") + ",";
+                    rest = rest.substring(sy.end()).trim();
+                }
                 narr = v.substring(0, m.start()) + intro;
                 speech = rest;
                 who = st.who(v.substring(Math.max(0, m.start() - 40), m.start()) + " " + intro, v.substring(0, m.start()));
@@ -118,11 +124,15 @@ final class BibleCast {
             any = true;
             inSpeech = true;
             speaker = who;
+            // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
+            // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
+            String feel = Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), speech);
+            String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
             out.append(out.length() > 0 ? " " : "").append(open);
-            if (tagged) out.append('\u0004').append(who).append('\u0004');
+            if (tagged) out.append('\u0004').append(whoF).append('\u0004');
             out.append(speech.trim()).append(close);
-            codes.add(who);
+            codes.add(whoF);
         }
         if (!any) return null;
         Result r = new Result();
@@ -132,6 +142,7 @@ final class BibleCast {
         return r;
     }
 
+    private static final Pattern SAYING = Pattern.compile("(?i)^(?:saying|na nagsasabi|nagsasabi|na sinasabi|sinasabi)\\s*[,:]\\s*");
     private static final Pattern AGAIN = Pattern.compile("(?i)^(?:at|and)\\s+(?:sinabi|nagsabi|said|saith|sumagot|answered)\\b[^,:]{0,40}[,:]\\s*");
 
     /** A verse that tells what happened: it begins like a story and nobody in it says "I" or "you". */

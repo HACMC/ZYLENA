@@ -288,7 +288,7 @@ final class Bible {
         return true;
     }
 
-    private static final Pattern CODE_TAG = Pattern.compile("\u00AB\u0004(c[mfud]\\d+(?:\\^[a-z]+)?)\u0004");
+    private static final Pattern CODE_TAG = Pattern.compile("\u00AB\u0004(c[mfud]\\d+(?:\\^[a-z@]+)?(?:~[a-z])?)\u0004");
 
     /** Takes the voice codes out of the quotations withVerses made, in order, and leaves plain quotation marks. */
     static String takeCodes(String text, List<String> codes) {
