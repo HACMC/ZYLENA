@@ -247,11 +247,25 @@ final class Cast {
             + "|rasped|rasps|roared|roars|sneered|sneers|spat|spits|wailed|wails|wept|weeps|smirked|smirks|grinned|grins|smiled|smiles"
             + "|nodded|nods|shrugged|shrugs|lied|lies|guessed|guesses|confessed|confesses|commented|comments|concluded|concludes"
             + "|countered|counters|echoed|echoes|finished|finishes|pressed|presses|prompted|prompts|reasoned|reasons|recalled|recalls"
-            + "|returned|returns|sang|sings|shrieked|shrieks|thought|thinks|volunteered|volunteers|vowed|vows";
+            + "|returned|returns|sang|sings|shrieked|shrieks|thought|thinks|volunteered|volunteers|vowed|vows"
+            + "|rambled|rambles|babbled|babbles|ranted|rants|chirped|chirps|stammered|sniffled|sniffles|sniffed|sniffs|squeaked|squeaks|cheered|cheers"
+            + "|bragged|brags|boasted|boasts|chided|chides|cautioned|cautions|cried out|called out|shouted out|blabbed|blurted out|rambled on|went off"
+            + "|clarified|clarifies|conceded|concedes|croaked|croaks|croon|crooned|croons|demurred|dismissed|dismisses|exclaim|fumed|fumes|gloated|gloats"
+            + "|griped|gripes|gushed|gushes|hesitated|hesitates|howled|howls|implored|implores|inquire|jeered|jeers|lamented|laments|moaned|moans"
+            + "|muttered|objected|objects|pouted|pouts|prattled|prattles|proposed|proposes|quipped|quips|raged|rages|rebuked|rebukes|rejoiced"
+            + "|replied|resumed|resumes|rumbled|rumbles|sassed|scolded|scolds|screeched|screeches|shot back|snarled|snarls|sniggered|stuttering"
+            + "|sulked|sulks|taunted|taunts|thundered|thunders|trailed off|trembled|trembles|uttered|utters|ventured|ventures|wheezed|wheezes"
+            + "|whimpered|whimpers|whooped|whoops|worried|worries|yawned|yawns|bawled|bawls|beamed|beams|bellowed|bellows|bubbled|burst out|choked|chokes";
     private static final String NAME = "\\p{Lu}[\\p{L}'’]{1,}(?:[ -]\\p{Lu}[\\p{L}'’]{1,})?";
     /** "Julia sighed", "she asked", "I said happily". */
     private static final Pattern SUBJECT_VERB = Pattern.compile(
             "(?<![\\p{L}'’])(I|[Hh]e|[Ss]he|" + NAME + ")\\s+(?:(?:had|then|just|only|finally|quickly|quietly|softly|simply|almost|\\p{Ll}+ly)\\s+)?(?:" + VERBS + ")(?![\\p{L}])");
+    /**
+     * A verb the list does not know: "she rambled." with nothing after it but the end of the sentence is still the
+     * one who said the quotation next to it.
+     */
+    private static final Pattern SUBJECT_ED = Pattern.compile(
+            "(?<![\\p{L}'’])(I|[Hh]e|[Ss]he)\\s+(?:\\p{Ll}+ly\\s+)?\\p{Ll}{3,}ed(?:\\s+(?:on|out|off|up|back|in))?\\s*(?=[.,!?…]|$)");
     /** "said Julia", "asked the boy" is not one. */
     private static final Pattern VERB_SUBJECT = Pattern.compile("(?<![\\p{L}])(?:" + VERBS + ")\\s+(" + NAME + ")(?![\\p{L}])");
     /** Tagalog: "sabi ni Julia", "tanong niya", "sagot ko", "ani Julia", "aniya". */
@@ -285,6 +299,11 @@ final class Cast {
                 who = s;
             }
             break;
+        }
+        m = SUBJECT_ED.matcher(narration);
+        if (m.find() && m.start() < best) {
+            best = m.start();
+            who = m.group(1);
         }
         m = VERB_SUBJECT.matcher(narration);
         while (m.find()) {

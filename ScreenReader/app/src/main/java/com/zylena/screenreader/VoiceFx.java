@@ -92,6 +92,7 @@ final class VoiceFx {
         feel("w", 1.0f, 0.90f, 0f, 0.38f, 0f, 0.65f, 0.07f); // whispered
         feel("t", 0.97f, 0.88f, 0f, 0.12f, 0f, 0.85f, 0.12f); // tender
         feel("p", 1.06f, 0.90f, 0.02f, 0.08f, 0f, 0.9f, 0.14f); // pleading
+        feel("r", 1.07f, 1.22f, 0f, 0f, 0f, 1.0f, 0.18f); // rambling: fast and rushed
         feel("h", 0.92f, 0.80f, 0f, 0.25f, 0f, 0.8f, 0.10f); // a sigh
     }
 

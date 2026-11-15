@@ -106,6 +106,8 @@ final class Mood {
                     + "|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
             {"a", "argued|argues|protested|retorted|scowled|seethed|gritted|snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
                     + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik|banta|nagbanta|binantaan|pabanta"},
+            {"r", "rambled|rambles|rambling|babbled|babbles|babbling|rattled on|prattled|chattered|jabbered|blabbed|gabbed|blurted|blurting|gushed|in a rush|in a hurry|hurriedly|rapidly|frantically|breathlessly|quickly"
+                    + "|nagdadaldal|dumaldal|daldal|nagmamadali|nagmamadaling|dali-dali|dalidali|humahangos|hingal|nagkakandarapa|tuloy-tuloy|sunod-sunod"},
             {"f", "stammered|stuttered|gasped|trembled|trembling|nervously|panicked|shakily|whimpered"
                     + "|nauutal|nanginginig|takot|natatakot|kinakabahan|napasinghap|taranta|natataranta"}};
     private static final Pattern[] FEEL_P = new Pattern[FEEL.length];
@@ -117,7 +119,7 @@ final class Mood {
     /**
      * How the quoted words are said, from the words around them ("she whispered", "pasigaw na sabi niya") and
      * from the words themselves (ALL IN CAPITALS is shouted): "w" whispered, "s" shouted, "d" sad, "j" glad, "l" laughing, "h" sighing,
-     * "a" angry, "f" afraid, or "" plainly.
+     * "a" angry, "f" afraid, "r" rambling (fast and rushed), or "" plainly.
      */
     static String feeling(String narration, String quote) {
         int at = Integer.MAX_VALUE;
@@ -223,6 +225,8 @@ final class Mood {
                 return new float[]{1.06f, 0.93f, 0.9f};
             case "h": // a sigh: breathy, slow, low
                 return new float[]{0.92f, 0.86f, 0.8f};
+            case "r": // rambling: fast, rushed, a little higher
+                return new float[]{1.08f, 1.20f, 1.05f};
             case "a":
                 return new float[]{0.90f, 1.08f, 1.25f};
             case "f":
