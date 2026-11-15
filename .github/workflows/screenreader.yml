@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "ZYLENA_VERSION=$((GITHUB_RUN_NUMBER + 100))" >> "$GITHUB_ENV"
           # From version 2 on, the name is 2.<n> (the first build of version 2 is 2.0); the number above stays as Android's version code.
-          echo "ZYLENA_NAME=2.$((GITHUB_RUN_NUMBER - 103))" >> "$GITHUB_ENV"
+          echo "ZYLENA_NAME=2.$((GITHUB_RUN_NUMBER - 104))" >> "$GITHUB_ENV"
       # The signing key lives in a secret, never in this public repository.
       - name: Signing key
         env:

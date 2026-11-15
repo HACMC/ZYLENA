@@ -470,13 +470,15 @@ final class Speaker {
         toast("Sleep timer: reading stopped. Good night!");
     }
 
-    private final Runnable sleepForce = () -> {
+    private final Runnable sleepForce = this::sleepForceNow;
+
+    private void sleepForceNow() {
         if (!sleepFinishing) return;
         sleepFinishing = false;
         Logs.d(ctx, "sleep timer: stopped reading");
         stop();
         toast("Sleep timer: reading stopped. Good night!");
-    };
+    }
 
     /** Stops reading after this many minutes; 0 turns the timer off. */
     void setSleepTimer(int minutes) {
