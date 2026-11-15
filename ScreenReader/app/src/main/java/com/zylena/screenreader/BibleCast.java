@@ -30,6 +30,9 @@ final class BibleCast {
     private static final Pattern INTRO = Pattern.compile("(?i)(?<![\\p{L}])(?:sinasabi|sinabi|nagsabi|nagsasabi|sabi|wika|sumagot|sumasagot|sagot|nagtanong|tinanong|nagtatanong|"
             + "sumigaw|sumisigaw|nagsisigaw|nagsigaw|bumulong|nagsalita|nagsasalita|nagutos|iniutos|ani|"
             + "said|saith|spake|spoke|answered|answering|asked|asking|cried|crying|replied|commanded|shouted|told|saying)(?![\\p{L}])[^.!?;:,]{0,60}?[,:]");
+    private static final Pattern HE = Pattern.compile("(?i)(?<![\\p{L}'])(?:he|siya|niya|kaniyang|sya)(?![\\p{L}])");
+    private static final Pattern SOMEONE = Pattern.compile("(?i)(?<![\\p{L}])(?:certain|isang|ilang|someone|a\\s+(?:man|woman|lawyer|ruler|scribe|centurion)|isa\\s+sa)(?![\\p{L}])");
+
     /** A part of a verse that names who speaks ("sinabi ni Pedro", "Peter said", the devil, the Spirit): somebody else takes over. */
     private static boolean namesSomeone(String part) {
         Matcher c = NAMED.matcher(part);
@@ -84,11 +87,20 @@ final class BibleCast {
      * the speaker's voice code between two \u0004 marks, for the caller to take out again (see Bible.takeCodes).
      */
     static Result annotateVerses(List<String> verseList, char open, char close, boolean tagged) {
+        return annotateVerses(verseList, open, close, tagged, 0);
+    }
+
+    /**
+     * As above, the first `context` verses being only what came before the passage in its chapter (and a little of the chapter
+     * before): they are read to learn who is speaking, since the Bible says it in other verses ("And Jesus … taught them, saying",
+     * five chapters of the Sermon on the Mount), but they are not part of the result.
+     */
+    static Result annotateVerses(List<String> verseList, char open, char close, boolean tagged, int context) {
         List<String> verses = new ArrayList<>();
         for (String v : verseList) verses.add(v.replaceAll("[\u201C\u201D\"\u00AB\u00BB]", "").trim());
         State st = new State();
-        StringBuilder out = new StringBuilder();
-        List<String> codes = new ArrayList<>();
+        StringBuilder outAll = new StringBuilder();
+        List<String> codesAll = new ArrayList<>();
         boolean inSpeech = false;
         String speaker = "";
         boolean any = false;
@@ -98,7 +110,7 @@ final class BibleCast {
         boolean startsInJesus = false;
         {
             int firstReal = -1;
-            for (int k = 0; k < verses.size() && k <= 3; k++) {
+            for (int k = context; k < verses.size() && k <= context + 3; k++) {
                 String v = verses.get(k);
                 if (v.isEmpty()) continue;
                 if (firstReal < 0) firstReal = k;
@@ -109,12 +121,21 @@ final class BibleCast {
                 if (narrates(v) || INTRO.matcher(v).find()) break;
             }
         }
-        for (String v : verses) {
+        for (int vi = 0; vi < verses.size(); vi++) {
+            String v = verses.get(vi);
             if (v.isEmpty()) continue;
-            final boolean firstVerse = !seenVerse;
+            // (A verse of context is read for who speaks, but what it comes to is thrown away.)
+            final boolean ctxV = vi < context;
+            final StringBuilder out = ctxV ? new StringBuilder() : outAll;
+            final List<String> codes = ctxV ? new ArrayList<>() : codesAll;
+            // Who is spoken of lately: an unnamed "he" later in the passage is most likely this one.
+            String mk = JESUS.matcher(v).find() ? "jesus" : FATHER.matcher(v).find() ? "father" : null;
+            if (mk != null) st.mentioned = mk;
+            final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
             String narr = v, speech = null;
             String who = null;
+            String pendingWho = null;
             // Inside Jesus's (or God's) words, "you have heard that it was said to those of old, …" quotes somebody else: it
             // is still him speaking, unless somebody is named as speaking.
             final boolean divineSpeech = inSpeech && speaker != null && speaker.startsWith("cd");
@@ -125,7 +146,13 @@ final class BibleCast {
                 String intro = m.group();
                 if (FIRST_PERSON.matcher(intro).find()) continue; // "sinabi ko sa inyo": the speaker's own words
                 String rest = v.substring(m.end()).trim();
-                if (rest.length() < 3 || rest.chars().noneMatch(Character::isLetter)) continue;
+                if (rest.length() < 3 || rest.chars().noneMatch(Character::isLetter)) {
+                    // "…and taught them, saying," at the end of a verse: the words themselves begin with the next verse.
+                    if (rest.chars().noneMatch(Character::isLetter) && pendingWho == null) {
+                        pendingWho = st.who(v.substring(Math.max(0, m.start() - 40), m.start()) + " " + intro, v.substring(0, m.start()));
+                    }
+                    continue;
+                }
                 // "sumagot, at sinabi, Nasusulat…": the second "said" belongs to the introduction too.
                 java.util.regex.Matcher again = AGAIN.matcher(rest);
                 if (again.find()) {
@@ -146,6 +173,12 @@ final class BibleCast {
             }
             // A passage that begins inside Jesus's own words ("Sapagka't katotohanang sinasabi ko sa inyo…", "Verily I say unto you…"),
             // as a lesson quotes the Sermon on the Mount from verse 17: no "Jesus said" before it, but only he says these things.
+            if (speech == null && pendingWho != null) {
+                inSpeech = true;
+                speaker = pendingWho;
+                out.append(out.length() > 0 ? " " : "").append(v);
+                continue;
+            }
             if (speech == null && !inSpeech && firstVerse && startsInJesus) {
                 narr = "";
                 speech = v;
@@ -161,7 +194,7 @@ final class BibleCast {
                 out.append(out.length() > 0 ? " " : "").append(v);
                 continue;
             }
-            any = true;
+            if (!ctxV) any = true;
             inSpeech = true;
             speaker = who;
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
@@ -176,8 +209,8 @@ final class BibleCast {
         }
         if (!any) return null;
         Result r = new Result();
-        r.text = out.toString();
-        r.codes = codes.toArray(new String[0]);
+        r.text = outAll.toString();
+        r.codes = codesAll.toArray(new String[0]);
         r.summary = st.summary();
         return r;
     }
@@ -202,6 +235,7 @@ final class BibleCast {
         final List<String> codes = new ArrayList<>();
         final List<String> history = new ArrayList<>(); // one entry per turn
         int men = 0, women = 0, anon;
+        String mentioned; // "jesus" or "father" when the verses have spoken of him lately
 
         String who(String nearIntro, String before) {
             String key = null;
@@ -234,6 +268,9 @@ final class BibleCast {
                 // Whoever answers the tempter, unnamed, is Jesus (or God).
                 if ("villain".equals(lastKey)) key = "jesus";
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey)) key = history.get(k);
+                // "And he opened his mouth, and taught them, saying": the "he" is who the chapter has been about, when nobody else is
+                // named, nobody has spoken yet, and it is not "a certain lawyer … tempted him".
+                if (key == null && mentioned != null && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find()) key = mentioned;
                 if (key == null) {
                     key = "#" + (++anon);
                     String cue = before + " " + nearIntro;

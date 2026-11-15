@@ -258,7 +258,11 @@ final class Bible {
             String words = v == null || book == 0 ? null : passage(src, tl, book, Integer.parseInt(m.group("c")), v);
             if (words != null && TextPrep.castOn && !alreadyReadPeek(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) {
                 // People who talk in the passage get voices of their own; the rest is told by the usual voice.
-                BibleCast.Result bc = BibleCast.annotateVerses(passageVerses(src, tl, book, Integer.parseInt(m.group("c")), v), '\u00AB', '\u00BB', true);
+                // The verses before it in the chapter are read as well (not said) to learn who speaks.
+                List<String> before = verseContext(src, tl, book, Integer.parseInt(m.group("c")), v);
+                List<String> both = new ArrayList<>(before);
+                both.addAll(passageVerses(src, tl, book, Integer.parseInt(m.group("c")), v));
+                BibleCast.Result bc = BibleCast.annotateVerses(both, '\u00AB', '\u00BB', true, before.size());
                 if (bc != null) words = bc.text;
             }
             if (words != null && alreadyRead(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) words = null;
@@ -397,6 +401,36 @@ final class Bible {
     private static String passage(Verses src, boolean tl, int book, int chapter, String spec) {
         List<String> vs = passageVerses(src, tl, book, chapter, spec);
         return vs.isEmpty() ? null : String.join(" ", vs);
+    }
+
+    /**
+     * The verses that come before a passage in its chapter (up to forty), and the last few of the chapter before when the
+     * chapter's own start is among them: where the Bible says who is speaking and to whom.
+     */
+    private static List<String> verseContext(Verses src, boolean tl, int book, int chapter, String spec) {
+        List<String> out = new ArrayList<>();
+        try {
+            Matcher r = RANGE_PART.matcher(spec.split("\\s?,\\s?")[0].trim());
+            int from;
+            if (r.matches()) from = Integer.parseInt(r.group(1));
+            else from = Integer.parseInt(spec.split("\\s?,\\s?")[0].trim());
+            int first = Math.max(1, from - 40);
+            if (first == 1 && chapter > 1) {
+                List<String> tail = new ArrayList<>();
+                for (int v = 40; v >= 1 && tail.size() < 3; v--) {
+                    String t = src.get(tl, book, chapter - 1, v);
+                    if (t != null) tail.add(0, t);
+                }
+                out.addAll(tail);
+            }
+            for (int v = first; v < from; v++) {
+                String t = src.get(tl, book, chapter, v);
+                if (t != null) out.add(t);
+            }
+        } catch (RuntimeException e) {
+            return new ArrayList<>();
+        }
+        return out;
     }
 
     private static List<String> passageVerses(Verses src, boolean tl, int book, int chapter, String spec) {
