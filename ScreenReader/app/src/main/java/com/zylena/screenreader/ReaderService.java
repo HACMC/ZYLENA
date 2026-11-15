@@ -2773,7 +2773,7 @@ public class ReaderService extends AccessibilityService {
         bar.addView(chip("\u21BB Scan again", this::scanAgain));
         bar.addView(chip("Picture text", this::readPictureText));
         bar.addView(chip("Save audio", this::saveAudio));
-        bar.addView(chip("\uD83D\uDD0D Search", () -> {
+        bar.addView(chip("\uD83D\uDD0D Settings search", () -> {
             hidePanel();
             openSettingsSearch();
         }));
@@ -2836,6 +2836,46 @@ public class ReaderService extends AccessibilityService {
         TextView hint = Theme.body(this, "Tap a line to start reading there", Theme.MUTED, 13);
         hint.setPadding(pad / 2, pad / 2, 0, 0);
         panel.addView(hint);
+        // Search the page's text: only the lines that have the words stay; tap one to read from there.
+        final android.widget.EditText find = new android.widget.EditText(this);
+        find.setHint("\uD83D\uDD0D Search this page");
+        find.setSingleLine(true);
+        find.setTextColor(Theme.INK);
+        find.setHintTextColor(Theme.MUTED);
+        find.setTextSize(15);
+        find.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_SEARCH);
+        find.setPadding(pad, pad / 2, pad, pad / 2);
+        GradientDrawable fbg = new GradientDrawable();
+        fbg.setCornerRadius(Theme.dp(this, 10));
+        fbg.setColor(0x33FFFFFF);
+        fbg.setStroke(Theme.dp(this, 1), Theme.LINE_STRONG);
+        find.setBackground(fbg);
+        LinearLayout.LayoutParams flp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        flp.topMargin = Theme.dp(this, 6);
+        panel.addView(find, flp);
+        // The panel never takes the keyboard's focus (it would steal it from the app below), except while this box is being typed in.
+        find.setOnTouchListener((v, e) -> {
+            if (e.getAction() == android.view.MotionEvent.ACTION_DOWN) panelTyping(true, find);
+            return false;
+        });
+        find.setOnEditorActionListener((v, action, ev) -> {
+            panelTyping(false, find);
+            return true;
+        });
+        find.addTextChangedListener(new android.text.TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence c, int a, int b, int d) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence c, int a, int b, int d) {
+            }
+
+            @Override
+            public void afterTextChanged(android.text.Editable e) {
+                filterPanel(e.toString(), hint);
+            }
+        });
 
         panelScroll = new ScrollView(this);
         LinearLayout list = new LinearLayout(this);
@@ -2853,6 +2893,7 @@ public class ReaderService extends AccessibilityService {
             tv.setPadding(pad, pad, pad, pad);
             tv.setOnClickListener(v -> {
                 Logs.d(this, "start from line " + line + ": " + Logs.snip(lines.get(line)));
+                panelTyping(false, find);
                 speakFrom(line);
             });
             list.addView(tv);
@@ -2864,13 +2905,77 @@ public class ReaderService extends AccessibilityService {
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE, PixelFormat.TRANSLUCENT);
         lp.gravity = Gravity.BOTTOM;
+        lp.softInputMode = WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE;
+        panelLp = lp;
         try {
             wm.addView(panel, lp);
         } catch (Exception e) {
             panel = null;
+            panelLp = null;
             return;
         }
         highlight(currentLine);
+    }
+
+    private WindowManager.LayoutParams panelLp;
+
+    /** The keyboard for the panel's search box: the panel can take focus only while it is being typed in. */
+    private void panelTyping(boolean on, android.widget.EditText box) {
+        if (panel == null || panelLp == null || wm == null) return;
+        int flag = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
+        boolean focusable = (panelLp.flags & flag) == 0;
+        if (on == focusable) return;
+        panelLp.flags = on ? panelLp.flags & ~flag : panelLp.flags | flag;
+        try {
+            wm.updateViewLayout(panel, panelLp);
+        } catch (Exception ignored) {
+        }
+        android.view.inputmethod.InputMethodManager imm = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm == null) return;
+        if (on) {
+            box.post(() -> {
+                box.requestFocus();
+                imm.showSoftInput(box, 0);
+            });
+        } else {
+            imm.hideSoftInputFromWindow(box.getWindowToken(), 0);
+            box.clearFocus();
+        }
+    }
+
+    /** Only the lines that have every word typed stay (the words marked); an empty box shows them all again. */
+    private void filterPanel(String query, TextView hint) {
+        if (panel == null) return;
+        String[] words = query.trim().toLowerCase(java.util.Locale.ROOT).split("\\s+");
+        boolean any = !query.trim().isEmpty();
+        int shown = 0;
+        for (int i = 0; i < lineViews.size(); i++) {
+            int line = lineViews.keyAt(i);
+            TextView tv = lineViews.valueAt(i);
+            String text = lines.get(line);
+            String low = text.toLowerCase(java.util.Locale.ROOT);
+            boolean ok = true;
+            if (any) for (String w : words) if (!w.isEmpty() && !low.contains(w)) ok = false;
+            tv.setVisibility(ok ? View.VISIBLE : View.GONE);
+            if (ok) shown++;
+            if (ok && any) {
+                android.text.SpannableString sp = new android.text.SpannableString(text);
+                for (String w : words) {
+                    if (w.isEmpty()) continue;
+                    for (int at = low.indexOf(w); at >= 0; at = low.indexOf(w, at + w.length())) {
+                        sp.setSpan(new android.text.style.BackgroundColorSpan(0x66D6AD55), at, at + w.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                    }
+                }
+                tv.setText(sp);
+            } else {
+                tv.setText(text);
+            }
+        }
+        if (hint != null) {
+            hint.setText(!any ? "Tap a line to start reading there"
+                    : shown == 0 ? "No line has that" : shown + (shown == 1 ? " line found" : " lines found") + " \u2014 tap one to start reading there");
+        }
+        if (panelScroll != null) panelScroll.scrollTo(0, 0);
     }
 
     private static final int[] SIZES = {40, 52, 64, 76}; // dp
@@ -3095,6 +3200,7 @@ public class ReaderService extends AccessibilityService {
         } catch (Exception ignored) {
         }
         panel = null;
+        panelLp = null;
         panelScroll = null;
         lineViews.clear();
     }
