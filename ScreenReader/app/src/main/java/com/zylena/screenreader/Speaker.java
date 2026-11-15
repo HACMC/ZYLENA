@@ -41,6 +41,12 @@ final class Speaker {
     private final List<Runnable> pendingVoiceCallbacks = new ArrayList<>();
 
     private volatile int curRun; // index of the run being spoken, for pause, back and skip
+    /** Where in the spoken run the voice is: per utterance {where it starts in the run, its share of the run, its length}. */
+    private final java.util.Map<String, float[]> partSpan = new java.util.concurrent.ConcurrentHashMap<>();
+    private volatile int posRun = -1;
+    private volatile float posFrac;
+    private volatile boolean rangeSeen;
+    private volatile long runStartedAt;
     private volatile boolean paused;
     private List<TextPrep.Seg> pausedRuns;
     private int pausedAt;
@@ -136,6 +142,10 @@ final class Speaker {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
         curRun = i;
+        posRun = i;
+        posFrac = 0f;
+        rangeSeen = false;
+        runStartedAt = System.currentTimeMillis();
         if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
         if (!r.sfx.isEmpty()) Sfx.play(ctx, r.sfx);
@@ -260,6 +270,7 @@ final class Speaker {
         stop();
         if (segs.isEmpty()) return;
         curRun = 0;
+        partSpan.clear();
         final int gen = ++generation;
         tracking = track;
         setSpeaking(true);
@@ -343,8 +354,14 @@ final class Speaker {
         List<TextPrep.Seg> runs = currentRuns;
         int at = Math.max(0, Math.min(curRun, runs.size() - 1));
         boolean track = tracking;
+        // The sentence being read is where reading goes on from, not the start of the whole paragraph.
+        TextPrep.Seg tail = tailOf(runs.get(at));
         stop();
         pausedRuns = runs;
+        if (tail != null) {
+            pausedRuns = new ArrayList<>(runs);
+            pausedRuns.set(at, tail);
+        }
         pausedAt = at;
         pausedTrack = track;
         paused = true;
@@ -373,7 +390,49 @@ final class Speaker {
             stop();
             return;
         }
-        speak(new ArrayList<>(runs.subList(Math.max(0, at), runs.size())), tracking);
+        List<TextPrep.Seg> from = new ArrayList<>(runs.subList(Math.max(0, at), runs.size()));
+        // No jump (delta 0, e.g. the speed was changed): go on from the sentence being read.
+        if (delta == 0 && at >= 0) {
+            TextPrep.Seg tail = tailOf(runs.get(at));
+            if (tail != null) from.set(0, tail);
+        }
+        speak(from, tracking);
+    }
+
+    /** How much of the run being read has been said, 0..1: from the voice's own progress, else from the time. */
+    private float spokenFraction(TextPrep.Seg r) {
+        if (rangeSeen && posRun == curRun) return posFrac;
+        long el = System.currentTimeMillis() - runStartedAt;
+        if (el < 1500) return 0f;
+        float cps = 13f * Prefs.rate(ctx) * (r.lang.equals(TextPrep.FIL) ? Prefs.rateFil(ctx) : 1f);
+        return Math.min(0.9f, el / 1000f * cps / Math.max(1, r.text.length()));
+    }
+
+    private static final java.util.regex.Pattern SENTENCE_STOP = java.util.regex.Pattern.compile("[.!?\u2026]+[\"\u201D\u2019')\\]]*\\s+");
+
+    /**
+     * The rest of the run being read, from the start of the sentence the voice is in, or null when the run is
+     * to be read whole (nothing said yet, or it holds a Bible verse that must not be cut).
+     */
+    private TextPrep.Seg tailOf(TextPrep.Seg r) {
+        if (r.text.indexOf('\u000E') >= 0) return null;
+        float f = spokenFraction(r);
+        if (f < 0.05f) return null;
+        int pos = (int) (f * r.text.length()), cut = 0;
+        java.util.regex.Matcher m = SENTENCE_STOP.matcher(r.text);
+        while (m.find() && m.end() <= pos) if (r.text.length() - m.end() >= 15) cut = m.end();
+        if (cut == 0) return null;
+        TextPrep.Seg t = new TextPrep.Seg(r.text.substring(cut).trim(), r.lang, r.line, r.lastLine, r.heading, r.translated).like(r);
+        t.sfx = "";
+        if (r.cast != null) {
+            int closed = 0;
+            List<int[]> spans = Cast.quoteSpans(r.text.substring(0, cut), r.inQuote);
+            for (int[] q : spans) closed += q[2];
+            t.castFrom = r.castFrom + closed;
+            t.inQuote = !spans.isEmpty() && spans.get(spans.size() - 1)[2] == 0;
+        }
+        Logs.d(ctx, "going on from the sentence being read (" + Math.round(f * 100) + "% of the paragraph said)");
+        return t;
     }
 
     // ------------------------------------------------------------ sleep timer
@@ -424,6 +483,18 @@ final class Speaker {
                             // A run spoken in several pieces (two voices) starts once, with its first piece.
                             if (p.length > 2 && p[2].startsWith("p") && !p[2].equals("p0")) return;
                             runStarted(Integer.parseInt(p[1]), Integer.parseInt(p[0]));
+                        } catch (Exception ignored) {
+                        }
+                    }
+
+                    @Override
+                    public void onRangeStart(String id, int start, int end, int frame) {
+                        try {
+                            float[] sp = partSpan.get(id);
+                            if (sp == null || sp[2] <= 0) return;
+                            posRun = Integer.parseInt(id.split(":")[1]);
+                            posFrac = Math.min(1f, sp[0] + sp[1] * start / sp[2]);
+                            rangeSeen = true;
                         } catch (Exception ignored) {
                         }
                     }
@@ -747,6 +818,12 @@ final class Speaker {
         // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
         // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
         String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
+        float partsTotal = 1f, partsDone = 0f;
+        {
+            int tot = 0;
+            for (String[] pt : parts) tot += pt[0].length();
+            partsTotal = Math.max(1, tot);
+        }
         for (int k = 0; k < parts.size(); k++) {
             String lang = parts.get(k)[1];
             String t = parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
@@ -775,6 +852,9 @@ final class Speaker {
             tts.setSpeechRate(rateFor(lang) * r);
             tts.setPitch(pitch * p);
             String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
+            int plen = parts.get(k)[0].length();
+            partSpan.put(id, new float[]{partsDone / partsTotal, plen / partsTotal, plen});
+            partsDone += plen;
             tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, how, id);
             // Time to think about the question, unless the page ends here.
             long after = (long) (Prefs.pauseQuestion(ctx) * 1000);

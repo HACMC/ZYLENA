@@ -90,8 +90,27 @@ public class MainActivity extends Activity {
     }
 
     @Override
+    protected void onNewIntent(android.content.Intent i) {
+        super.onNewIntent(i);
+        setIntent(i);
+    }
+
+    /** Opened from the floating button's Search: the search box is focused and the keyboard comes up. */
+    private void focusSearchIfAsked() {
+        android.content.Intent i = getIntent();
+        if (i == null || !i.getBooleanExtra("focus_search", false) || searchBox == null) return;
+        i.removeExtra("focus_search");
+        searchBox.post(() -> {
+            searchBox.requestFocus();
+            android.view.inputmethod.InputMethodManager im = (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+            if (im != null) im.showSoftInput(searchBox, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT);
+        });
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        focusSearchIfAsked();
         // Switched on in Accessibility but not running: Android stopped it after a problem and won't start it again
         // by itself (Settings shows "Not working"). Give Android a moment first: after a restart it binds it again.
         getWindow().getDecorView().postDelayed(() -> {

@@ -950,6 +950,7 @@ public class ReaderService extends AccessibilityService {
         Boolean shown; // asked the app to bring it into view: did it?
     }
 
+    private String lastParaLogged = "";
     private int markGen;
     private boolean markBusy, markAgain;
 
@@ -1026,7 +1027,9 @@ public class ReaderService extends AccessibilityService {
         if (m.samePage && !picture) {
             markWant = m.want;
             markNodes = m.nodes;
-            Logs.t(this, "paragraph " + first + " at " + r.toShortString());
+            String where = first + " at " + r.toShortString();
+            if (!where.equals(lastParaLogged)) Logs.t(this, "paragraph " + where);
+            lastParaLogged = where;
             markArea = m.area;
             if (m.shown != null) {
                 Logs.d(this, "bringing the paragraph into view: " + (m.shown ? "ok" : "not possible"));
@@ -2721,6 +2724,10 @@ public class ReaderService extends AccessibilityService {
         bar.addView(chip("\u21BB Scan again", this::scanAgain));
         bar.addView(chip("Picture text", this::readPictureText));
         bar.addView(chip("Save audio", this::saveAudio));
+        bar.addView(chip("\uD83D\uDD0D Search", () -> {
+            hidePanel();
+            openSettingsSearch();
+        }));
         bar.addView(chip("\u2699 Settings", () -> {
             hidePanel();
             startActivity(new android.content.Intent(this, MainActivity.class)
@@ -3330,6 +3337,12 @@ public class ReaderService extends AccessibilityService {
                 .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
     }
 
+    /** ZYLENA's settings, with the search box ready to type in: every control can be found by its name. */
+    private void openSettingsSearch() {
+        startActivity(new android.content.Intent(this, MainActivity.class).putExtra("focus_search", true)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+    }
+
     private void runShortcut(String id) {
         Speaker sp = Speaker.get(this);
         Logs.d(this, "shortcut: " + id);
@@ -3348,6 +3361,9 @@ public class ReaderService extends AccessibilityService {
             case "settings":
                 startActivity(new android.content.Intent(this, MainActivity.class)
                         .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK | android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP));
+                break;
+            case "search":
+                openSettingsSearch();
                 break;
             case "pause":
                 if (sp.isPaused()) sp.resume();
@@ -3389,6 +3405,7 @@ public class ReaderService extends AccessibilityService {
         if (fan != null || button == null) return;
         List<String[]> items = new ArrayList<>(Shortcuts.chosen(this));
         items.add(new String[]{"panel", "\u2630", "All controls"});
+        items.add(new String[]{"search", "\uD83D\uDD0D", "Search settings"});
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
         f.setBackgroundColor(0x33000000);
         f.setOnClickListener(v -> hideFan());

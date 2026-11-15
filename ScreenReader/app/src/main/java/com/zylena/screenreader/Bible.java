@@ -256,6 +256,11 @@ final class Bible {
             int book = bookNumber(m.group("n"), m.group("b"));
             boolean tl = fil || TAGALOG_NAMES.contains(m.group("b"));
             String words = v == null || book == 0 ? null : passage(src, tl, book, Integer.parseInt(m.group("c")), v);
+            if (words != null && TextPrep.castOn && !alreadyReadPeek(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) {
+                // People who talk in the passage get voices of their own; the rest is told by the usual voice.
+                BibleCast.Result bc = BibleCast.annotateVerses(passageVerses(src, tl, book, Integer.parseInt(m.group("c")), v), '\u00AB', '\u00BB', true);
+                if (bc != null) words = bc.text;
+            }
             if (words != null && alreadyRead(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) words = null;
             String out = m.group();
             if (words != null) {
@@ -275,6 +280,27 @@ final class Bible {
     private static final java.util.Map<String, java.util.Set<Integer>> readVerses = new java.util.HashMap<>();
     private static java.util.Set<Integer> pageNow = new java.util.HashSet<>();
     private static final java.util.Set<String> readNow = new java.util.HashSet<>();
+
+    private static synchronized boolean alreadyReadPeek(String id) {
+        java.util.Set<Integer> at = readVerses.get(id);
+        if (at == null) return false;
+        for (Integer h : pageNow) if (at.contains(h) && !readNow.contains(id)) return false;
+        return true;
+    }
+
+    private static final Pattern CODE_TAG = Pattern.compile("\u00AB\u0004(c[mfu]\\d+)\u0004");
+
+    /** Takes the voice codes out of the quotations withVerses made, in order, and leaves plain quotation marks. */
+    static String takeCodes(String text, List<String> codes) {
+        Matcher m = CODE_TAG.matcher(text);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            codes.add(m.group(1));
+            m.appendReplacement(sb, "\u00AB");
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
 
     /** A new reading begins (the button): every verse may be read once again. */
     static synchronized void newReading() {
@@ -369,7 +395,12 @@ final class Bible {
     }
 
     private static String passage(Verses src, boolean tl, int book, int chapter, String spec) {
-        StringBuilder sb = new StringBuilder();
+        List<String> vs = passageVerses(src, tl, book, chapter, spec);
+        return vs.isEmpty() ? null : String.join(" ", vs);
+    }
+
+    private static List<String> passageVerses(Verses src, boolean tl, int book, int chapter, String spec) {
+        List<String> sb = new ArrayList<>();
         int count = 0;
         for (String part : spec.split("\\s?,\\s?")) {
             Matcher r = RANGE_PART.matcher(part.trim());
@@ -400,13 +431,12 @@ final class Bible {
                     }
                     break;
                 }
-                if (sb.length() > 0) sb.append(' ');
-                sb.append(t);
+                sb.add(t);
                 count++;
                 v++;
             }
         }
-        return sb.length() == 0 ? null : sb.toString();
+        return sb;
     }
 
     static String expand(String text, boolean fil) {

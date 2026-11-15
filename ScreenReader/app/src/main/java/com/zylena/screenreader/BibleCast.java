@@ -51,7 +51,7 @@ final class BibleCast {
      * when nobody speaks in it. The verse numbers are taken out (the verses stay in order, one after the other).
      */
     static Result annotate(String line) {
-        String t = Bible.normalize(line).replaceAll("[“”\"«»]", "");
+        String t = Bible.normalize(line);
         Matcher lead = LEAD.matcher(t);
         if (lead.find()) t = t.substring(lead.end());
         List<String> verses = new ArrayList<>();
@@ -62,7 +62,16 @@ final class BibleCast {
             last = in.end();
         }
         verses.add(t.substring(last).trim());
+        return annotateVerses(verses, '\u201C', '\u201D', false);
+    }
 
+    /**
+     * The same for verses already apart (the built-in Bible's). tagged: each opening quotation mark is followed by
+     * the speaker's voice code between two \u0004 marks, for the caller to take out again (see Bible.takeCodes).
+     */
+    static Result annotateVerses(List<String> verseList, char open, char close, boolean tagged) {
+        List<String> verses = new ArrayList<>();
+        for (String v : verseList) verses.add(v.replaceAll("[\u201C\u201D\"\u00AB\u00BB]", "").trim());
         State st = new State();
         StringBuilder out = new StringBuilder();
         List<String> codes = new ArrayList<>();
@@ -73,7 +82,6 @@ final class BibleCast {
             if (v.isEmpty()) continue;
             String narr = v, speech = null;
             String who = null;
-            // A new speaker is announced at the start of a verse that goes on from speech, anywhere in other verses.
             Matcher m = INTRO.matcher(v);
             while (m.find()) {
                 if (inSpeech && m.start() > 50) break;
@@ -100,7 +108,9 @@ final class BibleCast {
             inSpeech = true;
             speaker = who;
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
-            out.append(out.length() > 0 ? " " : "").append('“').append(speech.trim()).append('”');
+            out.append(out.length() > 0 ? " " : "").append(open);
+            if (tagged) out.append('\u0004').append(who).append('\u0004');
+            out.append(speech.trim()).append(close);
             codes.add(who);
         }
         if (!any) return null;

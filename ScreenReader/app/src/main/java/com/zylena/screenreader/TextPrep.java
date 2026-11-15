@@ -1129,8 +1129,9 @@ final class TextPrep {
             // A quotation with its reference after it ("…halimbawa” (1 Corinto 10:11)) is Bible text: marked, so the
             // Bible voice reads it and the usual voice takes over again after it.
             if (bibleVoice && !verse) cleaned = markVerses(cleaned);
+            List<String> verseCodes = new ArrayList<>();
             if (readVerses && !verse) {
-                cleaned = Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL));
+                cleaned = Bible.takeCodes(Bible.withVerses(cleaned, Bible.hasTagalogBook(cleaned) || detect(cleaned).equals(FIL)), verseCodes);
             } else if (skipRefs) {
                 // A reference shown as its own link leaves "Apostol (" and "). Matapos" behind; tidy those ends.
                 // A reference the sentence goes through ("foretold in | Daniel 8:14 | represented") is read.
@@ -1170,6 +1171,16 @@ final class TextPrep {
             }
             // A Tagalog or Taglish paragraph keeps one voice throughout, the way one person would read it,
             // instead of flipping to the English voice for each English sentence.
+            // The Bible's own people (from the built-in verses): one voice code for each quotation made from them.
+            String[] verseCast = null;
+            if (cast == null && bibleQuotes == null && !verseCodes.isEmpty()) {
+                List<int[]> sp = Cast.quoteSpans(cleaned, false);
+                verseCast = new String[sp.size()];
+                int ci = 0;
+                for (int k = 0; k < sp.size(); k++) {
+                    verseCast[k] = cleaned.charAt(sp.get(k)[0]) == '\u00AB' && ci < verseCodes.size() ? verseCodes.get(ci++) : "";
+                }
+            }
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
             // In a story with Tagalog in it (Taglish too) every character, and the storyteller, keep the Tagalog voice:
             // a character whose line has English words in it used to switch to the English voice and back.
@@ -1199,6 +1210,7 @@ final class TextPrep {
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     if (cast != null) g.cast = cast[li];
                     else if (bibleQuotes != null) g.cast = bibleQuotes;
+                    else if (verseCast != null) g.cast = verseCast;
                     g.mood = mood;
                     g.story = cast != null;
                     g.sfx = fx;
@@ -1280,6 +1292,9 @@ final class TextPrep {
             head &= s.heading;
             if (sb.length() == 0) {
                 first = s.line;
+                // A run that is already the middle of a paragraph (reading goes on from there) knows how many of the
+                // paragraph's quotations were said before it.
+                if (s.cast != null && (s.castFrom > 0 || s.inQuote)) castState = new int[]{s.castFrom, s.inQuote ? 1 : 0};
                 cast = s.cast;
                 mood = s.mood;
                 story = s.story;
