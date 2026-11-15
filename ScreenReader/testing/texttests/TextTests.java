@@ -171,6 +171,25 @@ public class TextTests {
             String got = br == null ? "" : String.join(" ", br.codes);
             check("who speaks: " + c[0], c[1].equals(got), "'" + got + "'");
         }
+        // Who the last page was about carries on to the next; a child and an old man have voices that suit them; a cry is firm.
+        {
+            BibleCast.forget();
+            BibleCast.annotate("1 The same day went Jesus out of the house, and sat by the sea side.");
+            BibleCast.Result nx = BibleCast.annotate("3 And he said, Behold, a man went forth to sow.");
+            check("next page: he is Jesus", nx != null && "cd1".equals(nx.codes[0]), nx == null ? "none" : nx.codes[0]);
+            BibleCast.forget();
+            BibleCast.Result al = BibleCast.annotate("3 And he said, Behold, a man went forth to sow.");
+            check("a page alone: he is not named", al != null && !al.codes[0].startsWith("cd"), al == null ? "none" : al.codes[0]);
+            BibleCast.Result od = BibleCast.annotate("And the old man said unto the child, Come hither.");
+            check("an old man's voice", od != null && od.codes[0].endsWith("^elder"), od == null ? "none" : od.codes[0]);
+            BibleCast.Result ch = BibleCast.annotate("And the little child said unto his mother, I am hungry.");
+            check("a child's voice", ch != null && ch.codes[0].endsWith("^child"), ch == null ? "none" : ch.codes[0]);
+            BibleCast.Result jc = BibleCast.annotate("2 And Jesus called a little child unto him, and set him in the midst of them, 3 And said, Verily I say unto you, Except ye be converted.");
+            check("Jesus is not a child", jc != null && jc.codes[0].equals("cd1"), jc == null ? "none" : jc.codes[0]);
+            BibleCast.Result cr = BibleCast.annotate("Then answered all the people, and said, Crucify him.");
+            check("a cry is shouted", cr != null && cr.codes[0].endsWith("~s"), cr == null ? "none" : cr.codes[0]);
+            BibleCast.forget();
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");

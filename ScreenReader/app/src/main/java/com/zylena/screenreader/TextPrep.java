@@ -1162,7 +1162,7 @@ final class TextPrep {
         // The people of the Bible have the same feelings, sounds and sound effects a story's characters have (the words of
         // Scripture themselves are never changed or left out for them).
         final boolean bibleStory = verse && castOn;
-        final boolean feat = storyText || bibleStory;
+        final boolean feat = cast != null || bibleStory; // (a lesson with a few quotations has them too)
         final boolean taglishStory = cast != null && hasTagalog(lines);
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;

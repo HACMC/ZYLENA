@@ -144,6 +144,10 @@ final class BibleCast {
         int context = contextVerses;
         int said = 0; // how much the one speaking has said so far
         State st = new State();
+        // A page is often one verse of a chapter: who the last page was about carries on to the next, for a little while.
+        synchronized (BibleCast.class) {
+            if (memory != null && System.currentTimeMillis() - memoryAt < 180000L) st.mentioned = memory;
+        }
         StringBuilder outAll = new StringBuilder();
         List<String> codesAll = new ArrayList<>();
         boolean inSpeech = false;
@@ -226,7 +230,7 @@ final class BibleCast {
                         }
                         String w = near != null ? st.who(near, told) : prev;
                         prev = w;
-                        String feel = Mood.feeling((near == null ? "" : near).replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), w.startsWith("cd") ? "" : piece);
+                        String feel = bibleFeel(Mood.feeling((near == null ? "" : near).replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), w.startsWith("cd") ? "" : piece), piece, w.startsWith("cd"));
                         String wf = feel.isEmpty() ? w : w + "~" + feel;
                         out.append(out.length() > 0 ? " " : "").append(open);
                         if (tagged) out.append('\u0004').append(wf).append('\u0004');
@@ -384,7 +388,7 @@ final class BibleCast {
             }
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
-            String feel = Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech); // (what Jesus teaches is not made angry by its words)
+            String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech), speech, who != null && who.startsWith("cd")); // (what Jesus teaches is not made angry by its words)
             String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
             out.append(out.length() > 0 ? " " : "").append(open);
@@ -398,12 +402,43 @@ final class BibleCast {
                 if (ctxV) context++;
             }
         }
+        {
+            String last = st.history.isEmpty() ? null : st.history.get(st.history.size() - 1);
+            String keep = "jesus".equals(last) || "father".equals(last) ? last : st.mentioned;
+            synchronized (BibleCast.class) {
+                if (keep != null) {
+                    memory = keep;
+                    memoryAt = System.currentTimeMillis();
+                }
+            }
+        }
         if (!any) return null;
         Result r = new Result();
         r.text = outAll.toString();
         r.codes = codesAll.toArray(new String[0]);
         r.summary = st.summary();
         return r;
+    }
+
+    private static String memory; // "jesus" or "father": who the verses read lately were about
+    private static long memoryAt;
+
+    /** Forgets who the last verses were about (a new book is opened, or a test begins). */
+    static synchronized void forget() {
+        memory = null;
+    }
+
+    /** How the people of the Bible speak when the verse says nothing of it: "Woe unto you", "Crucify him", "Hosanna", "Fear not". */
+    private static final Pattern ROLE_SPEAKER = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:the\\s+|a\\s+)?(little\\s+child|child|little\\s+(?:boy|girl)|boy)|(?:the\\s+)?(old\\s+(?:man|woman|prophet)|aged\\s+(?:man|woman))|(?:the\\s+)?(lad|youth|young\\s+man))\\s+(?:answered|said|saith|spake|cried|spoke|replied)"
+            + "|(?:sinabi|sumagot|nagsabi)\\s+(?:ng|ni)\\s+(?:ang\\s+)?(?:(bata|batang\\s+lalake|batang\\s+babae)|(matanda|matandang\\s+(?:lalake|babae))|(binata|kabataan))(?![\\p{L}])");
+    private static final Pattern BIBLE_FIRM = Pattern.compile("(?i)^\\W*(?:woe\\b|crucify|away\\s+with|sino\\s+ang\\s+nakakaalam|sa\\s+aba|ipako|alisin\\s+mo)");
+    private static final Pattern BIBLE_GLAD = Pattern.compile("(?i)^\\W*(?:hosanna|hallelujah|alleluia|rejoice\\b|osana|aleluya|magalak|magalak\\b)");
+
+    private static String bibleFeel(String feel, String speech, boolean divine) {
+        if (!feel.isEmpty() || divine) return feel;
+        if (BIBLE_FIRM.matcher(speech).find()) return "s";
+        if (BIBLE_GLAD.matcher(speech).find()) return "j";
+        return feel;
     }
 
     private static final Pattern SAYING = Pattern.compile("(?i)^(?:saying|na nagsasabi|nagsasabi|na sinasabi|sinasabi)\\s*[,:]\\s*");
@@ -551,6 +586,11 @@ final class BibleCast {
                 else if (key.equals("villain")) code = "cm" + (men++) + "^villain";
                 else if (femaleKeys.contains(key) || TextPrep.WOMEN.contains(key) || FEMALE_CUE.matcher(key).find()) code = "cf" + (women++);
                 else code = "cm" + (men++);
+                // A child, an old man, a youth: told by how the verse names the one who speaks ("the old man said", "sinabi ng bata").
+                if (!code.contains("^") && !code.startsWith("cd")) {
+                    Matcher rs = ROLE_SPEAKER.matcher(nearIntro);
+                    if (rs.find()) code += "^" + (rs.group(1) != null ? "child" : rs.group(2) != null ? "elder" : "teen");
+                }
                 codes.add(code);
                 at = keys.size() - 1;
             }
