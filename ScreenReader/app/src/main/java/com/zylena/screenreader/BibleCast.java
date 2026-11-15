@@ -176,6 +176,7 @@ final class BibleCast {
             // Who is spoken of lately: an unnamed "he" later in the passage is most likely this one.
             String mk = JESUS.matcher(v).find() ? "jesus" : FATHER.matcher(v).find() ? "father" : null;
             if (mk != null) st.mentioned = mk;
+            st.hintJesus = PARABLE_WORD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
             final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
             String narr = v, speech = null;
@@ -294,7 +295,9 @@ final class BibleCast {
             final boolean noTalk = !TALK.matcher(v.length() > 140 ? v.substring(0, 140) : v).find();
             final boolean tellsOf = noTalk && ((!discourse && (JESUS.matcher(v).find() || VILLAIN.matcher(v).find()))
                     || (JESUS.matcher(v).find() && !Cast.JESUS_CODE.equals(speaker)));
-            final boolean ends = tellsOf || restart || (!parable && narrates(v));
+            // ("And he said, So is the kingdom of God…" after his own long teaching: he goes on.)
+            final boolean goesOnTeaching = divineSpeech && Cast.JESUS_CODE.equals(speaker) && discourse && v.length() > 20 && HE_SAID.matcher(v).find();
+            final boolean ends = tellsOf || restart || (!parable && !goesOnTeaching && narrates(v));
             if (speech == null && inSpeech && (quoteOpen || !ends)) {
                 narr = "";
                 speech = v; // the speech goes on into this verse
@@ -426,6 +429,10 @@ final class BibleCast {
     private static final Pattern RESTART = Pattern.compile("(?i)^(?:and|then|now|but|so|at|nang|datapuwa't|pagkatapos|when)\\b[^.!?]{0,40}?(?<![\\p{L}])(?:jesus|hesus|(?:the|his)\\s+disciples|ang\\s+(?:kaniyang\\s+)?mga\\s+alagad|pharisees|fariseo|multitude|karamihan|it\\s+came\\s+to\\s+pass|nangyari)(?![\\p{L}])"
             // In Tagalog the story's own sentences begin with the word of saying: "Sinabi nga ng mga alagad sa kaniya,", "Sinalita nga ni Jesus…".
             + "|^(?:sinabi|sumagot|nagsabi|sinalita|nagtanong|tinanong|sinagot|sumigaw|nagsalita)(?![\\p{L}])[^,:.!?]{0,40}");
+    private static final Pattern HE_SAID = Pattern.compile("(?i)^\\W*(?:and|at|then)?\\s*(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)(?![\\p{L}])");
+    private static final Pattern TELLS_PARABLE = Pattern.compile("(?i)(?:behold,?\\s+a\\s+sower|a\\s+certain\\s+(?:man|king|householder|rich\\s+man)\\s+(?:had|made|planted|which)|the\\s+kingdom\\s+of\\s+(?:heaven|god)\\s+is\\s+(?:like|likened)|manghahasik|ang\\s+kaharian\\s+ng\\s+(?:langit|dios|diyos)\\s+ay\\s+(?:katulad|gaya|nagiging\\s+gaya))");
+    /** Somebody other than the one the page is about is named in front of the saying. */
+    private static final Pattern PRONOUN_ONLY_OTHER = Pattern.compile("(?i)(?<![\\p{L}])(?:the\\s+(?:scribes?|pharisees?|lawyer|devil|tempter|disciples?)|ang\\s+(?:mga\\s+)?(?:eskriba|fariseo|alagad|diablo))(?![\\p{L}])");
     private static final Pattern PARABLE_WORD = Pattern.compile("(?i)(?<![\\p{L}])(?:parable|parables|talinghaga)(?![\\p{L}])");
     private static final Pattern SI_NAME = Pattern.compile("^(?:At\\s+|Nguni't\\s+|Datapuwa't\\s+|Kaya't\\s+)?[Ss]i\\s+(\\p{Lu}\\p{Ll}[\\p{L}]+)(?![\\p{L}])(?!\\s+ay\\s+(?:sinabihan|tinanong))");
     private static final Pattern NOUN_SAID = Pattern.compile("(?i)(?<![\\p{L}])(?:the\\s+(woman|man|father|mother|son|servant|king|queen|centurion|young\\s+man|blind\\s+man|lawyer|ruler|angel|people|multitude|disciples|pharisees|scribes)\\s+(?:said|saith|answered|asked|replied|cried)"
@@ -449,6 +456,7 @@ final class BibleCast {
         int men = 0, women = 0, anon;
         String spokenTo; // who the last words were said to, when that is told
         String mentioned; // "jesus" or "father" when the verses have spoken of him lately
+        boolean hintJesus; // the verse being read tells a parable or says what only he says: an unnamed "he" is Jesus
 
         String who(String nearIntro, String before) {
             String key = null;
@@ -522,6 +530,9 @@ final class BibleCast {
                 // "And he opened his mouth, and taught them, saying": the "he" is who the chapter has been about, when nobody else is
                 // named, nobody has spoken yet, and it is not "a certain lawyer … tempted him".
                 if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || !keys.contains(mentioned)) && HE.matcher(before).find() && !SOMEONE.matcher(before).find()) key = mentioned;
+                // "And he spake many things unto them in parables, saying, Behold, a sower went forth to sow": nobody else tells parables.
+                if (key == null && hintJesus && HE.matcher(before + " " + nearIntro).find() && !PRONOUN_ONLY_OTHER.matcher(before).find()
+                        && !(before + " " + nearIntro).replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus"; // (somebody named is not he)
                 if (key == null) {
                     key = "#" + (++anon);
                     String cue = before + " " + nearIntro;
