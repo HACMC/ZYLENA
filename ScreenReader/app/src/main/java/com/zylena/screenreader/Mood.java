@@ -138,7 +138,70 @@ final class Mood {
                 if (Character.isUpperCase(c)) caps++;
             }
         }
-        return letters >= 6 && caps * 10 >= letters * 8 ? "s" : "";
+        if (letters >= 6 && caps * 10 >= letters * 8) return "s";
+        return ofWords(quote);
+    }
+
+    // ---- How a line is said, from what it says (when nothing around it tells)
+
+    private static final String[][] SAYS = {
+            {"a", "hate you|shut up|get out|how dare you|damn it|idiot|stupid|liar|leave me alone|i said no|bastard|asshole|bullshit|what the hell|go away"
+                    + "|ayoko|galit na galit|tumigil ka|umalis ka|bwisit|gago|tanga|ulol|layas"},
+            {"f", "help me|please no|don'?t hurt|what was that|i'?m scared|i'?m afraid|oh no|someone help|let me go|stay away|don'?t touch"
+                    + "|tulong|takot ako|huwag po|bitawan mo ako|lumayo ka"},
+            {"d", "i miss you|don'?t leave|please don'?t go|it hurts|i can'?t do this|i'?m so sorry|forgive me|it'?s over|goodbye|she'?s gone|he'?s gone"
+                    + "|miss na kita|nasasaktan|patawarin mo ako|patawad|paalam|iniwan mo ako|wala na siya"},
+            {"t", "i love you|i missed you|sweetheart|darling|my love|honey|you'?re safe|it'?s okay"
+                    + "|mahal kita|mahal na mahal|iniibig kita|aking mahal"},
+            {"p", "please,|please\\.\\.\\.|begging you|i beg you|pakiusap|makiusap|maawa ka"},
+            {"j", "thank you so much|we did it|finally|yay|congratulations|i'?m so happy|can'?t wait|awesome|amazing"
+                    + "|salamat po|yehey|congrats|sa wakas|masaya ako|ang saya"}};
+    private static final Pattern[] SAYS_P = new Pattern[SAYS.length];
+
+    static {
+        for (int i = 0; i < SAYS.length; i++) SAYS_P[i] = Pattern.compile("(?i)(?<![\\p{L}'-])(?:" + SAYS[i][1] + ")(?![\\p{L}-])");
+    }
+
+    /** The feeling of the words themselves ("I hate you!" is angry, "Please don't go" sad), or "". */
+    static String ofWords(String quote) {
+        int at = Integer.MAX_VALUE;
+        String feel = "";
+        for (int i = 0; i < SAYS.length; i++) {
+            Matcher m = SAYS_P[i].matcher(quote);
+            if (m.find() && m.start() < at) {
+                at = m.start();
+                feel = SAYS[i][0];
+            }
+        }
+        return feel;
+    }
+
+    // ---- The storyteller's feeling in a sentence ("my heart pounded", "tears streamed down")
+
+    private static final String[][] NARR = {
+            {"f", "froze|trembl|terrified|panic|heart (?:pounded|raced|skipped|hammered)|goosebumps|shiver|dread|horrified|nanginig|kinabahan|natakot|nanlamig"},
+            {"d", "tears|crying|cried|sobbed|heartbroken|sorrow|grief|ached|lonely|nalungkot|umiyak|luha|nasaktan"},
+            {"a", "furious|angry|glared|rage|slammed|fuming|seething|clenched (?:his|her|my) fists|galit|nagalit|nanggigil"},
+            {"j", "smiled|beamed|delighted|joy|happy|excited|grinned|giggled|ngumiti|nangiti|masaya|natuwa|kilig"},
+            {"h", "sighed|exhaled|exhausted|nagbuntong"}};
+    private static final Pattern[] NARR_P = new Pattern[NARR.length];
+
+    static {
+        for (int i = 0; i < NARR.length; i++) NARR_P[i] = Pattern.compile("(?i)(?<![\\p{L}-])(?:" + NARR[i][1] + ")");
+    }
+
+    /** The feeling the storyteller's own words carry (read at half strength), or "". */
+    static String ofNarration(String sentence) {
+        int at = Integer.MAX_VALUE;
+        String feel = "";
+        for (int i = 0; i < NARR.length; i++) {
+            Matcher m = NARR_P[i].matcher(sentence);
+            if (m.find() && m.start() < at) {
+                at = m.start();
+                feel = NARR[i][0];
+            }
+        }
+        return feel;
     }
 
     /** {pitch, speed, loudness} for a feeling; 1 is unchanged. */
@@ -154,6 +217,10 @@ final class Mood {
                 return new float[]{1.12f, 1.06f, 1.05f};
             case "l": // laughing while speaking: lighter, quicker, brighter
                 return new float[]{1.15f, 1.10f, 1.08f};
+            case "t": // tender: soft and slow
+                return new float[]{1.0f, 0.92f, 0.88f};
+            case "p": // pleading
+                return new float[]{1.06f, 0.93f, 0.9f};
             case "h": // a sigh: breathy, slow, low
                 return new float[]{0.92f, 0.86f, 0.8f};
             case "a":

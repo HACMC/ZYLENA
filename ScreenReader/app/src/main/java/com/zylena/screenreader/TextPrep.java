@@ -36,6 +36,8 @@ final class TextPrep {
         String mood = "";
         /** The page is a story with characters: all of it is read at the same loudness, a little under full. */
         boolean story;
+        /** The storyteller's feeling in this sentence ("f" afraid, "d" sad, "a" angry, "j" glad, "h" tired), read at half strength; "" none. */
+        String narrFeel = "";
         /** A scene change comes before this ("***", "Later that day"): a longer pause, a soft chime in a story. */
         boolean scene;
         /** A sound effect played as this is read ("knock", "thunder"; "" none), for stories. */
@@ -55,6 +57,7 @@ final class TextPrep {
             inQuote = o.inQuote;
             sfx = o.sfx;
             scene = o.scene;
+            narrFeel = o.narrFeel;
             return this;
         }
 
@@ -760,21 +763,33 @@ final class TextPrep {
                 && t.substring(1, t.length() - 2).indexOf('\u201C') < 0 && t.substring(1, t.length() - 2).indexOf('\u201D') < 0;
     }
 
+    /**
+     * The text as pieces with a tone each: "q" a question, "e" an exclamation, "t" trailing off ("I thought…"), "c" cut off
+     * ("Hello, Grazel—"), "b" a short beat ("No." "Not just angry."): the last three are followed by a pause.
+     */
     static List<String[]> tonePieces(String s) {
         List<String[]> out = new ArrayList<>();
-        if (s.indexOf('?') < 0 && s.indexOf('!') < 0) {
+        boolean marks = s.indexOf('?') >= 0 || s.indexOf('!') >= 0 || s.indexOf('\u2026') >= 0 || s.contains("...") || s.indexOf('\u2014') >= 0;
+        String[] sentences = SENTENCE_CUT.split(s);
+        if (!marks && sentences.length < 3) {
             out.add(new String[]{s, ""});
             return out;
         }
         StringBuilder plain = new StringBuilder();
-        for (String sentence : SENTENCE_CUT.split(s)) {
+        for (String sentence : sentences) {
             String t = sentence.trim();
             if (t.isEmpty()) continue;
+            long letters = t.chars().filter(Character::isLetter).count();
             // A question ends in "?" (quotation marks or a bracket may follow) and has a few words to say.
-            boolean q = t.matches("(?s).*\\?[\u201D\u2019\"')\\]]{0,3}") && t.chars().filter(Character::isLetter).count() >= 4;
+            boolean q = t.matches("(?s).*\\?[\u201D\u2019\"')\\]]{0,3}") && letters >= 4;
             // An exclamation ("Pakinggan ninyo ito!") is said with some life.
-            boolean e = !q && t.matches("(?s).*![\u201D\u2019\"')\\]]{0,3}") && t.chars().filter(Character::isLetter).count() >= 4;
-            if (!q && !e) {
+            boolean e = !q && t.matches("(?s).*![\u201D\u2019\"')\\]]{0,3}") && letters >= 4;
+            boolean trail = !q && !e && t.matches("(?s).*(?:\u2026|\\.\\.\\.)[\u201D\u2019\"')\\]]{0,3}") && letters >= 3;
+            boolean cut = !q && !e && !trail && t.matches("(?s).*[\u2014\u2013-][\u201D\u2019\"')\\]]{0,3}") && letters >= 3;
+            int words = t.trim().split("\\s+").length;
+            boolean beat = !q && !e && !trail && !cut && words <= 3 && letters >= 2 && sentences.length >= 3;
+            String tone = q ? "q" : e ? "e" : trail ? "t" : cut ? "c" : beat ? "b" : "";
+            if (tone.isEmpty()) {
                 plain.append(plain.length() > 0 ? " " : "").append(t);
                 continue;
             }
@@ -782,7 +797,7 @@ final class TextPrep {
                 out.add(new String[]{plain.toString(), ""});
                 plain.setLength(0);
             }
-            out.add(new String[]{t, q ? "q" : "e"});
+            out.add(new String[]{t, tone});
         }
         if (plain.length() > 0) out.add(new String[]{plain.toString(), ""});
         if (out.isEmpty()) out.add(new String[]{s, ""});
@@ -1273,6 +1288,7 @@ final class TextPrep {
                     g.story = cast != null;
                     g.sfx = fx;
                     fx = "";
+                    if (cast != null && feelOn) g.narrFeel = Mood.ofNarration(sentence);
                     if (pendingScene) {
                         g.scene = true;
                         if (cast != null && g.sfx.isEmpty()) g.sfx = "scene";
@@ -1363,7 +1379,7 @@ final class TextPrep {
         String[] cast = null;
         String mood = "";
         boolean story = false, sceneRun = false;
-        String sfxRun = "";
+        String sfxRun = "", narrRun = "";
         int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
@@ -1382,7 +1398,8 @@ final class TextPrep {
             boolean newWho = lang != null && !who.equals(s.who); // another voice reads from here
             boolean newScene = lang != null && s.scene; // a scene change always starts a run of its own
             boolean newFx = lang != null && !s.sfx.isEmpty(); // so does a sentence with a sound effect: the sound plays where it starts
-            if (lang != null && (newLang || newLine || newKind || tooLong || newWho || newScene || newFx)) {
+            boolean newNarr = lang != null && !s.narrFeel.equals(narrRun); // and a change in the storyteller's feeling
+            if (lang != null && (newLang || newLine || newKind || tooLong || newWho || newScene || newFx || newNarr)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
@@ -1390,6 +1407,7 @@ final class TextPrep {
                 out.get(out.size() - 1).story = story;
                 out.get(out.size() - 1).scene = sceneRun;
                 out.get(out.size() - 1).sfx = sfxRun;
+                out.get(out.size() - 1).narrFeel = narrRun;
                 castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
                 cast = null;
                 ref = null;
@@ -1410,6 +1428,7 @@ final class TextPrep {
                 story = s.story;
                 sceneRun = s.scene;
                 sfxRun = s.sfx;
+                narrRun = s.narrFeel;
             } else if (s.line != last && (cast != null || s.cast != null)) {
                 // Two screen lines read as one sentence: the second one's characters follow the first one's.
                 int had = Cast.quoteSpans(sb.toString(), false).size();
@@ -1434,6 +1453,7 @@ final class TextPrep {
             out.get(out.size() - 1).story = story;
             out.get(out.size() - 1).scene = sceneRun;
             out.get(out.size() - 1).sfx = sfxRun;
+            out.get(out.size() - 1).narrFeel = narrRun;
             castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;

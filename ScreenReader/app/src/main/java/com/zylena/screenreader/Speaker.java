@@ -834,6 +834,13 @@ final class Speaker {
         queuePhone(runs, gen, i);
     }
 
+    /** A run that starts with somebody speaking (a quotation), in a story. */
+    private static boolean quickTalk(TextPrep.Seg r) {
+        if (r.cast == null) return false;
+        String t = r.text.trim();
+        return !t.isEmpty() && "\"\u201C\u00AB".indexOf(t.charAt(0)) >= 0;
+    }
+
     /** Puts run i in the phone voice's queue, with a breath before it when a new paragraph starts. */
     private void queuePhone(List<TextPrep.Seg> runs, int gen, int i) {
         TextPrep.Seg s = runs.get(i);
@@ -852,6 +859,8 @@ final class Speaker {
             // The pauses are the user's (Voice > Pauses); the online voice's own wait before each piece counts toward them.
             long want = (long) ((head ? Prefs.pauseHeading(ctx) : Prefs.pauseParagraph(ctx)) * 1000);
             long breath = online ? Math.max(0, want - 300) : want;
+            // People answering each other quickly: a shorter gap than between narration paragraphs.
+            if (quickTalk(runs.get(i - 1)) && quickTalk(s)) breath = breath * 55 / 100;
             if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
         // A scene change: a longer pause first, the way a narrator would take a breath before it.
@@ -904,9 +913,9 @@ final class Speaker {
             String lang = parts.get(k)[1];
             String t = parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
             boolean ask = t.equals("q");
-            float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : 1f;
+            float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : t.equals("t") ? 0.97f : 1f;
             boolean divineLine = Cast.voice(parts.get(k)[3]) != null && Cast.voice(parts.get(k)[3]).startsWith("cd");
-            float r = ask ? 0.96f : t.equals("e") ? 1.02f : t.equals("h") ? 0.93f : t.equals("v") ? 0.94f : 1f;
+            float r = ask ? 0.96f : t.equals("e") ? 1.02f : t.equals("h") ? 0.93f : t.equals("v") ? 0.94f : t.equals("t") ? 0.9f : 1f;
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
@@ -921,6 +930,11 @@ final class Speaker {
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
+            // The storyteller's own words ("my heart pounded", "tears streamed down") carry a feeling too, at half strength.
+            if (Cast.feel(parts.get(k)[3]).isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
+                float[] nf = Mood.forFeeling(s.narrFeel);
+                feel = new float[]{1f + (nf[0] - 1f) * 0.5f, 1f + (nf[1] - 1f) * 0.5f, 1f + (nf[2] - 1f) * 0.5f};
+            }
             p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
             r *= (1f + (kind[1] - 1f) * strength) * (1f + (feel[1] - 1f) * strength);
             // A story is read a little under full loudness, so that a shout can be louder than the rest.
@@ -944,6 +958,8 @@ final class Speaker {
             // Time to think about the question, unless the page ends here.
             final long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
             final boolean think = ask && after > 0 && !lastPart;
+            // A short beat, a trailing off, a cut-off: a pause after it, when more of the paragraph follows.
+            final long gapAfter = k < parts.size() - 1 ? (long) ((t.equals("b") ? 240 : t.equals("t") ? 380 : t.equals("c") ? 300 : 0) * strength) : 0;
             final int run = i, part = k;
             final String fl2 = lang;
             Runnable emit = () -> {
@@ -955,6 +971,7 @@ final class Speaker {
                 if (fx != null) synthDeep(say, id, fr, fp, fl * fx.vol, run, part, lastPart, gen, fx);
                 else tts.speak(say, TextToSpeech.QUEUE_ADD, fhow, id);
                 if (think) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
+                if (gapAfter > 0) tts.playSilentUtterance(gapAfter, TextToSpeech.QUEUE_ADD, gen + ":-1");
             };
             // What comes after God's words waits until they have been played (they are played by ZYLENA itself).
             if (deepHold) deepHeld.add(emit);
