@@ -136,6 +136,19 @@ public class TextTests {
             String got = br == null || br.codes.length == 0 ? "" : br.codes[0];
             check("voice for: " + c[0], c[1].equals("!cd") ? !got.isEmpty() && !got.startsWith("cd") : got.startsWith(c[1]), "'" + got + "'");
         }
+        // Only the words that are said get the voice: the narrator takes over again inside the verse.
+        String[][] ends = {
+                // {verse, the text it must come to}
+                {"3 And God said, Let there be light: and there was light.", "And God said, \u201CLet there be light:\u201D and there was light."},
+                {"3 At sinabi ng Dios Magkaroon ng liwanag; at nagkaroon ng liwanag.", "At sinabi ng Dios \u201CMagkaroon ng liwanag;\u201D at nagkaroon ng liwanag."},
+                {"3 Sinabi ng Diyos, ''Magkaroon ng liwanag\u201D at nagkaroon ng liwanag.", "Sinabi ng Diyos, \u201CMagkaroon ng liwanag\u201D at nagkaroon ng liwanag."},
+                {"9 And God said, Let the dry land appear: and it was so.", "And God said, \u201CLet the dry land appear:\u201D and it was so."},
+                {"9 At sinabi ni Jesus sa kaniya, Sumunod ka sa akin. At siya'y nagtindig, at sumunod sa kaniya.", "At sinabi ni Jesus sa kaniya, \u201CSumunod ka sa akin.\u201D At siya'y nagtindig, at sumunod sa kaniya."},
+                {"6 And God said, Let there be a firmament in the midst of the waters, and let it divide the waters from the waters.", "And God said, \u201CLet there be a firmament in the midst of the waters, and let it divide the waters from the waters.\u201D"}};
+        for (String[] c : ends) {
+            BibleCast.Result br = BibleCast.annotate(c[0]);
+            check("words end: " + c[0], br != null && c[1].equals(br.text), "'" + (br == null ? "" : br.text) + "'");
+        }
         // The same in a lesson's own words, with quotation marks.
         String[][] lesson = {
                 {"Sinabi ni Jesus, \"Sumunod ka sa akin.\"", "cd1"},

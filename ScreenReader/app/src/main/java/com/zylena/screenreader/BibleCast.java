@@ -29,7 +29,15 @@ final class BibleCast {
     /** The words that bring in what somebody says: up to the comma or colon after them. */
     private static final Pattern INTRO = Pattern.compile("(?i)(?<![\\p{L}])(?:sinasabi|sinabi|nagsabi|nagsasabi|sabi|wika|sumagot|sumasagot|sagot|nagtanong|tinanong|nagtatanong|"
             + "sumigaw|sumisigaw|nagsisigaw|nagsigaw|bumulong|nagsalita|nagsasalita|nagutos|iniutos|ani|"
-            + "said|saith|spake|spoke|answered|answering|asked|asking|cried|crying|replied|commanded|shouted|told|saying)(?![\\p{L}])[^.!?;:,]{0,60}?[,:]");
+            + "said|saith|spake|spoke|answered|answering|asked|asking|cried|crying|replied|commanded|shouted|told|saying)(?![\\p{L}])"
+            // "At sinabi ng Dios Magkaroon ng liwanag": no comma, the words begin at the capital letter after who speaks.
+            + "(?:(?-i:\\s+(?:ng|ni)\\s+\\p{Lu}\\p{Ll}+(?=\\s+(?!(?:Cristo|Kristo|Dios|Diyos|Jesus|Hesus|Santo|Espiritu|Panginoon|Ama|Hari|Anak)\\b)\\p{Lu}\\p{Ll}))|[^.!?;:,]{0,60}?[,:])");
+    /** Where the one who tells the story takes over again inside a verse: "…Let there be light: | and there was light." */
+    private static final Pattern RESULT = Pattern.compile("(?i)[:;.,]\\s+(?=(?:and\\s+there\\s+w(?:as|ere)|and\\s+it\\s+was\\s+so|at\\s+nagkaroon|at\\s+nagkagayon|at\\s+gayon\\s+nga|at\\s+nangyari|at\\s+ito\\s+nga\\s+ang\\s+nangyari)(?![\\p{L}]))");
+    /** A short word to somebody, then what that one did: "…Follow me. | And he arose, and followed him." */
+    private static final Pattern DID = Pattern.compile("(?i)[.!]\\s+(?=(?:and|at)\\s+(?:he|she|they|siya'y|siya|sila'y|sila)(?![\\p{L}']))");
+    private static final Pattern LET = Pattern.compile("(?i)^(?:and|at)\\s+(?:let|magkaroon|maging|lumitaw|bukalan|tubuan)(?![\\p{L}]).*");
+    private static final char Q = '\u0006'; // where the page itself has a quotation mark
     private static final Pattern HE = Pattern.compile("(?i)(?<![\\p{L}'])(?:he|siya|niya|kaniyang|sya)(?![\\p{L}])");
     private static final Pattern SOMEONE = Pattern.compile("(?i)(?<![\\p{L}])(?:certain|isang|ilang|someone|a\\s+(?:man|woman|lawyer|ruler|scribe|centurion)|isa\\s+sa)(?![\\p{L}])");
 
@@ -114,8 +122,14 @@ final class BibleCast {
      * five chapters of the Sermon on the Mount), but they are not part of the result.
      */
     static Result annotateVerses(List<String> verseList, char open, char close, boolean tagged, int context) {
-        List<String> verses = new ArrayList<>();
-        for (String v : verseList) verses.add(v.replaceAll("[\u201C\u201D\"\u00AB\u00BB]", "").trim());
+        // The page's own quotation marks are the surest sign of where somebody's words end: their places are kept (marked).
+        List<String> verses = new ArrayList<>(), marked = new ArrayList<>();
+        for (String v : verseList) {
+            String mk = v.replace("''", "\"").replaceAll("[\u201C\u201D\"\u00AB\u00BB]", String.valueOf(Q)).trim();
+            marked.add(mk);
+            verses.add(mk.replace(String.valueOf(Q), "").trim());
+        }
+        boolean quoteOpen = false; // the page opened a quotation and has not closed it yet
         State st = new State();
         StringBuilder outAll = new StringBuilder();
         List<String> codesAll = new ArrayList<>();
@@ -202,18 +216,75 @@ final class BibleCast {
                 speech = v;
                 who = st.who("Jesus said", "");
             }
-            if (speech == null && inSpeech && !narrates(v)) {
+            if (speech == null && inSpeech && (quoteOpen || !narrates(v))) {
                 narr = "";
                 speech = v; // the speech goes on into this verse
                 who = speaker;
             }
             if (speech == null) {
                 inSpeech = false;
+                quoteOpen = false;
+                out.append(out.length() > 0 ? " " : "").append(v);
+                continue;
+            }
+            // Where the words end inside the verse: at the page's own closing quotation mark, else where the story plainly
+            // goes on ("…: and there was light.", "…; at nagkaroon ng liwanag."). What follows is the narrator's again.
+            String tail = null;
+            boolean closed = false;
+            {
+                String qv = marked.get(vi);
+                int sv = v.length() - speech.length();
+                int[] at = new int[v.length() + 1];
+                for (int i = 0, j = 0; j < v.length(); j++) {
+                    while (i < qv.length() && qv.charAt(i) != v.charAt(j)) i++;
+                    at[j] = i++;
+                }
+                at[v.length()] = qv.length();
+                int from = sv > 0 ? at[sv - 1] + 1 : 0;
+                boolean opens = qv.substring(Math.min(from, qv.length()), Math.min(at[sv], qv.length())).indexOf(Q) >= 0;
+                boolean goesOn = sv == 0 && quoteOpen && narr.isEmpty();
+                if (opens || goesOn) {
+                    int end = qv.indexOf(Q, at[sv]);
+                    if (end >= 0) {
+                        int j = sv;
+                        while (j < v.length() && at[j] < end) j++;
+                        String rest = v.substring(j).trim();
+                        // (A mark that only sets off a word inside the speech is not its end.)
+                        if (j - sv >= 3 || rest.isEmpty()) {
+                            speech = v.substring(sv, j).trim();
+                            if (rest.chars().anyMatch(Character::isLetter)) tail = rest;
+                            closed = true;
+                        }
+                    }
+                    quoteOpen = !closed;
+                } else {
+                    quoteOpen = false;
+                    Matcher rs = RESULT.matcher(speech);
+                    while (rs.find()) {
+                        String rest = speech.substring(rs.end());
+                        if (rs.start() < 2 || TALK.matcher(rest).find()) continue;
+                        tail = rest.trim();
+                        speech = speech.substring(0, rs.start() + 1);
+                        closed = true;
+                        break;
+                    }
+                    Matcher dd = closed ? null : DID.matcher(speech);
+                    if (dd != null && dd.find() && dd.start() < 80 && TALK.matcher(speech.substring(0, dd.start())).find()
+                            && !TALK.matcher(speech.substring(dd.end())).find()) {
+                        tail = speech.substring(dd.end()).trim();
+                        speech = speech.substring(0, dd.start() + 1);
+                        closed = true;
+                    }
+                }
+            }
+            if (speech.chars().noneMatch(Character::isLetter)) {
+                inSpeech = false;
+                quoteOpen = false;
                 out.append(out.length() > 0 ? " " : "").append(v);
                 continue;
             }
             if (!ctxV) any = true;
-            inSpeech = true;
+            inSpeech = !closed;
             speaker = who;
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
@@ -224,6 +295,7 @@ final class BibleCast {
             if (tagged) out.append('\u0004').append(whoF).append('\u0004');
             out.append(speech.trim()).append(close);
             codes.add(whoF);
+            if (tail != null) out.append(' ').append(tail);
         }
         if (!any) return null;
         Result r = new Result();
@@ -242,7 +314,7 @@ final class BibleCast {
 
     /** A verse that tells what happened: it begins like a story and nobody in it says "I" or "you". */
     private static boolean narrates(String v) {
-        if (!NARRATION.matcher(v).matches()) return false;
+        if (!NARRATION.matcher(v).matches() || LET.matcher(v).matches()) return false; // "And let them be for lights…" is still being said
         String head = v.length() > 140 ? v.substring(0, 140) : v;
         return !TALK.matcher(head).find();
     }
