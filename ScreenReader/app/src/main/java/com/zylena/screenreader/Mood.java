@@ -181,19 +181,27 @@ final class Mood {
     // ---- The storyteller's feeling in a sentence ("my heart pounded", "tears streamed down")
 
     private static final String[][] NARR = {
-            {"f", "froze|trembl|terrified|panic|heart (?:pounded|raced|skipped|hammered)|goosebumps|shiver|dread|horrified|nanginig|kinabahan|natakot|nanlamig"},
-            {"d", "tears|crying|cried|sobbed|heartbroken|sorrow|grief|ached|lonely|nalungkot|umiyak|luha|nasaktan"},
-            {"a", "furious|angry|glared|rage|slammed|fuming|seething|clenched (?:his|her|my) fists|galit|nagalit|nanggigil"},
-            {"j", "smiled|beamed|delighted|joy|happy|excited|grinned|giggled|ngumiti|nangiti|masaya|natuwa|kilig"},
-            {"h", "sighed|exhaled|exhausted|nagbuntong"}};
+            {"f", "froze|trembl|terrified|panic|heart (?:pounded|raced|skipped|hammered)|goosebumps|shiver|dread|horrified|nanginig|kinabahan|natakot|nanlamig"
+                    + "|(?:sore|greatly|exceedingly|sorely) afraid|feared exceedingly|were afraid|was afraid|dismayed|fell on (?:their|his|her) face|nangatakot|natakot na lubha|nanglupaypay"},
+            {"d", "tears|crying|cried|sobbed|heartbroken|sorrow|grief|ached|lonely|nalungkot|umiyak|luha|nasaktan"
+                    + "|wept|weeping|mourn\\w*|lament\\w*|wail\\w*|bewail\\w*|grieved|anguish|rent (?:his|her|their) (?:clothes|garments)|sackcloth|nanangis|tumangis|nanaghoy|nagdalamhati|nagluksa|nalumbay"},
+            {"a", "furious|angry|glared|rage|slammed|fuming|seething|clenched (?:his|her|my) fists|galit|nagalit|nanggigil"
+                    + "|wroth|wrath|indignation|was displeased|anger (?:was )?kindled|nagalab ang galit|napoot|poot"},
+            {"j", "smiled|beamed|delighted|joy|happy|excited|grinned|giggled|ngumiti|nangiti|masaya|natuwa|kilig"
+                    + "|rejoice\\w*|gladness|glad\\b|praised God|glorified God|shouted for joy|nagalak|nangagalak|nagsipagalak|nagagalak|nagpuri sa Dios"},
+            {"h", "sighed|exhaled|exhausted|nagbuntong|groaned|sighing|nagbuntung|dumaing"}};
     private static final Pattern[] NARR_P = new Pattern[NARR.length];
 
     static {
         for (int i = 0; i < NARR.length; i++) NARR_P[i] = Pattern.compile("(?i)(?<![\\p{L}-])(?:" + NARR[i][1] + ")");
     }
 
+    private static final Pattern QUOTED = Pattern.compile("[\u201C\"\u00AB][^\u201D\"\u00BB]*[\u201D\"\u00BB]");
+
     /** The feeling the storyteller's own words carry (read at half strength), or "". */
     static String ofNarration(String sentence) {
+        // What the characters say is theirs: only the storyteller's own words carry the narrator's feeling.
+        sentence = QUOTED.matcher(sentence).replaceAll(" ");
         int at = Integer.MAX_VALUE;
         String feel = "";
         for (int i = 0; i < NARR.length; i++) {

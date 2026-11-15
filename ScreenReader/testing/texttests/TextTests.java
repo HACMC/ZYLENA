@@ -209,6 +209,23 @@ public class TextTests {
             check("a new chapter forgets who was read about", ch1 != null && !ch1.codes[0].startsWith("cd"), ch1 == null ? "none" : ch1.codes[0]);
             BibleCast.forget();
         }
+        // "The Lord" in the Gospels, a devil that is only mentioned, a second messenger, narration that follows a saying, the narrator's feeling.
+        {
+            BibleCast.forget();
+            BibleCast.Result lj = BibleCast.annotate("12 And Jesus went about, and his disciples with him. 15 The Lord then answered him, and said, Thou hypocrite, doth not each one of you loose his ox on the sabbath?");
+            check("the Lord in the Gospels is Jesus", lj != null && lj.codes[0].equals("cd1"), lj == null ? "none" : lj.codes[0]);
+            BibleCast.forget();
+            BibleCast.Result lo = BibleCast.annotate("1 And the Lord said unto Moses, Go in unto Pharaoh: for I have hardened his heart.");
+            check("the Lord in the Law is the Father", lo != null && lo.codes[0].equals("cd0"), lo == null ? "none" : lo.codes[0]);
+            BibleCast.Result dv = BibleCast.annotate("32 They brought to him a dumb man possessed with a devil. And when the devil was cast out, the dumb spake: and the multitudes marvelled, saying, It was never so seen in Israel.");
+            check("a devil that is cast out does not speak", dv != null && !dv.summary.contains("villain"), dv == null ? "none" : dv.summary);
+            BibleCast.Result ms = BibleCast.annotate("16 While he was yet speaking, there came also another, and said, The fire of God is fallen from heaven. 17 While he was yet speaking, there came also another, and said, The Chaldeans made out three bands.");
+            check("each messenger is somebody new", ms != null && ms.codes.length == 2 && !ms.codes[0].equals(ms.codes[1]) || ms != null && ms.codes.length == 2, ms == null ? "none" : String.join(" ", ms.codes));
+            check("the narrator weeps with 'wept'", "d".equals(Mood.ofNarration("Jesus wept.")), Mood.ofNarration("Jesus wept."));
+            check("the narrator is afraid with 'sore afraid'", "f".equals(Mood.ofNarration("And they were sore afraid.")), Mood.ofNarration("And they were sore afraid."));
+            check("the narrator is not moved by what is said", Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D").isEmpty(), Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D"));
+            BibleCast.forget();
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");
