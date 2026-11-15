@@ -102,7 +102,7 @@ final class VoiceFx {
 
         // A heavy voice has less of the high end.
         if (st.dull) {
-            float a = (float) (1 - Math.exp(-2 * Math.PI * 3800.0 / rate)), s = 0;
+            float a = (float) (1 - Math.exp(-2 * Math.PI * 5200.0 / rate)), s = 0;
             for (int i = 0; i < m; i++) {
                 s += a * (z[i] - s);
                 z[i] = s;
