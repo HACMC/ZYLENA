@@ -829,10 +829,12 @@ final class Speaker {
             String t = parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
             boolean ask = t.equals("q");
             float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : 1f;
+            boolean divineLine = Cast.voice(parts.get(k)[3]) != null && Cast.voice(parts.get(k)[3]).startsWith("cd");
             float r = ask ? 0.96f : t.equals("e") ? 1.02f : t.equals("h") ? 0.93f : t.equals("v") ? 0.94f : 1f;
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
+            if (divineLine) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             p *= applyVoice(lang, parts.get(k)[3]);
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
@@ -981,10 +983,14 @@ final class Speaker {
     private float applyCast(String lang, String who) {
         char g = Cast.genderOf(who);
         int n = Cast.slotOf(who);
+        // God and Jesus: a man's voice, made deep.
+        final boolean divine = g == 'd';
+        if (divine) g = 'm';
+        final float deep = divine ? DEEP : 1f;
         List<Voice> pool = castPool(lang, g);
         if (pool.isEmpty()) {
             applyUsual(lang);
-            return g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length];
+            return deep * (divine ? 0.9f : 1f) * (g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length]);
         }
         // A character keeps the voice they were first given for as long as ZYLENA runs, even when the list of
         // voices is reordered (a voice downloading, the connection coming and going).
@@ -995,7 +1001,8 @@ final class Speaker {
         if (v == null) {
             java.util.Set<String> taken = new java.util.HashSet<>();
             for (java.util.Map.Entry<String, String> e : castPinned.entrySet()) {
-                if (e.getKey().startsWith(lang + "|c" + g) && !e.getKey().equals(pin)) taken.add(e.getValue());
+                if ((g == 'm' ? (e.getKey().startsWith(lang + "|cm") || e.getKey().startsWith(lang + "|cd")) : e.getKey().startsWith(lang + "|c" + g))
+                        && !e.getKey().equals(pin)) taken.add(e.getValue());
             }
             for (int k = 0; k < pool.size() && v == null; k++) {
                 Voice c = pool.get((n + k) % pool.size());
@@ -1006,8 +1013,11 @@ final class Speaker {
         }
         if (!v.equals(lastSet)) tts.setVoice(v);
         lastSet = v;
-        return AGAIN[(n / pool.size()) % AGAIN.length];
+        return deep * (divine ? 1f : AGAIN[(n / pool.size()) % AGAIN.length]);
     }
+
+    /** How much lower the voice of God and of Jesus is said. */
+    private static final float DEEP = 0.78f;
 
     private final java.util.Map<String, List<Voice>> castPools = new java.util.HashMap<>();
     /** Each character's voice ("en|cf1" → the voice's name), kept so a character never changes voice. */

@@ -21,10 +21,15 @@ final class Cast {
     private Cast() {
     }
 
+    /** The Father, the Son and the Holy Spirit: when they speak the voice is "cd0", deep and slow, so the authority is heard. */
+    static final String DIVINE_CODE = "cd0";
+    private static final Set<String> DIVINE_NAMES = new HashSet<>(Arrays.asList(("jesus hesus jesu cristo christ messiah mesias god dios diyos panginoon lord "
+            + "yahweh jehovah jehova ama espiritu spirit holy father").split(" ")));
+
     /** A voice code: "cm0" the first man's voice, "cf1" the second woman's, "cu0" a character the reader can't tell. */
     static boolean isCode(String who) {
         who = voice(who);
-        return who != null && who.length() >= 3 && who.charAt(0) == 'c' && "mfu".indexOf(who.charAt(1)) >= 0
+        return who != null && who.length() >= 3 && who.charAt(0) == 'c' && "mfud".indexOf(who.charAt(1)) >= 0
                 && Character.isDigit(who.charAt(2));
     }
 
@@ -493,6 +498,10 @@ final class Cast {
     private static String codeFor(Map<String, Person> people, Person p) {
         if (p == null) return "";
         if (p.code != null) return p.code;
+        if (DIVINE_NAMES.contains(p.name)) {
+            p.code = DIVINE_CODE;
+            return p.code;
+        }
         String g = p.gender.isEmpty() ? "u" : p.gender;
         int used = 0;
         for (Person o : people.values()) if (o.code != null && o.code.charAt(1) == g.charAt(0)) used++;

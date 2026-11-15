@@ -133,7 +133,7 @@ final class BibleCast {
         final List<String> keys = new ArrayList<>(); // speakers in order of first speech
         final List<String> codes = new ArrayList<>();
         final List<String> history = new ArrayList<>(); // one entry per turn
-        int men = 1, women = 0, anon;
+        int men = 0, women = 0, anon;
 
         String who(String nearIntro, String before) {
             String key = null;
@@ -170,7 +170,7 @@ final class BibleCast {
             if (at < 0) {
                 keys.add(key);
                 String code;
-                if (key.equals("divine")) code = "cm0";
+                if (key.equals("divine")) code = Cast.DIVINE_CODE;
                 else if (femaleKeys.contains(key) || TextPrep.WOMEN.contains(key)) code = "cf" + (women++);
                 else code = "cm" + (men++);
                 codes.add(code);
