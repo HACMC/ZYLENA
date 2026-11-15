@@ -409,6 +409,7 @@ final class Prefs {
         TextPrep.castOn = flag(c, "cast_voices", true);
         Cast.setOverrides(sp(c).getString("cast_overrides", ""));
         TextPrep.laughOn = flag(c, "say_laughs", true);
+        TextPrep.soundsOn = flag(c, "say_sounds", true);
         TextPrep.skipNotes = flag(c, "skip_notes", true);
         TextPrep.stopCards = flag(c, "stop_cards", true);
         TextPrep.sceneOn = flag(c, "scene_breaks", true);

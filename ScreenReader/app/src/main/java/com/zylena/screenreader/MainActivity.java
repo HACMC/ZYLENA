@@ -535,6 +535,10 @@ public class MainActivity extends Activity {
         Ui.add(st, flagRow(R.drawable.ic_person, "Laugh aloud",
                 "When a story says someone laughs (\"she answered with a laugh\", \"Mia giggled\"), the character laughs (Hahaha, Hehehe) in their own voice "
                         + "instead of the words being read. Each character has a laugh of their own.", "say_laughs", true));
+        Ui.add(st, flagRow(R.drawable.ic_person, "Sighs, gasps and groans aloud",
+                "A sigh, a gasp, a groan or a scoff the story tells of is made by the character (Haaah\u2026, Hah!, Uuugh\u2026), the way the author wrote it "
+                        + "(a long sigh, a sigh of relief, an annoyed sigh). If the author wrote little more than the sound, the sound is all you hear; "
+                        + "otherwise it comes first and the sentence is read as written.", "say_sounds", true));
         Ui.add(st, flagRow(R.drawable.ic_clock, "Mark scene changes",
                 "\"* * *\", \"Later that day\", \"The next morning\": a longer pause and, in a story, a soft chime", "scene_breaks", true));
         Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",

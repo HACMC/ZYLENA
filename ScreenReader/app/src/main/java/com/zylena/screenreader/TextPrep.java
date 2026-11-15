@@ -1287,6 +1287,35 @@ final class TextPrep {
                         }
                     }
                 }
+                // The sounds people make without words (a sigh, a gasp, a groan): made by the character, as the author wrote it.
+                Seg soundAfter = null;
+                if (soundsOn && cast != null && !verse && !hasVerse) {
+                    String kind = NonVerbal.kindOf(sentence);
+                    if (kind != null) {
+                        String[] who2 = laugher(sentence, cast[li]);
+                        String key = (who2[2].isEmpty() ? "narrator" : Cast.voice(who2[2])) + ":" + kind;
+                        Integer was = SOUNDED_AT.get(key);
+                        boolean allowed = was == null || sentenceCount - was >= 6; // not at every mention
+                        String stripped = NonVerbal.without(sentence, kind);
+                        boolean quotedTag = !stripped.equals(sentence) && NonVerbal.hasQuote(sentence);
+                        boolean only = NonVerbal.onlySound(sentence, kind);
+                        if (allowed) {
+                            SOUNDED_AT.put(key, sentenceCount);
+                            String[] sd = NonVerbal.say(kind, sentence);
+                            String sLang = para ? FIL : langOf(sentence, screenFil);
+                            Seg sg = soundSeg(who2[2], sd[0], sd[1], sLang, li, cast[li], mood);
+                            if (only) {
+                                out.add(sg); // the author wrote little more than the sound: the sound is all that is heard
+                                continue;
+                            } else if (quotedTag) {
+                                sentence = stripped; // "…," she said with a sigh: the words said, then the sigh
+                                soundAfter = sg;
+                            } else {
+                                out.add(sg); // a longer sentence: the sound first, then the sentence as written
+                            }
+                        }
+                    }
+                }
                 // Sound effects in a story: a sound written out ("Ring, ring!") is played instead of said; a sentence
                 // that tells of one (a knock, a door, thunder) plays it as it is read.
                 String fx = "";
@@ -1322,6 +1351,7 @@ final class TextPrep {
                     }
                     out.add(g);
                 }
+                if (soundAfter != null) out.add(soundAfter);
                 if (laughWho != null && !out.isEmpty()) out.add(laughSeg(laughWho, laughSaid, out.get(out.size() - 1).lang, li, cast[li], mood));
             }
         }
@@ -1332,7 +1362,8 @@ final class TextPrep {
 
     // ---- A laugh the story tells of ("she answered with a laugh", "Mia giggled") is laughed aloud by the character
 
-    static volatile boolean laughOn = true;
+    static volatile boolean laughOn = true, soundsOn = true;
+    private static final java.util.Map<String, Integer> SOUNDED_AT = new java.util.HashMap<>();
     private static final Pattern LAUGH = Pattern.compile("(?i)(?<![\\p{L}])(?:laugh(?:ed|s|ing|ter)?|giggl\\w+|chuckl\\w+|cackl\\w+|snicker\\w*|guffaw\\w*|tumawa|humagikgik|humalakhak|natawa|natatawa)(?![\\p{L}])");
     private static final Pattern GIGGLE = Pattern.compile("(?i)(?<![\\p{L}])(?:giggl\\w+|snicker\\w*|humagikgik|hagikgik)(?![\\p{L}])");
     private static final Pattern WITH_LAUGH = Pattern.compile("(?i),?\\s*(?:and\\s+)?(?:with|in)\\s+(?:a|an|some)\\s+(?:\\w+\\s+){0,2}?(?:laugh|giggle|chuckle|snicker|cackle)\\w*");
@@ -1432,6 +1463,16 @@ final class TextPrep {
             }
         }
         return letters >= 6 && caps * 10 >= letters * 8;
+    }
+
+    /** A sound a person makes (a sigh, a gasp), as a piece of its own, said by the one who makes it with the feeling the author wrote. */
+    private static Seg soundSeg(String who, String said, String feel, String lang, int li, String[] lineCast, String mood) {
+        Seg sg = new Seg(said, lang, li, li, false);
+        sg.who = who + (feel.isEmpty() ? "" : "~" + feel);
+        sg.cast = lineCast;
+        sg.mood = mood;
+        sg.story = true;
+        return sg;
     }
 
     private static final Pattern SHE = Pattern.compile("(?i)\\b(?:she|her|hers|herself)\\b"), HE = Pattern.compile("(?i)\\b(?:he|his|him|himself)\\b");
