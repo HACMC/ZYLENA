@@ -43,7 +43,10 @@ final class Sfx {
         cue("alarm", "\\balarm(?: clock)?\\b[^.!?]{0,20}\\b(?:went off|rang|blared|buzzed|beeped|sounded)\\b|\\balarm clock\\b");
         cue("message", "\\b(?:text|message|notification|email)\\b[^.!?]{0,20}\\b(?:chimed|pinged|dinged|came in|popped up|beeped)\\b|\\bpinged\\b");
         cue("knock", "\\b(?:knock(?:s|ed|ing)?|rapped|rapping|kumatok|katok|tok[ -]tok)\\b(?! (?:out|down|over|off|back|up)\\b)(?!out)");
-        cue("slam", "\\bslam(?:med|ming|s)?\\b[^.!?]{0,20}\\b(?:door|shut)\\b|\\bdoor\\b[^.!?]{0,15}\\b(?:slam(?:med|s)?|banged)\\b|\\bisinara nang malakas\\b|\\bbumagsak ang pinto");
+        cue("slam", "\\bslam(?:med|ming|s)?\\b[^.!?]{0,20}\\b(?:door|shut)\\b|\\bdoor\\b[^.!?]{0,15}\\b(?:slam(?:med|s)?|banged)\\b|\\bisinara nang malakas\\b|\\bbumagsak ang pinto"
+                + "|\\bslam(?:med|ming|s)?\\b[^.!?]{0,40}\\b(?:fist|fists|palm|hand|hands|table|desk|wall|wheel|steering|counter|dashboard|bar)\\b"
+                + "|\\b(?:banged|pounded|thumped|smacked|struck|hit|punched|hinampas|sinuntok|pinukpok|hinampas)\\b[^.!?]{0,30}\\b(?:table|desk|wall|wheel|steering wheel|counter|dashboard|mesa|dingding|manibela)\\b"
+                + "|\\b(?:fist|palm|hand)s?\\b[^.!?]{0,15}\\b(?:slammed|banged|crashed|pounded|smacked)\\b");
         cue("door_open", "\\bdoor\\b[^.!?]{0,25}\\b(?:opened|opens|swung|creaked|creaking|swung open)\\b|\\b(?:opened|opens|opening|pushed open|pushed|pulled open) the door\\b|\\bcreaked open\\b|\\bbumukas ang pinto|\\bbinuksan (?:niya )?ang pinto");
         cue("door_close", "\\b(?:closed|shut|closes|shuts|closing|clicked shut|locked|unlocked) (?:the |her |his |their )?(?:door|gate)\\b|\\bdoor\\b[^.!?]{0,15}\\b(?:closed|shut|clicked|locked)\\b|\\bsinara (?:niya )?ang pinto");
         cue("thunder", "\\bthunder(?:ed|ing|s|clap)?\\b|\\bthunderclap\\b|\\blightning\\b|\\bkumulog\\b|\\bkulog\\b|\\bkidlat\\b|\\bkumidlat\\b");
