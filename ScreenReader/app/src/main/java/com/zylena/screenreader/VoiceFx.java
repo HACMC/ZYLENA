@@ -74,17 +74,21 @@ final class VoiceFx {
         // In Tagalog the phone's voices are plainer, and the more the sound is changed the less natural it gets: so each is
         // changed less there (less lowering, a smaller room), and told apart more by pace.
         divine("deep", 0.86f, 0.88f, 1f, 0.18f, 0.05f, 0.45f, 0f, 0.20f, 1.5f);
-        divine("deep_fil", 0.91f, 0.90f, 1f, 0.18f, 0.10f, 0.40f, 0f, 0.12f, 1.2f);
+        divine("deep_fil", 0.88f, 0.90f, 1f, 0.15f, 0.20f, 0.40f, 0.10f, 0.20f, 1.5f);
         // The Son took our nature, so His is a man's own voice and not the Father's made milder: natural in pitch, in the
         // open air beside the hearer (no hall around it). What sets it apart is how He spoke: "musical", "never raised in
         // high, strained notes", not "so rapidly that His words were crowded one upon another", "He distinctly enunciated
         // every word" (Ellen White), "clear", calm and earnest; "He shall not cry, nor lift up" (Isaiah 42:2). So: unhurried,
         // very clear, a little warm and bright, even in loudness.
         divine("jesus", 0.98f, 0.92f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
-        divine("jesus_fil", 1.00f, 0.93f, 1f, 0.20f, 0.15f, 0.15f, 0.05f, 0f, 0.35f);
+        divine("jesus_fil", 0.92f, 0.92f, 1f, 0.12f, 0.20f, 0.45f, 0.08f, 0.10f, 0.9f);
         // The Holy Spirit: soft, "a still small voice" (kept audible): a little lighter than the plain voice, slow, airy, with a soft glow around it.
         divine("spirit", 1.04f, 0.90f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
-        divine("spirit_fil", 1.03f, 0.92f, 0.95f, 0.15f, 0f, 0f, 0.25f, 0.10f, 1.0f);
+        STYLES.put("spirit_fil", new Style("spirit_fil", 0.98f, 0.90f, 0f, 0.02f, 0f, 1f, false)); // a little breath
+        {
+            Style sp = STYLES.get("spirit_fil");
+            sp.level = 0.10f; sp.presence = 0.18f; sp.warm = 0.40f; sp.air = 0.15f; sp.space = 0.25f; sp.room = 1.8f;
+        }
         add("child", 1.30f, 1.05f, 0f, 0f, 0f, 1f, false);
         add("squeaky", 1.38f, 1.08f, 0f, 0f, 0f, 1f, false);
         add("cute", 1.18f, 1.04f, 0f, 0f, 0f, 1f, false);
@@ -164,6 +168,11 @@ final class VoiceFx {
         if (name == null || name.isEmpty()) return null;
         Style mine = CUSTOM.get(name);
         return mine != null ? mine : STYLES.get(name);
+    }
+
+    /** The phone voice the Father, the Son and the Holy Spirit have in Tagalog unless the user chose another: Google's FIE. */
+    static String defaultVoice(String name) {
+        return name != null && name.endsWith("_fil") ? "fil-ph-x-fie" : null;
     }
 
     static Style builtIn(String name) {

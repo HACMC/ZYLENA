@@ -1584,6 +1584,7 @@ final class Speaker {
         // The phone voice the user chose for this one in the voice lab (Apply).
         if (divine) {
             String want = VoiceFx.customVoice(divineStyle(lang, Cast.voice(who)));
+            if (want == null) want = VoiceFx.defaultVoice(divineStyle(lang, Cast.voice(who)));
             if (want != null) {
                 List<Voice> every = voicesFor(lang);
                 for (Voice c : every) {
