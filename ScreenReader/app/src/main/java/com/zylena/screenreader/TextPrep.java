@@ -247,6 +247,11 @@ final class TextPrep {
     private static final Pattern STUTTER = Pattern.compile("(?<![\\p{L}'-])([B-DF-HJ-NP-TV-Zb-df-hj-np-tv-z])((?:-\\1)*)-(\\1[\\p{L}']{2,})", Pattern.CASE_INSENSITIVE);
     private static final Pattern FIRST_SYLLABLE = Pattern.compile("^[^aeiouAEIOU]*[aeiouAEIOU]+");
 
+    /** Marks where a stutter stops for a moment; Speaker says each piece apart with a silence between. */
+    static final char HALT = '\u0007';
+    /** "I-I'm", "I-I-I can't": the pronoun said again. */
+    private static final Pattern STUTTER_I = Pattern.compile("(?<![\\p{L}'-])(I)((?:-I)*)-(I(?:['\u2019]\\p{L}+)?)(?![\\p{L}'\u2019])");
+
     static String stutter(String s) {
         if (s.indexOf('-') < 0) return s;
         java.util.regex.Matcher m = STUTTER.matcher(s);
@@ -256,12 +261,26 @@ final class TextPrep {
             java.util.regex.Matcher f = FIRST_SYLLABLE.matcher(word);
             String syl = f.find() ? f.group() : m.group(1);
             int times = 1 + m.group(2).length() / 2;
+            // Real stuttering repeats the beginning of a word, with a stop between each try (about a third of a second).
             StringBuilder out = new StringBuilder();
-            for (int i = 0; i < times; i++) out.append(i == 0 ? syl : syl.toLowerCase(Locale.ROOT)).append('-');
+            for (int i = 0; i < times; i++) out.append(i == 0 ? syl : syl.toLowerCase(Locale.ROOT)).append(HALT);
             m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(out + word));
         }
         m.appendTail(sb);
-        return sb.toString();
+        java.util.regex.Matcher mi = STUTTER_I.matcher(sb);
+        StringBuffer sb2 = new StringBuffer();
+        while (mi.find()) {
+            StringBuilder out = new StringBuilder("I").append(HALT);
+            for (int i = 0; i < mi.group(2).length() / 2; i++) out.append("I").append(HALT);
+            mi.appendReplacement(sb2, java.util.regex.Matcher.quoteReplacement(out + mi.group(3)));
+        }
+        mi.appendTail(sb2);
+        return sb2.toString();
+    }
+
+    /** Text for a voice that says it whole (samples, saved audio): the stops of a stutter become commas. */
+    static String withoutHalts(String s) {
+        return s.indexOf(HALT) < 0 ? s : s.replace(String.valueOf(HALT), ", ");
     }
 
     static String say(String text, String lang) {

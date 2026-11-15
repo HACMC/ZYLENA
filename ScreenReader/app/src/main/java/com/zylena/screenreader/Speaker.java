@@ -875,6 +875,23 @@ final class Speaker {
             if (!tone) parts.add(new String[]{said, vp[1], "", vp[2]});
             else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1], vp[2]});
         }
+        // A stutter ("L-lalabas", "I-I'm") is said in pieces with a stop between them: each repeated start, then the word.
+        // The first stop is the longest and the next ones shorter, as in real speech; the last piece keeps the tone.
+        for (int k = 0; k < parts.size(); k++) {
+            String[] pt = parts.get(k);
+            if (pt[0].indexOf(TextPrep.HALT) < 0) continue;
+            String[] bits = pt[0].split(String.valueOf(TextPrep.HALT), -1);
+            parts.remove(k);
+            int at = k;
+            for (int b = 0; b < bits.length; b++) {
+                String bit = bits[b].trim();
+                if (bit.isEmpty()) continue;
+                boolean end = b == bits.length - 1;
+                parts.add(at++, new String[]{bit, pt[1], end ? pt[2] : "", pt[3], end ? "" : (b == 0 ? "340" : "260")});
+            }
+            if (at == k) parts.add(at++, new String[]{"", pt[1], pt[2], pt[3]});
+            k = at - 1;
+        }
         // The sound effect of a sentence like "...," she answered with a laugh: it plays at the narration, after the character's words.
         if (!s.sfx.isEmpty()) {
             int at = 0;
@@ -970,7 +987,8 @@ final class Speaker {
             final long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
             final boolean think = ask && after > 0 && !lastPart;
             // A short beat, a trailing off, a cut-off: a pause after it, when more of the paragraph follows.
-            final long gapAfter = k < parts.size() - 1 ? (long) ((t.equals("b") ? 240 : t.equals("t") ? 380 : t.equals("c") ? 300 : 0) * strength) : 0;
+            final long halt = parts.get(k).length > 4 && !parts.get(k)[4].isEmpty() ? Long.parseLong(parts.get(k)[4]) : 0;
+            final long gapAfter = (k < parts.size() - 1 ? (long) ((t.equals("b") ? 240 : t.equals("t") ? 380 : t.equals("c") ? 300 : 0) * strength) : 0) + halt;
             final int run = i, part = k;
             final String fl2 = lang;
             Runnable emit = () -> {
@@ -1719,7 +1737,7 @@ final class Speaker {
                 applyVoice(s.lang);
                 tts.setSpeechRate(rateFor(s.lang));
                 String id = "save:" + i + (i == runs.size() - 1 ? ":last" : "");
-                tts.synthesizeToFile(TextPrep.say(s.text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
+                tts.synthesizeToFile(TextPrep.withoutHalts(TextPrep.say(s.text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang)), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
             }
             Logs.d(ctx, "saving " + runs.size() + " pieces to audio");
         });

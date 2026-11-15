@@ -147,7 +147,7 @@ public class FixActivity extends Activity {
         hearWord.setText("Hear the word");
         hearWord.setAllCaps(false);
         // As it is read now: with the fixes and respellings already in use.
-        hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(TextPrep.say(wrong.getText().toString(), lang()), lang()));
+        hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(TextPrep.withoutHalts(TextPrep.say(wrong.getText().toString(), lang())), lang()));
         Button hearFix = new Button(this);
         hearFix.setText("Hear my fix");
         hearFix.setAllCaps(false);
