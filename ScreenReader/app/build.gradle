@@ -14,7 +14,7 @@ android {
         // (ZYLENA_VERSION is the run number plus 100: builds from the old repo went up to 1.64.)
         def build = (System.getenv("ZYLENA_VERSION") ?: System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
         versionCode build
-        versionName "1." + build
+        versionName System.getenv("ZYLENA_NAME") ?: ("2." + build)
         // Phones only: the text-recognition and translation engines are copied once per chip type, and the
         // two emulator types (x86) doubled the APK. The virtual-phone test builds its own with ZYLENA_ABIS=x86_64.
         ndk {

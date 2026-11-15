@@ -141,6 +141,16 @@ final class Speaker {
     private void runStarted(int i, int gen) {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
+        if (sleepFinishing && i > sleepRun) {
+            sleepFinishing = false;
+            main.removeCallbacks(sleepForce);
+            Logs.d(ctx, "sleep timer: stopped reading after the paragraph");
+            main.post(() -> {
+                stop();
+                toast("Sleep timer: reading stopped. Good night!");
+            });
+            return;
+        }
         curRun = i;
         posRun = i;
         posFrac = 0f;
@@ -338,6 +348,8 @@ final class Speaker {
         generation++;
         endWait();
         paused = false;
+        sleepFinishing = false;
+        main.removeCallbacks(sleepForce);
         stopDeep();
         if (tts != null) tts.stop();
         if (gemini != null) gemini.stop();
@@ -440,12 +452,31 @@ final class Speaker {
 
     private final Runnable sleepNow = this::sleepNow;
 
+    private volatile boolean sleepFinishing;
+    private volatile int sleepRun = -1;
+
     private void sleepNow() {
-        Logs.d(ctx, "sleep timer: stopped reading");
         sleepAt = 0;
+        // Not in the middle of a paragraph: the one being read is finished, then reading stops.
+        if (speaking && Prefs.flag(ctx, "sleep_finish", true) && curRun < currentRuns.size() - 1) {
+            Logs.d(ctx, "sleep timer: finishing the paragraph first");
+            sleepFinishing = true;
+            sleepRun = curRun;
+            main.postDelayed(sleepForce, 3 * 60_000L); // never longer than this
+            return;
+        }
+        Logs.d(ctx, "sleep timer: stopped reading");
         stop();
         toast("Sleep timer: reading stopped. Good night!");
     }
+
+    private final Runnable sleepForce = () -> {
+        if (!sleepFinishing) return;
+        sleepFinishing = false;
+        Logs.d(ctx, "sleep timer: stopped reading");
+        stop();
+        toast("Sleep timer: reading stopped. Good night!");
+    };
 
     /** Stops reading after this many minutes; 0 turns the timer off. */
     void setSleepTimer(int minutes) {
@@ -479,7 +510,10 @@ final class Speaker {
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override
                     public void onStart(String id) {
-                        if (id != null && id.startsWith("deep:")) return;
+                        if (id != null && id.startsWith("deep:")) {
+                            main.post(() -> deepStarted(id));
+                            return;
+                        }
                         try {
                             String[] p = id.split(":");
                             // A run spoken in several pieces (two voices) starts once, with its first piece.
@@ -504,7 +538,7 @@ final class Speaker {
                     @Override
                     public void onDone(String id) {
                         if (id.startsWith("deep:")) {
-                            main.post(() -> deepReady(id));
+                            main.post(() -> deepMarker(id, false));
                             return;
                         }
                         if (id.startsWith("save:")) {
@@ -518,7 +552,7 @@ final class Speaker {
                     public void onError(String id) {
                         Logs.d(ctx, "TTS error on " + id);
                         if (id != null && id.startsWith("deep:")) {
-                            main.post(() -> deepFail(id));
+                            main.post(() -> deepMarker(id, true));
                             return;
                         }
                         if (id.startsWith("save:")) {
@@ -804,6 +838,8 @@ final class Speaker {
             long breath = online ? Math.max(0, want - 300) : want;
             if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
+        // A scene change: a longer pause first, the way a narrator would take a breath before it.
+        if (s.scene && i > 0) tts.playSilentUtterance(900, TextToSpeech.QUEUE_ADD, gen + ":-1");
         // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
         // in English inside a Tagalog run is its own utterance too, in the English voice.
         // A question is a piece of its own as well, said a little higher and slower, with a moment after it.
@@ -910,7 +946,6 @@ final class Speaker {
     private static final float DEEP = 0.78f;
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
-    private final java.util.Map<String, Object[]> deepReq = new java.util.concurrent.ConcurrentHashMap<>();
     private android.media.AudioTrack deepTrack;
     private Runnable deepFinishTask;
 
@@ -922,59 +957,175 @@ final class Speaker {
         return VoiceFx.get(Cast.styleOf(who));
     }
 
+    /** One line to be made into a character's voice: recorded by a second voice engine while the line before it is spoken. */
+    private static final class DeepReq {
+        java.io.File f;
+        float loud, rate, pitch;
+        int run, part, gen;
+        boolean last, pre, recorded, failed, reached;
+        String text, id;
+        VoiceFx.Style fx;
+    }
+
+    private final java.util.Map<String, DeepReq> deepReqs = new java.util.concurrent.ConcurrentHashMap<>();
+    private TextToSpeech ttsSynth;
+    private volatile boolean synthReady;
+
+    /**
+     * A second voice engine that only records (to files), so that the next styled line is already made when its turn
+     * comes, with no wait while the first engine is busy speaking.
+     */
+    private void initSynth() {
+        if (ttsSynth != null) return;
+        String pkg = Prefs.ttsPackage(ctx);
+        ttsSynth = new TextToSpeech(ctx, status -> main.post(() -> {
+            if (status != TextToSpeech.SUCCESS || ttsSynth == null) {
+                ttsSynth = null;
+                return;
+            }
+            ttsSynth.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String id) {
+                }
+
+                @Override
+                public void onDone(String id) {
+                    main.post(() -> deepRecorded(id, false));
+                }
+
+                @Override
+                public void onError(String id) {
+                    main.post(() -> deepRecorded(id, true));
+                }
+            });
+            synthReady = true;
+            Logs.d(ctx, "voice fx: a second voice engine records the next lines ahead");
+        }), pkg.isEmpty() ? null : pkg);
+    }
+
     private void synthDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen, VoiceFx.Style fx) {
         final String rid = "deep:" + id;
-        java.io.File f = new java.io.File(ctx.getCacheDir(), "deep-" + id.replace(':', '_') + ".wav");
-        deepReq.put(rid, new Object[]{f, loud, run, part, last, text, rate, pitch, gen, id, fx});
+        DeepReq d = new DeepReq();
+        d.f = new java.io.File(ctx.getCacheDir(), "deep-" + id.replace(':', '_') + ".wav");
+        d.loud = loud;
+        d.rate = rate;
+        d.pitch = pitch;
+        d.run = run;
+        d.part = part;
+        d.gen = gen;
+        d.last = last;
+        d.text = text;
+        d.id = id;
+        d.fx = fx;
+        deepReqs.put(rid, d);
         deepHold = true;
-        int rc = tts.synthesizeToFile(text, null, f, rid);
-        if (rc != TextToSpeech.SUCCESS) {
-            main.post(() -> deepFail(rid));
+        if (!synthReady) initSynth();
+        Voice v = null;
+        try {
+            v = tts.getVoice();
+        } catch (Exception ignored) {
+        }
+        if (synthReady && ttsSynth != null && v != null) {
+            // Recorded now by the second engine; the first engine's queue only says when this line's turn has come.
+            d.pre = true;
+            ttsSynth.setVoice(v);
+            ttsSynth.setSpeechRate(rate);
+            ttsSynth.setPitch(pitch);
+            if (ttsSynth.synthesizeToFile(text, null, d.f, rid) != TextToSpeech.SUCCESS) d.failed = true;
+            tts.playSilentUtterance(10, TextToSpeech.QUEUE_ADD, rid);
+        } else {
+            int rc = tts.synthesizeToFile(text, null, d.f, rid);
+            if (rc != TextToSpeech.SUCCESS) {
+                d.failed = true;
+                d.reached = true;
+                main.post(() -> deepTry(rid));
+            }
+        }
+        // A second engine that never answers: when it is this line's turn, it is read the ordinary way.
+        if (d.pre) {
+            main.postDelayed(() -> {
+                DeepReq x = deepReqs.get(rid);
+                if (x == null || x.recorded) return;
+                x.failed = true;
+                deepTry(rid);
+            }, 20000 + text.length() * 90L);
+        }
+    }
+
+    /** The first engine began recording a line itself (no second engine): from now it may take only so long. */
+    private void deepStarted(String rid) {
+        DeepReq d = deepReqs.get(rid);
+        if (d == null || d.pre) return;
+        main.postDelayed(() -> {
+            DeepReq x = deepReqs.get(rid);
+            if (x == null) return;
+            x.failed = !x.recorded;
+            x.reached = true;
+            deepTry(rid);
+        }, 10000 + d.text.length() * 90L);
+    }
+
+    /** The recording of a line is done (or failed), by the second engine (pre) or by the first one. */
+    private void deepRecorded(String rid, boolean error) {
+        DeepReq d = deepReqs.get(rid);
+        if (d == null) return;
+        if (error) d.failed = true;
+        else d.recorded = true;
+        deepTry(rid);
+    }
+
+    /** The first engine got to this line's place in its queue (after everything before it was said). */
+    private void deepMarker(String rid, boolean error) {
+        DeepReq d = deepReqs.get(rid);
+        if (d == null) return;
+        d.reached = true;
+        if (!d.pre) { // the first engine made the recording itself: this is its end
+            if (error) d.failed = true;
+            else d.recorded = true;
+        }
+        deepTry(rid);
+    }
+
+    /** Plays the line when its turn has come and it is recorded; reads it the ordinary way when the recording failed. */
+    private void deepTry(String rid) {
+        DeepReq d = deepReqs.get(rid);
+        if (d == null || !d.reached) return;
+        if (!d.failed && !d.recorded) return; // still being recorded: it plays as soon as it is
+        deepReqs.remove(rid);
+        if (d.gen != generation) {
+            d.f.delete();
             return;
         }
-        // Should the voice never answer, reading goes on with the ordinary way after a while.
-        main.postDelayed(() -> {
-            if (deepReq.containsKey(rid)) deepFail(rid);
-        }, 8000 + text.length() * 90L);
+        if (d.failed) {
+            d.f.delete();
+            deepPlainly(d);
+        } else {
+            playDeep(d);
+        }
     }
 
     /** The voice could not make the file: the words are read the ordinary way, lower, and reading goes on. */
-    private void deepFail(String rid) {
-        Object[] d = deepReq.remove(rid);
-        if (d == null) return;
-        int gen = (Integer) d[8];
-        try {
-            ((java.io.File) d[0]).delete();
-        } catch (Exception ignored) {
-        }
-        if (gen != generation || tts == null) return;
-        Logs.d(ctx, "deep voice: the sound could not be made, reading it the ordinary way");
-        tts.setSpeechRate((Float) d[6] * ((VoiceFx.Style) d[10]).pf);
-        tts.setPitch((Float) d[7] * ((VoiceFx.Style) d[10]).pf);
+    private void deepPlainly(DeepReq d) {
+        if (d.gen != generation || tts == null) return;
+        Logs.d(ctx, "voice fx: the sound could not be made, reading it the ordinary way");
+        tts.setSpeechRate(d.rate * d.fx.pf);
+        tts.setPitch(d.pitch * d.fx.pf);
         android.os.Bundle how = new android.os.Bundle();
-        how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, (Float) d[1]);
-        tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, how, (String) d[9]);
-        releaseHeld(gen);
+        how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, d.loud);
+        tts.speak(d.text, TextToSpeech.QUEUE_ADD, how, d.id);
+        releaseHeld(d.gen);
     }
 
-    /** The recording is ready: play it slower (lower), then let reading go on. */
-    private void deepReady(String rid) {
-        Object[] d = deepReq.remove(rid);
-        if (d == null) return;
-        final java.io.File f = (java.io.File) d[0];
-        final int gen = (Integer) d[8], run = (Integer) d[2], part = (Integer) d[3];
-        final boolean last = (Boolean) d[4];
-        if (gen != generation) {
-            f.delete();
-            return;
-        }
+    /** The recording is ready: change it into the character's voice, play it, then let reading go on. */
+    private void playDeep(DeepReq d) {
+        final int gen = d.gen;
         try {
-            byte[] b = new byte[(int) f.length()];
-            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+            byte[] b = new byte[(int) d.f.length()];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(d.f)) {
                 int off = 0, n;
                 while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
             }
-            f.delete();
+            d.f.delete();
             int[] w = wavInfo(b);
             if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
             int sr = w[0], ch = w[1];
@@ -985,7 +1136,7 @@ final class Speaker {
                 for (int i = 0; i < mono.length; i++) mono[i] = (short) ((pcm[2 * i] + pcm[2 * i + 1]) / 2);
                 pcm = mono;
             }
-            pcm = VoiceFx.process(pcm, sr, (VoiceFx.Style) d[10]);
+            pcm = VoiceFx.process(pcm, sr, d.fx);
             final int frames = pcm.length;
             android.media.AudioTrack tr = new android.media.AudioTrack.Builder()
                     .setAudioAttributes(attrs)
@@ -994,11 +1145,12 @@ final class Speaker {
                     .setTransferMode(android.media.AudioTrack.MODE_STATIC)
                     .setBufferSizeInBytes(pcm.length * 2).build();
             tr.write(pcm, 0, pcm.length);
-            tr.setVolume(Math.min(1f, (Float) d[1]));
-            if (part == 0) runStarted(run, gen);
+            tr.setVolume(Math.min(1f, d.loud));
+            if (d.part == 0) runStarted(d.run, gen);
             deepTrack = tr;
             tr.play();
-            Logs.d(ctx, "voice fx: " + ((VoiceFx.Style) d[10]).name + ", " + Math.round(frames * 1000f / sr) + " ms");
+            Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms" + (d.pre ? " (recorded ahead)" : ""));
+            final boolean last = d.last;
             deepFinishTask = () -> {
                 try {
                     tr.stop();
@@ -1012,15 +1164,9 @@ final class Speaker {
             };
             main.postDelayed(deepFinishTask, frames * 1000L / sr + 250);
         } catch (Throwable e) {
-            Logs.d(ctx, "deep voice failed: " + e);
-            f.delete();
-            if (gen == generation) {
-                // Read it the ordinary way instead.
-                tts.setSpeechRate((Float) d[6] * ((VoiceFx.Style) d[10]).pf);
-                tts.setPitch((Float) d[7] * ((VoiceFx.Style) d[10]).pf);
-                tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, null, (String) d[9]);
-                releaseHeld(gen);
-            }
+            Logs.d(ctx, "voice fx failed: " + e);
+            d.f.delete();
+            deepPlainly(d);
         }
     }
 
@@ -1044,7 +1190,9 @@ final class Speaker {
     private void stopDeep() {
         deepHold = false;
         deepHeld.clear();
-        deepReq.clear();
+        for (DeepReq d : deepReqs.values()) d.f.delete();
+        deepReqs.clear();
+        if (ttsSynth != null && synthReady) ttsSynth.stop();
         if (deepFinishTask != null) main.removeCallbacks(deepFinishTask);
         deepFinishTask = null;
         android.media.AudioTrack t = deepTrack;

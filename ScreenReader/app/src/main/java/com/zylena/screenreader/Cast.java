@@ -75,6 +75,8 @@ final class Cast {
         boolean sure; // the gender is from the user's list or a well-known name, not a guess
         String style = ""; // what kind of person the story says this is (a VoiceFx style), "" when it says nothing
         final Map<String, Integer> voiceHits = new HashMap<>(); // how often the story describes their voice a certain way
+        boolean styleFixed; // the user chose the voice style: the story's descriptions no longer change it
+        String applied = ""; // the user's choice for this character that was last put to use
         boolean frozen; // the voice was given on an earlier page: it stays, whatever is learned about the character later
 
         Person(String name) {
@@ -86,6 +88,52 @@ final class Cast {
     private static final Map<String, LinkedHashMap<String, Person>> STORIES = new HashMap<>();
     /** For the log and Settings: the characters of the page just prepared. */
     static volatile String lastSummary = "";
+
+    /** What the user chose for characters (Settings, Voice, Characters): lines "name|m, f, u or empty|style, none or empty". */
+    private static volatile String overrides = "";
+
+    static void setOverrides(String lines) {
+        overrides = lines == null ? "" : lines;
+    }
+
+    private static void applyOverrides(Map<String, Person> people) {
+        for (String line : overrides.split("\\n")) {
+            String[] f = line.split("\\|", -1);
+            if (f.length < 3 || f[0].trim().isEmpty()) continue;
+            String name = f[0].trim().toLowerCase(Locale.ROOT);
+            Person p = people.get(name);
+            if (p == null) {
+                p = new Person(name);
+                people.put(name, p);
+            }
+            if (p.applied.equals(line)) continue;
+            p.applied = line;
+            String g = f[1].trim();
+            if (g.equals("m") || g.equals("f") || g.equals("u")) {
+                p.gender = g.equals("u") ? "" : g;
+                p.sure = true;
+                p.code = null; // the user's word is new: the voice is chosen again
+                p.frozen = false;
+            }
+            String st = f[2].trim();
+            p.styleFixed = !st.isEmpty();
+            if (st.equals("none")) p.style = "";
+            else if (!st.isEmpty()) p.style = st;
+        }
+    }
+
+    /** The characters met in any story so far, for the Characters screen: {name, "m"/"f"/"u", style}. */
+    static synchronized List<String[]> knownList() {
+        List<String[]> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (LinkedHashMap<String, Person> m : STORIES.values()) {
+            for (Person p : m.values()) {
+                if (p.code == null || !seen.add(p.name)) continue;
+                out.add(new String[]{cap(p.name), p.gender.isEmpty() ? "u" : p.gender, p.style});
+            }
+        }
+        return out;
+    }
 
     static synchronized void reset() {
         STORIES.clear();
@@ -350,7 +398,7 @@ final class Cast {
             }
             if (named.size() != 1) continue;
             Person p = people.get(named.iterator().next());
-            if (!p.style.equals(role)) {
+            if (!p.style.equals(role) && !p.styleFixed) {
                 p.style = role;
                 learned = true;
             }
@@ -377,6 +425,7 @@ final class Cast {
             STORIES.put(scope, people);
         }
         if (people.size() > 200) people.clear();
+        applyOverrides(people);
         // First pass: who the characters are (named with a "said", or a well-known name), and the narrator's own name.
         Set<String> narrator = new HashSet<>();
         String[] narr = new String[n];
@@ -498,11 +547,11 @@ final class Cast {
             // What kind of voice they have: "in a husky voice" for this line, or what the story says of them all along.
             String vs = Persona.ofVoice(narration);
             Person sp0 = people.get(speaker);
-            if (!vs.isEmpty() && sp0 != null && !rerun && sp0.voiceHits.merge(vs, 1, Integer::sum) >= 2 && !sp0.style.equals(vs)) {
+            if (!vs.isEmpty() && sp0 != null && !sp0.styleFixed && !rerun && sp0.voiceHits.merge(vs, 1, Integer::sum) >= 2 && !sp0.style.equals(vs)) {
                 sp0.style = vs;
                 learned = true;
             }
-            String style = !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
+            String style = sp0 != null && sp0.styleFixed ? sp0.style : !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
             String styleTag = style.isEmpty() || code.isEmpty() || code.equals(DIVINE_CODE) ? "" : "^" + style;
             out[i] = new String[sp.size()];
             for (int k = 0; k < sp.size(); k++) {

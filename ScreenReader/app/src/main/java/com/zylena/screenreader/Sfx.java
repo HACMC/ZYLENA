@@ -212,6 +212,11 @@ final class Sfx {
     private static short[] make(String name) {
         float[] b;
         switch (name) {
+            case "scene":
+                b = buf(1.8f);
+                bell(b, 0.0f, 523f, 1.4f, 0.45f);
+                bell(b, 0.22f, 784f, 1.5f, 0.4f);
+                break;
             case "knock":
                 b = buf(0.9f);
                 for (int i = 0; i < 3; i++) knock(b, 0.02f + i * 0.24f, 1f - i * 0.1f);

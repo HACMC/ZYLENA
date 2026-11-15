@@ -216,6 +216,10 @@ public class ReaderService extends AccessibilityService {
                 scrolledBy = (was == null ? 0 : was) + dy;
             }
         }
+        if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || type == AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED) {
+            CharSequence fp = e.getPackageName();
+            if (type == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED || fsHidden) checkFullscreen(fp == null ? null : fp.toString());
+        }
         if (type != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         // Some phones are slow to tell about the unlock (or never do): an app coming up means unlocked.
         if (lockHidden) {
@@ -349,11 +353,46 @@ public class ReaderService extends AccessibilityService {
             hideFan();
             hidePanel();
         }
-        if (button != null) button.setVisibility(on ? View.VISIBLE : View.GONE);
+        updateButtonVisible();
+    }
+
+    /**
+     * Settings, Controls: hide the button when an app is full screen (a video, a game). A reading app that is full screen
+     * too (Wattpad's reading view) keeps it: the app last read in is never counted.
+     */
+    private boolean fsHidden;
+    private String frontPkg = "";
+    private long fsCheckedAt;
+
+    private void updateButtonVisible() {
+        if (button != null) button.setVisibility(lockHidden || fsHidden ? View.GONE : View.VISIBLE);
+    }
+
+    private void checkFullscreen(String front) {
+        if (front != null && !front.isEmpty()) frontPkg = front;
+        boolean want = false;
+        if (Prefs.flag(this, "hide_fullscreen", false) && android.os.Build.VERSION.SDK_INT >= 30 && wm != null && panel == null && fan == null) {
+            long now = System.currentTimeMillis();
+            if (now - fsCheckedAt < 700) return;
+            fsCheckedAt = now;
+            try {
+                // No status bar showing: the app in front uses the whole screen.
+                android.graphics.Insets in = wm.getMaximumWindowMetrics().getWindowInsets().getInsets(android.view.WindowInsets.Type.statusBars());
+                want = in.top == 0 && !frontPkg.equals(Prefs.lastApp(this)) && !frontPkg.equals(getPackageName());
+            } catch (Exception ignored) {
+            }
+        }
+        if (want != fsHidden) {
+            fsHidden = want;
+            Logs.d(this, want ? "floating button hidden (full screen in " + frontPkg + ")" : "floating button back (not full screen)");
+            updateButtonVisible();
+        }
     }
 
     /** Call after a setting changes. */
     void applyPrefs() {
+        fsCheckedAt = 0;
+        checkFullscreen(null);
         applyKeepAlive();
         if (Prefs.floatingButton(this)) {
             showButton();
@@ -3162,7 +3201,7 @@ public class ReaderService extends AccessibilityService {
                 }
             }
         });
-        if (lockHidden) button.setVisibility(View.GONE);
+        if (lockHidden || fsHidden) button.setVisibility(View.GONE);
         try {
             wm.addView(button, buttonLp);
             fadeSoon();

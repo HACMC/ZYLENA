@@ -423,6 +423,10 @@ public class MainActivity extends Activity {
                     applyService();
                 });
         Ui.add(g, tuckRow.view);
+        Ui.add(g, flagRow(R.drawable.ic_touch, "Hide in full screen",
+                "The button goes away while a video or a game fills the screen, and comes back after. The app you last read in keeps it, "
+                        + "even if it is full screen too (some story apps are). With it hidden, use the Quick Settings tile or the notification controls.",
+                "hide_fullscreen", false));
         autoRow = Ui.toggle(this, R.drawable.ic_play, "Read each new screen", "Starts by itself when you open an app",
                 on -> Prefs.setAutoRead(this, on));
         Ui.add(g, autoRow.view);
@@ -477,6 +481,10 @@ public class MainActivity extends Activity {
         buttonsRow = Ui.toggle(this, R.drawable.ic_touch, "Skip button names", "Buttons, icons and short labels like \"Close\"",
                 on -> Prefs.setSkipButtons(this, on));
         Ui.add(skip, buttonsRow.view);
+        Ui.add(skip, flagRow(R.drawable.ic_frame, "Skip author's notes",
+                "\"A/N\", \"Author's note\", \"please vote and comment\", \"thanks for reading\" in stories", "skip_notes", true));
+        Ui.add(skip, flagRow(R.drawable.ic_frame, "Stop before the cards after a story",
+                "\"You'll also like\", \"Share this story\" and what follows are not read", "stop_cards", true));
         skipRow = Ui.nav(this, R.drawable.ic_frame, "Words to skip", "", () -> editList(false));
         Ui.add(skip, skipRow.view);
         col.addView(skip);
@@ -524,6 +532,8 @@ public class MainActivity extends Activity {
 
         col.addView(Ui.section(this, "Story and Bible voices"));
         LinearLayout st = Ui.group(this);
+        Ui.add(st, flagRow(R.drawable.ic_clock, "Mark scene changes",
+                "\"* * *\", \"Later that day\", \"The next morning\": a longer pause and, in a story, a soft chime", "scene_breaks", true));
         Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
                 "In a story, what each character says is read in a voice of their own: a man's voice for a man, a woman's for a woman, "
                         + "the best voices first. The storyteller keeps the usual voice.", "cast_voices", true));
@@ -539,6 +549,10 @@ public class MainActivity extends Activity {
         Ui.add(st, castFilRow.view);
         castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
         Ui.add(st, castEnRow.view);
+        Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a drama sample",
+                "A short story with a mob boss, a child, a maid, an old woman, Jesus, sound effects and a scene change, to check how voices and sounds come out on this phone", this::hearSample).view);
+        Ui.add(st, Ui.nav(this, R.drawable.ic_person, "Fix a character's voice",
+                "Every character the reader has met: pick man or woman, and a kind of voice (child, elder, husky, boss, maid\u2026)", this::pickCharacter).view);
         castRow = Ui.nav(this, R.drawable.ic_person, "Story characters", "", this::editPovNames);
         Ui.add(st, castRow.view);
         povRow = Ui.toggle(this, R.drawable.ic_person, "Point of view (POV) voice",
@@ -650,6 +664,8 @@ public class MainActivity extends Activity {
         Ui.add(g, fanRow.view);
         sleepRow = Ui.nav(this, R.drawable.ic_timer, "Sleep timer", "", this::pickSleepTimer);
         Ui.add(g, sleepRow.view);
+        Ui.add(g, flagRow(R.drawable.ic_timer, "Sleep timer finishes the paragraph",
+                "When the time is up, the paragraph being read is finished first (at most 3 minutes more), then reading stops", "sleep_finish", true));
         Ui.add(g, new Ui.Row(this, R.drawable.ic_headset, "Headphone buttons",
                 "Play/pause pauses and continues; next and previous skip a paragraph").view);
         col.addView(g);
@@ -935,6 +951,98 @@ public class MainActivity extends Activity {
     }
 
     /** Which of the phone's voices a story's characters may use, and whether each is a man's or a woman's. */
+    private static final String[] SAMPLE_STORY = {
+            "Chapter One",
+            "Thunder rolled across the sky as the rain began to fall.",
+            "Don Vito leaned back in his chair. He was the mafia boss of the whole city.",
+            "\"You are late,\" Don Vito said coldly.",
+            "\"I'm sorry, boss,\" Luca whispered.",
+            "Someone knocked at the door.",
+            "Mia, a seven-year-old girl, ran in and tugged at her mother's sleeve.",
+            "\"Mommy, can we go home now?\" Mia asked.",
+            "\"Soon, sweetheart,\" Anna said, smiling.",
+            "Lola Rosa chuckled from her rocking chair. \"Ay, these children,\" she said.",
+            "The maid, Carmen, curtsied at the door.",
+            "\"Dinner is ready, sir,\" Carmen said softly.",
+            "\"Ha ha ha!\"",
+            "* * *",
+            "Later that night, a gentle voice filled the room.",
+            "\"Peace,\" Jesus said. \"Do not be afraid.\"",
+            "\"I-I'm not afraid,\" Luca said in a husky voice.",
+            "The end."};
+
+    /** A short story that uses everything: story voices, kinds of voice, God's voice, sound effects, a scene change. */
+    private void hearSample() {
+        Prefs.applyLists(this);
+        TextPrep.scope("zylena.sample");
+        java.util.List<TextPrep.Seg> segs = TextPrep.prepare(java.util.Arrays.asList(SAMPLE_STORY), false, true, false);
+        android.widget.Toast.makeText(this, "Playing a short drama sample\u2026", android.widget.Toast.LENGTH_SHORT).show();
+        Speaker.get(this).speak(segs, false);
+    }
+
+    private static final String[] CHAR_STYLE_IDS = {"", "none", "child", "teen", "elder", "husky", "gruff", "boss", "villain", "maid", "butler", "gentle", "cute", "squeaky", "bass"};
+    private static final String[] CHAR_STYLE_NAMES = {"Automatic (from the story)", "Plain voice", "Child", "Teen", "Elder (old person)", "Husky", "Gruff", "Boss (mob boss)", "Villain",
+            "Maid", "Butler", "Gentle", "Cute", "Squeaky", "Deep bass"};
+
+    /** Every character met so far; a tap lets the user say man or woman and what kind of voice. */
+    private void pickCharacter() {
+        java.util.List<String[]> known = Cast.knownList();
+        java.util.LinkedHashMap<String, String[]> all = new java.util.LinkedHashMap<>();
+        for (String[] k : known) all.put(k[0].toLowerCase(java.util.Locale.ROOT), k);
+        for (String line : Prefs.castOverrides(this).split("\n")) {
+            String[] f = line.split("\\|", -1);
+            if (f.length >= 3 && !f[0].trim().isEmpty() && !all.containsKey(f[0].trim().toLowerCase(java.util.Locale.ROOT))) {
+                all.put(f[0].trim().toLowerCase(java.util.Locale.ROOT), new String[]{f[0].trim(), f[1].isEmpty() ? "u" : f[1], f[2].equals("none") ? "" : f[2]});
+            }
+        }
+        java.util.List<String[]> list = new java.util.ArrayList<>(all.values());
+        String[] labels = new String[list.size() + 1];
+        for (int i = 0; i < list.size(); i++) {
+            String[] k = list.get(i);
+            labels[i] = k[0] + " \u2014 " + (k[1].equals("m") ? "man" : k[1].equals("f") ? "woman" : "not sure") + (k[2].isEmpty() ? "" : ", " + k[2]);
+        }
+        labels[list.size()] = "Add a character by name\u2026";
+        new AlertDialog.Builder(this)
+                .setTitle("Characters")
+                .setItems(labels, (d, which) -> {
+                    if (which < list.size()) {
+                        editCharacter(list.get(which)[0]);
+                        return;
+                    }
+                    android.widget.EditText in = new android.widget.EditText(this);
+                    in.setHint("Name, e.g. Lily");
+                    in.setSingleLine(true);
+                    new AlertDialog.Builder(this).setTitle("Add a character").setView(in)
+                            .setPositiveButton("Next", (d2, w) -> {
+                                String n = in.getText().toString().trim();
+                                if (!n.isEmpty()) editCharacter(n);
+                            }).setNegativeButton("Cancel", null).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    private void editCharacter(String name) {
+        String[] genders = {"Automatic", "Man", "Woman", "Not sure"};
+        String[] gid = {"", "m", "f", "u"};
+        new AlertDialog.Builder(this)
+                .setTitle(name + ": a man or a woman?")
+                .setItems(genders, (d, g) -> new AlertDialog.Builder(this)
+                        .setTitle(name + ": what kind of voice?")
+                        .setItems(CHAR_STYLE_NAMES, (d2, st) -> {
+                            String key = name.trim().toLowerCase(java.util.Locale.ROOT);
+                            StringBuilder out = new StringBuilder();
+                            for (String line : Prefs.castOverrides(this).split("\n")) {
+                                if (line.isEmpty() || line.toLowerCase(java.util.Locale.ROOT).startsWith(key + "|")) continue;
+                                out.append(line).append('\n');
+                            }
+                            if (!gid[g].isEmpty() || !CHAR_STYLE_IDS[st].isEmpty()) out.append(key).append('|').append(gid[g]).append('|').append(CHAR_STYLE_IDS[st]).append('\n');
+                            Prefs.setCastOverrides(this, out.toString().trim());
+                            android.widget.Toast.makeText(this, name + ": saved. It is used the next time the reader reaches them.", android.widget.Toast.LENGTH_LONG).show();
+                        }).show())
+                .show();
+    }
+
     private void pickCastVoices(String lang) {
         Speaker sp = Speaker.get(this);
         List<Voice> voices = sp.voicesFor(lang);

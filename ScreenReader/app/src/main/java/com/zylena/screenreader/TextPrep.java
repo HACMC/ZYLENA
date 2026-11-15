@@ -36,6 +36,8 @@ final class TextPrep {
         String mood = "";
         /** The page is a story with characters: all of it is read at the same loudness, a little under full. */
         boolean story;
+        /** A scene change comes before this ("***", "Later that day"): a longer pause, a soft chime in a story. */
+        boolean scene;
         /** A sound effect played as this is read ("knock", "thunder"; "" none), for stories. */
         String sfx = "";
         /** How many of those quoted parts came before this text, and whether it begins inside one. */
@@ -52,6 +54,7 @@ final class TextPrep {
             castFrom = o.castFrom;
             inQuote = o.inQuote;
             sfx = o.sfx;
+            scene = o.scene;
             return this;
         }
 
@@ -916,6 +919,16 @@ final class TextPrep {
     static volatile boolean povOn = true;
     /** In a story, each character's quoted words are read in a voice of their own. */
     static volatile boolean castOn = true;
+    /** Settings, Reading: author's notes and "please vote" lines left out; the cards after a story's end left out; scene changes marked. */
+    static volatile boolean skipNotes = true, stopCards = true, sceneOn = true;
+    private static final Pattern AUTHOR_NOTE = Pattern.compile("(?i)^\\s*(?:[(\\[]?a/n\\b|[(\\[]?a\\.n\\.|author'?s'? note|note from the author|\\[an\\]\\s*:)"
+            + "|^.{0,120}\\b(?:please|pls|don'?t forget to|do)\\s+(?:vote|comment|follow|share)\\b.{0,60}\\b(?:vote|comment|follow|share|library|story)\\b.{0,60}$"
+            + "|^.{0,60}\\b(?:thanks?|thank you|salamat)\\b.{0,20}\\b(?:for reading|sa pagbabasa|sa pagbabasa nito)\\b.{0,40}$");
+    private static final Set<String> END_CARDS = new HashSet<>(Arrays.asList("you'll also like", "you may also like", "recommended for you", "share this story",
+            "related stories", "similar stories", "more like this", "join the conversation", "more from this author", "you might also like"));
+    private static final Pattern SCENE_BREAK = Pattern.compile("^[\\s*\\-_~=#\\u2022\\u00B7.+<>|\\u2042\\u2014\\u2013]{3,}$");
+    private static final Pattern SCENE_PHRASE = Pattern.compile("(?i)^(?:later that (?:day|night|evening|morning|afternoon)|the (?:next|following) (?:day|morning|evening|night)|"
+            + "(?:a few |some |many )?(?:hours|days|weeks|months|years) later|that (?:night|evening|morning)|meanwhile|kinabukasan|makalipas ang|samantala)\\b");
     /** For the log: who talks in the Bible text of the page just prepared. */
     static volatile String lastBibleCast = "";
     /** Sound effects in stories (Settings, Voice). */
@@ -1111,7 +1124,19 @@ final class TextPrep {
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
         lastMood = moodMode.equals("auto") ? Mood.lastWhy : "";
+        // The cards after a story ("You'll also like…") are not part of it.
+        int endAt = lines.size();
+        if (stopCards) {
+            for (int li = 1; li < lines.size(); li++) {
+                if (END_CARDS.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) {
+                    endAt = li;
+                    break;
+                }
+            }
+        }
+        boolean pendingScene = false;
         for (int li = 0; li < lines.size(); li++) {
+            if (li >= endAt) break;
             if (povOn) {
                 String pv = povOf(lines.get(li));
                 if (pv != null) who = pv;
@@ -1127,6 +1152,15 @@ final class TextPrep {
                 if (bibleVoice && isQuote) for (Seg g : out) if (g.line == quoted.line) g.who = "m";
             }
             if (UI_NOISE.contains(lines.get(li).trim().toLowerCase(Locale.ROOT))) continue;
+            if (skipNotes && !verse && lines.get(li).length() <= 200 && AUTHOR_NOTE.matcher(lines.get(li)).find()) continue;
+            if (sceneOn && !verse) {
+                String tl = lines.get(li).trim();
+                if (SCENE_BREAK.matcher(tl).matches()) {
+                    pendingScene = true;
+                    continue;
+                }
+                if (tl.length() <= 70 && SCENE_PHRASE.matcher(tl).find()) pendingScene = true;
+            }
             if (lines.get(li).trim().matches("(?i)search \\d+ of \\d+")) continue; // the EGW app's search counter
             String cleaned = applyUserLists(dropCodes(clean(dropCodes(lines.get(li)))));
             // A link inside a sentence ("In this volume, on | page 13 | , Mrs. White states…") is part of it.
@@ -1239,6 +1273,11 @@ final class TextPrep {
                     g.story = cast != null;
                     g.sfx = fx;
                     fx = "";
+                    if (pendingScene) {
+                        g.scene = true;
+                        if (cast != null && g.sfx.isEmpty()) g.sfx = "scene";
+                        pendingScene = false;
+                    }
                     out.add(g);
                 }
             }
@@ -1281,7 +1320,7 @@ final class TextPrep {
         String prev = "", ref = null, who = "";
         String[] cast = null;
         String mood = "";
-        boolean story = false;
+        boolean story = false, sceneRun = false;
         int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
@@ -1298,12 +1337,14 @@ final class TextPrep {
             boolean newKind = lang != null && done != s.translated; // translated text never joins untranslated
             boolean tooLong = sb.length() + s.text.length() > max && !midSentence;
             boolean newWho = lang != null && !who.equals(s.who); // another voice reads from here
-            if (lang != null && (newLang || newLine || newKind || tooLong || newWho)) {
+            boolean newScene = lang != null && s.scene; // a scene change always starts a run of its own
+            if (lang != null && (newLang || newLine || newKind || tooLong || newWho || newScene)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
                 out.get(out.size() - 1).mood = mood;
                 out.get(out.size() - 1).story = story;
+                out.get(out.size() - 1).scene = sceneRun;
                 castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
                 cast = null;
                 ref = null;
@@ -1322,6 +1363,7 @@ final class TextPrep {
                 cast = s.cast;
                 mood = s.mood;
                 story = s.story;
+                sceneRun = s.scene;
             } else if (s.line != last && (cast != null || s.cast != null)) {
                 // Two screen lines read as one sentence: the second one's characters follow the first one's.
                 int had = Cast.quoteSpans(sb.toString(), false).size();
@@ -1344,6 +1386,7 @@ final class TextPrep {
             out.get(out.size() - 1).who = who;
             out.get(out.size() - 1).mood = mood;
             out.get(out.size() - 1).story = story;
+            out.get(out.size() - 1).scene = sceneRun;
             castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;

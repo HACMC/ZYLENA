@@ -407,6 +407,10 @@ final class Prefs {
         TextPrep.povOn = povVoices(c);
         TextPrep.userPov = TextPrep.parseSay(povNames(c));
         TextPrep.castOn = flag(c, "cast_voices", true);
+        Cast.setOverrides(sp(c).getString("cast_overrides", ""));
+        TextPrep.skipNotes = flag(c, "skip_notes", true);
+        TextPrep.stopCards = flag(c, "stop_cards", true);
+        TextPrep.sceneOn = flag(c, "scene_breaks", true);
         TextPrep.sfxOn = flag(c, "sfx", true);
         Sfx.on = TextPrep.sfxOn;
         Sfx.volume = num(c, "sfx_volume", 0.7f);
@@ -548,6 +552,15 @@ final class Prefs {
 
     static float toneStrength(Context c) {
         return sp(c).getFloat("tone_strength", 1f);
+    }
+
+    static String castOverrides(Context c) {
+        return sp(c).getString("cast_overrides", "");
+    }
+
+    static void setCastOverrides(Context c, String v) {
+        sp(c).edit().putString("cast_overrides", v).apply();
+        Cast.setOverrides(v);
     }
 
     static void setFloat(Context c, String key, float v) {
