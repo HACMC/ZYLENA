@@ -338,6 +338,7 @@ final class Speaker {
         generation++;
         endWait();
         paused = false;
+        stopDeep();
         if (tts != null) tts.stop();
         if (gemini != null) gemini.stop();
         handLate.clear();
@@ -478,6 +479,7 @@ final class Speaker {
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override
                     public void onStart(String id) {
+                        if (id != null && id.startsWith("deep:")) return;
                         try {
                             String[] p = id.split(":");
                             // A run spoken in several pieces (two voices) starts once, with its first piece.
@@ -501,6 +503,10 @@ final class Speaker {
 
                     @Override
                     public void onDone(String id) {
+                        if (id.startsWith("deep:")) {
+                            main.post(() -> deepReady(id));
+                            return;
+                        }
                         if (id.startsWith("save:")) {
                             if (id.endsWith(":last")) saveFinished();
                             return;
@@ -511,6 +517,10 @@ final class Speaker {
                     @Override
                     public void onError(String id) {
                         Logs.d(ctx, "TTS error on " + id);
+                        if (id != null && id.startsWith("deep:")) {
+                            main.post(() -> deepFail(id));
+                            return;
+                        }
                         if (id.startsWith("save:")) {
                             if (id.endsWith(":last")) saveFinished();
                             return;
@@ -565,10 +575,10 @@ final class Speaker {
      * (each run a call into the voice app, which waits while the voice app is busy) froze ZYLENA.
      */
     private void queueAhead(List<TextPrep.Seg> runs, int gen, int speaking) {
-        if (gen != generation || runs != currentRuns || tts == null) return;
+        if (gen != generation || runs != currentRuns || tts == null || deepHold) return;
         // Gemini's voice gets more at a time: it asks for several paragraphs in one request.
         int upTo = Math.min(runs.size() - 1, speaking + (GeminiVoice.usable(ctx) ? 8 : AHEAD));
-        while (queuedTo < upTo) {
+        while (queuedTo < upTo && !deepHold) {
             queuedTo++;
             queue(runs, gen, queuedTo);
         }
@@ -818,6 +828,7 @@ final class Speaker {
         // A heading is announced, and a paragraph that is one quotation (a memory verse) is read with care:
         // both a little lower and slower. They are whole runs already, so no extra pause comes of it.
         String whole = !tone ? "" : s.heading ? "h" : TextPrep.wholeQuote(s.text) ? "v" : "";
+        final boolean dsp = !translating && !Prefs.testMode(ctx) && Prefs.flag(ctx, "deep_dsp", true);
         float partsTotal = 1f, partsDone = 0f;
         {
             int tot = 0;
@@ -834,9 +845,12 @@ final class Speaker {
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
-            if (divineLine) r *= 0.92f; // slower, with weight
+            final boolean deep = divineLine && dsp;
+            if (divineLine && !deep) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
-            p *= applyVoice(lang, parts.get(k)[3]);
+            float vm = applyVoice(lang, parts.get(k)[3]);
+            // (Made deep by processing the sound after the voice has said it: only a little lower from the engine itself.)
+            p *= deep ? vm / DEEP * ENGINE_DEEP : vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
             p *= (1f + (kind[0] - 1f) * strength) * (1f + (feel[0] - 1f) * strength);
@@ -849,20 +863,205 @@ final class Speaker {
                 how = new android.os.Bundle();
                 how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, loud);
             }
-            // A breath when another voice takes over, if the user wants one.
-            if (change > 0 && k > 0 && !Cast.voice(parts.get(k)[3]).equals(Cast.voice(parts.get(k - 1)[3]))) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
-            tts.setSpeechRate(rateFor(lang) * r);
-            tts.setPitch(pitch * p);
-            String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (last && k == parts.size() - 1 ? ":last" : "");
-            int plen = parts.get(k)[0].length();
+            final String say = parts.get(k)[0], who = parts.get(k)[3];
+            final boolean lastPart = last && k == parts.size() - 1;
+            final String id = gen + ":" + i + (parts.size() > 1 ? ":p" + k : "") + (lastPart ? ":last" : "");
+            int plen = say.length();
             partSpan.put(id, new float[]{partsDone / partsTotal, plen / partsTotal, plen});
             partsDone += plen;
-            tts.speak(parts.get(k)[0], TextToSpeech.QUEUE_ADD, how, id);
+            final float fr = rateFor(lang) * r, fp = pitch * p, fl = loud;
+            final android.os.Bundle fhow = how;
+            // A breath when another voice takes over, if the user wants one.
+            final boolean breath = change > 0 && k > 0 && !Cast.voice(who).equals(Cast.voice(parts.get(k - 1)[3]));
             // Time to think about the question, unless the page ends here.
-            long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
-            if (ask && after > 0 && !(last && k == parts.size() - 1)) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            final long after = (long) (Prefs.pauseQuestion(ctx) * 1000);
+            final boolean think = ask && after > 0 && !lastPart;
+            final int run = i, part = k;
+            final String fl2 = lang;
+            Runnable emit = () -> {
+                if (gen != generation || tts == null) return;
+                if (breath) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
+                applyVoice(fl2, who);
+                tts.setSpeechRate(fr);
+                tts.setPitch(fp);
+                if (deep) synthDeep(say, id, fr, fp, fl, run, part, lastPart, gen);
+                else tts.speak(say, TextToSpeech.QUEUE_ADD, fhow, id);
+                if (think) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            };
+            // What comes after God's words waits until they have been played (they are played by ZYLENA itself).
+            if (deepHold) deepHeld.add(emit);
+            else emit.run();
         }
         tts.setPitch(pitch);
+    }
+
+    // ------------------------------------------------------------ God's voice
+
+    /**
+     * How the voice of God, Jesus and the Holy Spirit is made. Asking the engine for a lower pitch is not enough:
+     * Google's online voices ignore it, so the words would sound like anyone's. So these words are first
+     * recorded to a file by the voice, then played by ZYLENA slower, which makes them lower and slower at once
+     * (the sound drops about three semitones): a voice with weight, whatever voice the phone uses.
+     * What follows waits until they have been played.
+     */
+    private static final float DEEP = 0.78f, ENGINE_DEEP = 0.92f, DEEP_PLAY = 0.84f;
+    private volatile boolean deepHold;
+    private final List<Runnable> deepHeld = new ArrayList<>();
+    private final java.util.Map<String, Object[]> deepReq = new java.util.concurrent.ConcurrentHashMap<>();
+    private android.media.AudioTrack deepTrack;
+    private Runnable deepFinishTask;
+
+    private void synthDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen) {
+        final String rid = "deep:" + id;
+        java.io.File f = new java.io.File(ctx.getCacheDir(), "deep-" + id.replace(':', '_') + ".wav");
+        deepReq.put(rid, new Object[]{f, loud, run, part, last, text, rate, pitch, gen, id});
+        deepHold = true;
+        int rc = tts.synthesizeToFile(text, null, f, rid);
+        if (rc != TextToSpeech.SUCCESS) {
+            main.post(() -> deepFail(rid));
+            return;
+        }
+        // Should the voice never answer, reading goes on with the ordinary way after a while.
+        main.postDelayed(() -> {
+            if (deepReq.containsKey(rid)) deepFail(rid);
+        }, 8000 + text.length() * 90L);
+    }
+
+    /** The voice could not make the file: the words are read the ordinary way, lower, and reading goes on. */
+    private void deepFail(String rid) {
+        Object[] d = deepReq.remove(rid);
+        if (d == null) return;
+        int gen = (Integer) d[8];
+        try {
+            ((java.io.File) d[0]).delete();
+        } catch (Exception ignored) {
+        }
+        if (gen != generation || tts == null) return;
+        Logs.d(ctx, "deep voice: the sound could not be made, reading it the ordinary way");
+        tts.setSpeechRate((Float) d[6]);
+        tts.setPitch((Float) d[7] / ENGINE_DEEP * DEEP);
+        android.os.Bundle how = new android.os.Bundle();
+        how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, (Float) d[1]);
+        tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, how, (String) d[9]);
+        releaseHeld(gen);
+    }
+
+    /** The recording is ready: play it slower (lower), then let reading go on. */
+    private void deepReady(String rid) {
+        Object[] d = deepReq.remove(rid);
+        if (d == null) return;
+        final java.io.File f = (java.io.File) d[0];
+        final int gen = (Integer) d[8], run = (Integer) d[2], part = (Integer) d[3];
+        final boolean last = (Boolean) d[4];
+        if (gen != generation) {
+            f.delete();
+            return;
+        }
+        try {
+            byte[] b = new byte[(int) f.length()];
+            try (java.io.FileInputStream in = new java.io.FileInputStream(f)) {
+                int off = 0, n;
+                while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
+            }
+            f.delete();
+            int[] w = wavInfo(b);
+            if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
+            int sr = w[0], ch = w[1], frames = w[3] / 2 / ch;
+            short[] pcm = new short[w[3] / 2];
+            java.nio.ByteBuffer.wrap(b, w[2], w[3]).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm);
+            android.media.AudioTrack tr = new android.media.AudioTrack.Builder()
+                    .setAudioAttributes(attrs)
+                    .setAudioFormat(new android.media.AudioFormat.Builder().setEncoding(android.media.AudioFormat.ENCODING_PCM_16BIT)
+                            .setSampleRate(sr).setChannelMask(ch == 2 ? android.media.AudioFormat.CHANNEL_OUT_STEREO : android.media.AudioFormat.CHANNEL_OUT_MONO).build())
+                    .setTransferMode(android.media.AudioTrack.MODE_STATIC)
+                    .setBufferSizeInBytes(pcm.length * 2).build();
+            tr.write(pcm, 0, pcm.length);
+            tr.setVolume((Float) d[1]);
+            tr.setPlaybackRate(Math.round(sr * DEEP_PLAY));
+            if (part == 0) runStarted(run, gen);
+            deepTrack = tr;
+            tr.play();
+            Logs.d(ctx, "deep voice: played " + Math.round(frames * 1000f / (sr * DEEP_PLAY)) + " ms, " + Math.round((1 - DEEP_PLAY) * 100) + "% slower and lower");
+            deepFinishTask = () -> {
+                try {
+                    tr.stop();
+                    tr.release();
+                } catch (Exception ignored) {
+                }
+                if (deepTrack == tr) deepTrack = null;
+                if (gen != generation) return;
+                releaseHeld(gen);
+                if (last) allDone(gen);
+            };
+            main.postDelayed(deepFinishTask, (long) (frames * 1000L / (sr * DEEP_PLAY)) + 250);
+        } catch (Throwable e) {
+            Logs.d(ctx, "deep voice failed: " + e);
+            f.delete();
+            if (gen == generation) {
+                // Read it the ordinary way instead.
+                tts.setSpeechRate((Float) d[6]);
+                tts.setPitch((Float) d[7] / ENGINE_DEEP * DEEP);
+                tts.speak((String) d[5], TextToSpeech.QUEUE_ADD, null, (String) d[9]);
+                releaseHeld(gen);
+            }
+        }
+    }
+
+    /** What waited for God's words is given to the voice now, and the runs after it follow. */
+    private void releaseHeld(int gen) {
+        if (gen != generation) return;
+        List<Runnable> h = new ArrayList<>(deepHeld);
+        deepHeld.clear();
+        deepHold = false;
+        for (int x = 0; x < h.size(); x++) {
+            if (deepHold) deepHeld.add(h.get(x)); // another of God's sayings in the same paragraph: the rest waits for it
+            else h.get(x).run();
+        }
+        if (!deepHold && tts != null) {
+            tts.setPitch(Prefs.pitch(ctx));
+            List<TextPrep.Seg> runs = currentRuns;
+            queueAhead(runs, gen, Math.max(0, curRun));
+        }
+    }
+
+    private void stopDeep() {
+        deepHold = false;
+        deepHeld.clear();
+        deepReq.clear();
+        if (deepFinishTask != null) main.removeCallbacks(deepFinishTask);
+        deepFinishTask = null;
+        android.media.AudioTrack t = deepTrack;
+        deepTrack = null;
+        if (t != null) {
+            try {
+                t.stop();
+                t.release();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** {sample rate, channels, where the sound starts, how long it is} of a WAV file the voice made; null if it is not one. */
+    private static int[] wavInfo(byte[] b) {
+        if (b.length < 44 || b[0] != 'R' || b[1] != 'I' || b[2] != 'F' || b[3] != 'F') return null;
+        int pos = 12, sr = 0, ch = 0, bits = 16;
+        while (pos + 8 <= b.length) {
+            String tag = new String(b, pos, 4, java.nio.charset.StandardCharsets.US_ASCII);
+            int size = (b[pos + 4] & 255) | (b[pos + 5] & 255) << 8 | (b[pos + 6] & 255) << 16 | (b[pos + 7] & 255) << 24;
+            if (tag.equals("fmt ")) {
+                ch = (b[pos + 10] & 255) | (b[pos + 11] & 255) << 8;
+                sr = (b[pos + 12] & 255) | (b[pos + 13] & 255) << 8 | (b[pos + 14] & 255) << 16 | (b[pos + 15] & 255) << 24;
+                bits = (b[pos + 22] & 255) | (b[pos + 23] & 255) << 8;
+            } else if (tag.equals("data")) {
+                int off = pos + 8, rest = b.length - off;
+                int len = size <= 0 || size > rest ? rest : size;
+                if (sr <= 0 || ch < 1 || ch > 2 || bits != 16) return null;
+                return new int[]{sr, ch, off, len & ~1};
+            }
+            if (size < 0) return null;
+            pos += 8 + size + (size & 1);
+        }
+        return null;
     }
 
     private static final float QUESTION_PITCH = 1.12f;
@@ -1016,8 +1215,7 @@ final class Speaker {
         return deep * (divine ? 1f : AGAIN[(n / pool.size()) % AGAIN.length]);
     }
 
-    /** How much lower the voice of God and of Jesus is said. */
-    private static final float DEEP = 0.78f;
+
 
     private final java.util.Map<String, List<Voice>> castPools = new java.util.HashMap<>();
     /** Each character's voice ("en|cf1" → the voice's name), kept so a character never changes voice. */
