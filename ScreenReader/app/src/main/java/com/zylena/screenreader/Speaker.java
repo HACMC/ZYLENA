@@ -921,7 +921,17 @@ final class Speaker {
             r = 1f + (r - 1f) * strength;
             // A character with a voice of their own kind (God's, a child's, an old person's, a husky one, a boss's, a maid's)
             // is made by processing the sound; see VoiceFx.
-            final VoiceFx.Style fx = dsp ? styleFor(lang, parts.get(k)[3]) : null;
+            // How the line is said (shouted, angry, sad, afraid, laughing, whispered…) is made audible the same way: an online voice
+            // often ignores a change of pitch, and a few percent of speed or volume is not heard.
+            final String fcode = Cast.feel(parts.get(k)[3]);
+            String effCode = fcode;
+            float effK = strength;
+            if (fcode.isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
+                effCode = s.narrFeel; // the storyteller's own words carry a feeling too, less strongly
+                effK = strength * 0.7f;
+            }
+            final VoiceFx.Style feelFx = dsp && !effCode.isEmpty() ? VoiceFx.forFeeling(effCode) : null;
+            final VoiceFx.Style fx = dsp ? VoiceFx.combine(styleFor(lang, parts.get(k)[3]), feelFx, effK) : null;
             if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
             else if (divineLine) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
@@ -929,9 +939,9 @@ final class Speaker {
             if (fx != null) p *= divineLine ? vm / DEEP : vm; // the pitch is changed afterwards
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
-            float[] kind = Mood.forKind(s.mood), feel = Mood.forFeeling(Cast.feel(parts.get(k)[3]));
+            float[] kind = Mood.forKind(s.mood), feel = feelFx != null ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
             // The storyteller's own words ("my heart pounded", "tears streamed down") carry a feeling too, at half strength.
-            if (Cast.feel(parts.get(k)[3]).isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
+            if (feelFx == null && Cast.feel(parts.get(k)[3]).isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
                 float[] nf = Mood.forFeeling(s.narrFeel);
                 feel = new float[]{1f + (nf[0] - 1f) * 0.5f, 1f + (nf[1] - 1f) * 0.5f, 1f + (nf[2] - 1f) * 0.5f};
             }

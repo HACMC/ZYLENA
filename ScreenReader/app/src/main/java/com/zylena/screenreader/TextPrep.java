@@ -1254,6 +1254,8 @@ final class TextPrep {
                     verseCast[k] = cleaned.charAt(sp.get(k)[0]) == '\u00AB' && ci < verseCodes.size() ? verseCodes.get(ci++) : "";
                 }
             }
+            // (Judged on the line as it was printed: the words in capitals have been lowercased by now.)
+            final boolean shoutLine = cast != null && feelOn && !verse && lines.get(li).indexOf('"') < 0 && lines.get(li).indexOf('\u201C') < 0 && isShout(lines.get(li));
             boolean hasVerse = cleaned.indexOf('\u000E') >= 0;
             // In a story with Tagalog in it (Taglish too) every character, and the storyteller, keep the Tagalog voice:
             // a character whose line has English words in it used to switch to the English voice and back.
@@ -1303,6 +1305,8 @@ final class TextPrep {
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
                     Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
+                    // A line of the story in CAPITALS ("I ENTERED THE WRONG CAR!") is shouted, quoted or not.
+                    if (shoutLine) g.who = g.who + "~s";
                     if (cast != null) g.cast = cast[li];
                     else if (bibleQuotes != null) g.cast = bibleQuotes;
                     else if (verseCast != null) g.cast = verseCast;
@@ -1416,6 +1420,18 @@ final class TextPrep {
         lg.mood = mood;
         lg.story = true;
         return lg;
+    }
+
+    private static boolean isShout(String t) {
+        int caps = 0, letters = 0;
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (Character.isLetter(c)) {
+                letters++;
+                if (Character.isUpperCase(c)) caps++;
+            }
+        }
+        return letters >= 6 && caps * 10 >= letters * 8;
     }
 
     private static final Pattern SHE = Pattern.compile("(?i)\\b(?:she|her|hers|herself)\\b"), HE = Pattern.compile("(?i)\\b(?:he|his|him|himself)\\b");

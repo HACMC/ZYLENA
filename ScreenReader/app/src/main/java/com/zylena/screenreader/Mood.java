@@ -105,7 +105,7 @@ final class Mood {
             {"j", "joked|jokes|grinned|beamed|cheered|happily|excitedly|teased|squealed"
                     + "|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
             {"a", "argued|argues|protested|retorted|scowled|seethed|gritted|snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
-                    + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik"},
+                    + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik|banta|nagbanta|binantaan|pabanta"},
             {"f", "stammered|stuttered|gasped|trembled|trembling|nervously|panicked|shakily|whimpered"
                     + "|nauutal|nanginginig|takot|natatakot|kinakabahan|napasinghap|taranta|natataranta"}};
     private static final Pattern[] FEEL_P = new Pattern[FEEL.length];
@@ -146,7 +146,7 @@ final class Mood {
 
     private static final String[][] SAYS = {
             {"a", "hate you|shut up|get out|how dare you|damn it|idiot|stupid|liar|leave me alone|i said no|bastard|asshole|bullshit|what the hell|go away"
-                    + "|ayoko|galit na galit|tumigil ka|umalis ka|bwisit|gago|tanga|ulol|layas"},
+                    + "|ayoko|galit na galit|tumigil ka|umalis ka|bwisit|gago|tanga|ulol|layas|naiinis na ako|naiinis ako|nakakainis|inis na inis|galit ako|nagagalit ako|ayoko na"},
             {"f", "help me|please no|don'?t hurt|what was that|i'?m scared|i'?m afraid|oh no|someone help|let me go|stay away|don'?t touch"
                     + "|tulong|takot ako|huwag po|bitawan mo ako|lumayo ka"},
             {"d", "i miss you|don'?t leave|please don'?t go|it hurts|i can'?t do this|i'?m so sorry|forgive me|it'?s over|goodbye|she'?s gone|he'?s gone"

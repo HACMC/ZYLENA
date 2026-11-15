@@ -30,6 +30,8 @@ final class VoiceFx {
         final float vol;
         /** Muffles the top of the sound (a heavy, rumbling voice). */
         final boolean dull;
+        /** How loud the sound is made (speech is 0.10 to 0.20), and some extra upper-middle range for clarity (0 to 1). */
+        float level = 0.17f, presence = 0f;
 
         Style(String name, float pf, float tf, float vib, float husk, float drive, float vol, boolean dull) {
             this.name = name;
@@ -74,6 +76,47 @@ final class VoiceFx {
         add("gentle", 1.05f, 0.95f, 0f, 0.07f, 0f, 0.85f, false);
     }
 
+    private static void feel(String code, float pf, float tf, float vib, float husk, float drive, float vol, float level) {
+        add("feel_" + code, pf, tf, vib, husk, drive, vol, false);
+        STYLES.get("feel_" + code).level = level;
+    }
+
+    static {
+        // How a line is said, made audible by changing the sound itself (an online voice often ignores a change of pitch).
+        feel("s", 1.10f, 1.10f, 0f, 0f, 0.12f, 1.0f, 0.24f); // shouted
+        feel("a", 0.93f, 1.06f, 0f, 0.04f, 0.22f, 1.0f, 0.21f); // angry
+        feel("d", 0.94f, 0.85f, 0.01f, 0.10f, 0f, 0.85f, 0.13f); // sad
+        feel("f", 1.12f, 1.12f, 0.02f, 0.08f, 0f, 0.9f, 0.15f); // afraid
+        feel("l", 1.12f, 1.10f, 0f, 0f, 0f, 1.0f, 0.19f); // laughing while speaking
+        feel("j", 1.08f, 1.06f, 0f, 0f, 0f, 1.0f, 0.18f); // glad
+        feel("w", 1.0f, 0.90f, 0f, 0.38f, 0f, 0.65f, 0.07f); // whispered
+        feel("t", 0.97f, 0.88f, 0f, 0.12f, 0f, 0.85f, 0.12f); // tender
+        feel("p", 1.06f, 0.90f, 0.02f, 0.08f, 0f, 0.9f, 0.14f); // pleading
+        feel("h", 0.92f, 0.80f, 0f, 0.25f, 0f, 0.8f, 0.10f); // a sigh
+    }
+
+    /** The voice of a feeling ("s" shouted, "a" angry, "d" sad, …), or null. */
+    static Style forFeeling(String code) {
+        return code == null || code.isEmpty() ? null : STYLES.get("feel_" + code);
+    }
+
+    /**
+     * A kind of voice (or none) with a feeling on top, the feeling at the strength k (the user's tone strength): the pitches
+     * and tempos multiply, the roughness and breath take the larger, the loudness is brought towards the feeling's.
+     */
+    static Style combine(Style kind, Style feeling, float k) {
+        if (feeling == null) return kind;
+        Style f = new Style("feeling", 1f + (feeling.pf - 1f) * k, 1f + (feeling.tf - 1f) * k, feeling.vib * k, feeling.husk * k, feeling.drive * k,
+                1f + (feeling.vol - 1f) * k, false);
+        f.level = 0.17f + (feeling.level - 0.17f) * k;
+        if (kind == null) return f;
+        Style m = new Style("mix", kind.pf * f.pf, kind.tf * f.tf, Math.max(kind.vib, f.vib), Math.max(kind.husk, f.husk), Math.max(kind.drive, f.drive),
+                kind.vol * f.vol, kind.dull);
+        m.level = kind.level + (f.level - 0.17f);
+        m.presence = kind.presence;
+        return m;
+    }
+
     static Style get(String name) {
         return name == null || name.isEmpty() ? null : STYLES.get(name);
     }
@@ -87,7 +130,7 @@ final class VoiceFx {
 
     /** The recording made into the character's voice. mono, 16-bit, at the rate it came in. */
     static short[] process(short[] in, int rate, Style st) {
-        return process(in, rate, st, 0.17f, 0f);
+        return process(in, rate, st, st.level, st.presence);
     }
 
     /** As above, with the loudness it is brought to (speech is about 0.1 to 0.2) and some extra upper-middle range (0 to 1). */
