@@ -156,7 +156,10 @@ final class ScreenText {
             if (lines.isEmpty() || !lines.get(lines.size() - 1).equals(own)) {
                 CharSequence t = node.getText();
                 boolean iconLabel = (t == null || t.length() == 0) && words(own) <= 4; // "Arrow Back", "Search"
-                boolean shortTap = tappable && words(own) <= 4 && own.length() <= 40; // "Komento ng Guro", "READ"
+                // A line of the story that ends like a sentence ("What?!", "Oh no.", a quotation) is text, even where the whole
+                // paragraph can be tapped (Wattpad's inline comments): it is not a button's label.
+                boolean prose = !buttonClass(node) && own.matches("(?s).*[.!?\u2026\"\u201D\u2019)]\\s*$");
+                boolean shortTap = tappable && !prose && words(own) <= 4 && own.length() <= 40; // "Komento ng Guro", "READ"
                 lines.add(own);
                 rects.add(new Rect(bounds));
                 // Only short labels can be buttons: a paragraph is read whatever the app calls it.

@@ -234,8 +234,32 @@ final class TextPrep {
      * user's own fixes, and last the respelling for the Tagalog voice. "Fix a word" shows the words before
      * the fixes and the respelling, so what is tapped there is what is printed.
      */
+    /**
+     * A stutter written out ("L-lalabas", "W-w-what", "I-I'm"): a lone consonant said as a letter ("el") is wrong; the
+     * first syllable is said again instead, so it is heard as a stutter: "la-lalabas", "wha-wha-what".
+     */
+    private static final Pattern STUTTER = Pattern.compile("(?<![\\p{L}'-])([B-DF-HJ-NP-TV-Zb-df-hj-np-tv-z])((?:-\\1)*)-(\\1[\\p{L}']{2,})", Pattern.CASE_INSENSITIVE);
+    private static final Pattern FIRST_SYLLABLE = Pattern.compile("^[^aeiouAEIOU]*[aeiouAEIOU]+");
+
+    static String stutter(String s) {
+        if (s.indexOf('-') < 0) return s;
+        java.util.regex.Matcher m = STUTTER.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String word = m.group(3);
+            java.util.regex.Matcher f = FIRST_SYLLABLE.matcher(word);
+            String syl = f.find() ? f.group() : m.group(1);
+            int times = 1 + m.group(2).length() / 2;
+            StringBuilder out = new StringBuilder();
+            for (int i = 0; i < times; i++) out.append(i == 0 ? syl : syl.toLowerCase(Locale.ROOT)).append('-');
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(out + word));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
     static String say(String text, String lang) {
-        String s = userFix(sayName(text, lang));
+        String s = userFix(sayName(stutter(text), lang));
         if (!FIL.equals(lang)) return s;
         String r = sayTagalog(s);
         return r.equals(s) ? s : userFix(r); // an older fix may be for the respelled word ("impreshon")
@@ -355,7 +379,7 @@ final class TextPrep {
                 else if (ENGLISH.contains(w)) en++;
             }
         }
-        return fil >= 12 && fil * 4 >= (fil + en);
+        return fil >= 8 && fil * 8 >= (fil + en);
     }
 
     static boolean mostlyTagalog(List<String> lines) {
