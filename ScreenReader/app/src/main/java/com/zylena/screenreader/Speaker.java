@@ -144,11 +144,13 @@ final class Speaker {
     private void partStarted(int i, int k, int gen) {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
-        TextPrep.Seg r = runs.get(i);
-        if (r.sfx.isEmpty()) return;
-        Integer at = sfxAt.get(i);
-        if (k == (at == null ? 0 : at)) Sfx.play(ctx, r.sfx);
+        // The sound effect is not played from here: the reading is held for it (see sfxNow), so it is heard clearly.
     }
+
+    /** The effects to play when their silence starts: utterance id -> effect. Reading is held for each one. */
+    private final java.util.Map<String, String> sfxNow = new java.util.concurrent.ConcurrentHashMap<>();
+    /** The run each kind of effect last played in, so that the same sound is not held for again and again. */
+    private final java.util.Map<String, Integer> sfxLastRun = new java.util.concurrent.ConcurrentHashMap<>();
 
     private void runStarted(int i, int gen) {
         List<TextPrep.Seg> runs = currentRuns;
@@ -293,6 +295,8 @@ final class Speaker {
         curRun = 0;
         partSpan.clear();
         sfxAt.clear();
+        sfxNow.clear();
+        sfxLastRun.clear();
         final int gen = ++generation;
         tracking = track;
         setSpeaking(true);
@@ -530,6 +534,11 @@ final class Speaker {
                         }
                         try {
                             String[] p = id.split(":");
+                            if (p.length > 2 && p[2].equals("x")) {
+                                String fx = sfxNow.remove(id);
+                                if (fx != null && Integer.parseInt(p[0]) == generation) Sfx.play(ctx, fx, true);
+                                return;
+                            }
                             int piece = p.length > 2 && p[2].startsWith("p") ? Integer.parseInt(p[2].substring(1)) : 0;
                             partStarted(Integer.parseInt(p[1]), piece, Integer.parseInt(p[0]));
                             // A run spoken in several pieces (two voices) starts once, with its first piece.
@@ -905,6 +914,23 @@ final class Speaker {
             }
             sfxAt.put(i, at);
         }
+        // Reading waits while an effect plays, so the sound and the voice are each heard clearly.
+        long sfxHold = 0;
+        final String sfxId = gen + ":" + i + ":x";
+        if (!s.sfx.isEmpty()) {
+            String base = s.sfx.indexOf('@') < 0 ? s.sfx : s.sfx.substring(0, s.sfx.indexOf('@'));
+            Integer lastRun = sfxLastRun.get(base);
+            int gap = Sfx.person(base) ? 8 : 5; // the same sound again and again is tiresome
+            if (lastRun == null || Math.abs(i - lastRun) >= gap) {
+                sfxHold = Sfx.holdMs(ctx, s.sfx);
+                if (sfxHold > 0) {
+                    sfxLastRun.put(base, i);
+                    sfxNow.put(sfxId, s.sfx);
+                }
+            }
+        }
+        final long sfxHoldF = sfxHold;
+        final int sfxPart = sfxAt.get(i) == null ? 0 : sfxAt.get(i);
         if (s.cast != null && parts.size() > 1) {
             StringBuilder v = new StringBuilder();
             for (String[] pt : parts) if (v.indexOf(pt[3].isEmpty() ? "usual" : pt[3]) < 0) v.append(v.length() > 0 ? ", " : "").append(pt[3].isEmpty() ? "usual" : pt[3]);
@@ -994,6 +1020,7 @@ final class Speaker {
             Runnable emit = () -> {
                 if (gen != generation || tts == null) return;
                 if (breath) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
+                if (sfxHoldF > 0 && part == sfxPart) tts.playSilentUtterance(sfxHoldF, TextToSpeech.QUEUE_ADD, sfxId);
                 applyVoice(fl2, who);
                 tts.setSpeechRate(fr);
                 tts.setPitch(fp);

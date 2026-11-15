@@ -164,18 +164,20 @@ final class VoiceFx {
                 z[i] = s;
             }
         }
-        // Breath: noise from the upper range, as loud as the voice is at that moment, so it is there only while speaking.
+        // Breath: soft noise from the middle-upper range, as loud as the voice is at that moment, so it is there only while
+        // speaking. Kept gentle: hiss pushed any louder (and then brought up with the rest) sounds like a broken speaker.
         if (st.husk > 0) {
             Random r = new Random(5);
-            float env = 0, lp = 0;
-            float up = (float) (1 - Math.exp(-1.0 / (0.004 * rate))), down = (float) (1 - Math.exp(-1.0 / (0.05 * rate)));
-            float hpA = (float) (1 - Math.exp(-2 * Math.PI * 1800.0 / rate));
+            float[] nzs = new float[m];
+            for (int i = 0; i < m; i++) nzs[i] = r.nextFloat() * 2 - 1;
+            float[] air = band(nzs, 2600f, 2400f, rate);
+            float env = 0;
+            float up = (float) (1 - Math.exp(-1.0 / (0.006 * rate))), down = (float) (1 - Math.exp(-1.0 / (0.08 * rate)));
+            float amount = Math.min(st.husk, 0.3f) * 1.1f;
             for (int i = 0; i < m; i++) {
                 float a = Math.abs(z[i]);
                 env += (a > env ? up : down) * (a - env);
-                float nz = r.nextFloat() * 2 - 1;
-                lp += hpA * (nz - lp);
-                z[i] += st.husk * 2.2f * env * (nz - lp);
+                z[i] += amount * Math.min(env, 0.3f) * air[i] * 3f;
             }
         }
         // Grit: pushed into a soft clip.

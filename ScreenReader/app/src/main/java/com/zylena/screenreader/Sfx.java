@@ -167,10 +167,36 @@ final class Sfx {
 
     /** Plays the effect (on a thread of its own; made the first time it is needed). Not twice in a row too soon. */
     static void play(Context c, String name) {
+        play(c, name, false);
+    }
+
+    /**
+     * How long the reading is held while the effect plays (its length and a breath), or 0 when it will not play at all
+     * (effects off, volume off, test mode).
+     */
+    static long holdMs(Context c, String name) {
+        if (!on || name == null || name.isEmpty() || Prefs.testMode(c) || volume <= 0.01f) return 0;
+        try {
+            short[] pcm;
+            synchronized (made) {
+                pcm = made.get(name);
+                if (pcm == null) {
+                    pcm = make(name);
+                    if (pcm != null) made.put(name, pcm);
+                }
+            }
+            return pcm == null ? 0 : Math.min(4000L, pcm.length * 1000L / RATE + 150);
+        } catch (Throwable e) {
+            return 0;
+        }
+    }
+
+    /** now: the reading was held for it, so it plays whatever came just before (the caller kept count). */
+    static void play(Context c, String name, boolean now0) {
         if (!on || name == null || name.isEmpty() || Prefs.testMode(c)) return;
         long now = System.currentTimeMillis();
         final String base = name.indexOf('@') < 0 ? name : name.substring(0, name.indexOf('@'));
-        synchronized (lastAt) {
+        if (!now0) synchronized (lastAt) {
             Long was = lastAt.get(base);
             // The same sound again and again is tiresome; the sounds of a person ("laughed", "sighed") come up the most.
             if (was != null && now - was < (PERSON.contains(base) ? 14000 : 6000)) return;
