@@ -36,6 +36,8 @@ final class TextPrep {
         String mood = "";
         /** The page is a story with characters: all of it is read at the same loudness, a little under full. */
         boolean story;
+        /** A sound effect played as this is read ("knock", "thunder"; "" none), for stories. */
+        String sfx = "";
         /** How many of those quoted parts came before this text, and whether it begins inside one. */
         int castFrom;
         boolean inQuote;
@@ -49,6 +51,7 @@ final class TextPrep {
             story = o.story;
             castFrom = o.castFrom;
             inQuote = o.inQuote;
+            sfx = o.sfx;
             return this;
         }
 
@@ -877,6 +880,8 @@ final class TextPrep {
     static volatile boolean povOn = true;
     /** In a story, each character's quoted words are read in a voice of their own. */
     static volatile boolean castOn = true;
+    /** Sound effects in stories (Settings, Voice). */
+    static volatile boolean sfxOn = true;
     /** For the log: the characters found on the page just prepared. */
     static volatile String lastCast = "";
     /** How characters say their lines (whispered, shouted, in tears) is heard in the voice. */
@@ -1043,6 +1048,7 @@ final class TextPrep {
         lastCodes = "";
         lastRefLine = "";
         Bible.page(lines);
+        String pendingFx = "";
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
@@ -1145,12 +1151,29 @@ final class TextPrep {
             for (String sentence : SENTENCE_END.split(cleaned)) {
                 sentence = sentence.trim();
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
+                // Sound effects in a story: a sound written out ("Ring, ring!") is played instead of said; a sentence
+                // that tells of one (a knock, a door, thunder) plays it as it is read.
+                String fx = "";
+                if (sfxOn && cast != null && !verse && !hasVerse && Bible.firstRef(sentence) == null) {
+                    String solo = Sfx.solo(sentence);
+                    if (solo != null) {
+                        pendingFx = solo;
+                        continue;
+                    }
+                    fx = Sfx.detect(sentence);
+                }
+                if (fx.isEmpty()) {
+                    fx = pendingFx;
+                    pendingFx = "";
+                }
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
                     Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     if (cast != null) g.cast = cast[li];
                     g.mood = mood;
                     g.story = cast != null;
+                    g.sfx = fx;
+                    fx = "";
                     out.add(g);
                 }
             }

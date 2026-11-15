@@ -508,6 +508,10 @@ public class MainActivity extends Activity {
         Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
                 "In a story, what each character says is read in a voice of their own: a man's voice for a man, a woman's for a woman, "
                         + "the best voices first. The storyteller keeps the usual voice.", "cast_voices", true));
+        Ui.add(st, flagRow(R.drawable.ic_eq, "Sound effects in stories",
+                "A knock, a door, a ringing phone, thunder and the like are played as the story tells of them. A sound written out "
+                        + "(\"Ring, ring!\") is played instead of said. Made on the phone, nothing to download.", "sfx", true));
+        Ui.add(st, numSlider(R.drawable.ic_eq, "Sound effects volume", 0f, 1f, 0.05f, "sfx_volume", 0.7f, "%.2f"));
         castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
         Ui.add(st, castFilRow.view);
         castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));

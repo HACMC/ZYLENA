@@ -305,7 +305,7 @@ final class Prefs {
      * itself from the built-in Bible. One setting, so the choices can't cancel each other out.
      */
     static String refMode(Context c) {
-        return sp(c).getString("ref_mode", "skip");
+        return sp(c).getString("ref_mode", "verses");
     }
 
     static void setRefMode(Context c, String v) {
@@ -407,6 +407,9 @@ final class Prefs {
         TextPrep.povOn = povVoices(c);
         TextPrep.userPov = TextPrep.parseSay(povNames(c));
         TextPrep.castOn = flag(c, "cast_voices", true);
+        TextPrep.sfxOn = flag(c, "sfx", true);
+        Sfx.on = TextPrep.sfxOn;
+        Sfx.volume = num(c, "sfx_volume", 0.7f);
         TextPrep.feelOn = flag(c, "feel_voices", true);
         TextPrep.moodMode = sp(c).getString("mood", "auto");
         TextPrep.respellNames = flag(c, "respell_names", true);
@@ -549,6 +552,7 @@ final class Prefs {
 
     static void setFloat(Context c, String key, float v) {
         sp(c).edit().putFloat(key, v).apply();
+        if (key.equals("sfx_volume")) Sfx.volume = v;
     }
 
     /** Book names in references said in English ("Numbers fourteen"); off: as printed ("Bilang fourteen"). */

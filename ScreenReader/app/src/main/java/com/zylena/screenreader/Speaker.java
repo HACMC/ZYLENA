@@ -138,6 +138,7 @@ final class Speaker {
         curRun = i;
         if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
+        if (!r.sfx.isEmpty()) Sfx.play(ctx, r.sfx);
         Logs.d(ctx, "speaking run " + i + "/" + runs.size() + " [" + r.lang + "] lines " + r.line + "-" + r.lastLine
                 + ": " + (r.translated ? (r.text.length() > 600 ? r.text.substring(0, 600) + "…" : r.text)
                 : Logs.snip(Bible.sayRefs(r.text, r.lang.equals(TextPrep.FIL)))));
