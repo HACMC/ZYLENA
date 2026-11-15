@@ -552,7 +552,9 @@ final class Cast {
                 learned = true;
             }
             String style = sp0 != null && sp0.styleFixed ? sp0.style : !vs.isEmpty() ? vs : sp0 != null ? sp0.style : "";
-            String styleTag = style.isEmpty() || code.isEmpty() || code.equals(DIVINE_CODE) ? "" : "^" + style;
+            // (A character the user chose a plain voice for is marked, so that no style is given to them.)
+            String styleTag = code.isEmpty() || code.equals(DIVINE_CODE) ? ""
+                    : style.isEmpty() ? (sp0 != null && sp0.styleFixed ? "^plain" : "") : "^" + style;
             out[i] = new String[sp.size()];
             for (int k = 0; k < sp.size(); k++) {
                 if (!spoken(l, sp.get(k))) {

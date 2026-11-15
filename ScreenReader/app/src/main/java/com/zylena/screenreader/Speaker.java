@@ -883,7 +883,7 @@ final class Speaker {
             r = 1f + (r - 1f) * strength;
             // A character with a voice of their own kind (God's, a child's, an old person's, a husky one, a boss's, a maid's)
             // is made by processing the sound; see VoiceFx.
-            final VoiceFx.Style fx = dsp ? styleFor(parts.get(k)[3]) : null;
+            final VoiceFx.Style fx = dsp ? styleFor(lang, parts.get(k)[3]) : null;
             if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
             else if (divineLine) r *= 0.92f; // slower, with weight
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
@@ -949,12 +949,25 @@ final class Speaker {
     private android.media.AudioTrack deepTrack;
     private Runnable deepFinishTask;
 
-    /** The kind of voice a character has, from the voice code: God's, or what the story says they are like; null for the plain voice. */
-    private static VoiceFx.Style styleFor(String who) {
+    private static final String[] MEN_VARIANTS = {"", "bass", "teen", "gruff"}, WOMEN_VARIANTS = {"", "gentle", "teen", "cute"};
+
+    /**
+     * The kind of voice a character has, from the voice code: God's, or what the story says they are like; null for the plain
+     * voice. When the phone has only one voice for a man (or a woman) in this language, characters are told apart by how
+     * the sound is changed, so that no two sound the same.
+     */
+    private VoiceFx.Style styleFor(String lang, String who) {
         String v = Cast.voice(who);
         if (v == null || !Cast.isCode(v)) return null;
         if (v.startsWith("cd")) return VoiceFx.get("deep");
-        return VoiceFx.get(Cast.styleOf(who));
+        String st = Cast.styleOf(who);
+        if (st.equals("plain")) return null;
+        if (!st.isEmpty()) return VoiceFx.get(st);
+        char g = Cast.genderOf(v);
+        if (g != 'm' && g != 'f') return null;
+        if (castPool(lang, g).size() >= 2) return null;
+        String[] variants = g == 'm' ? MEN_VARIANTS : WOMEN_VARIANTS;
+        return VoiceFx.get(variants[Cast.slotOf(v) % variants.length]);
     }
 
     /** One line to be made into a character's voice: recorded by a second voice engine while the line before it is spoken. */
@@ -1351,7 +1364,9 @@ final class Speaker {
         final boolean divine = g == 'd';
         if (divine) g = 'm';
         final float deep = divine ? DEEP : 1f;
-        List<Voice> pool = castPool(lang, g);
+        List<Voice> all = castPool(lang, g);
+        // The best man's voice is kept for God and Jesus when there is another to give the rest.
+        List<Voice> pool = !divine && g == 'm' && all.size() >= 2 ? all.subList(1, all.size()) : all;
         if (pool.isEmpty()) {
             applyUsual(lang);
             return deep * (divine ? 0.9f : 1f) * (g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length]);
@@ -1368,6 +1383,7 @@ final class Speaker {
                 if ((g == 'm' ? (e.getKey().startsWith(lang + "|cm") || e.getKey().startsWith(lang + "|cd")) : e.getKey().startsWith(lang + "|c" + g))
                         && !e.getKey().equals(pin)) taken.add(e.getValue());
             }
+            if (divine) v = all.get(0);
             for (int k = 0; k < pool.size() && v == null; k++) {
                 Voice c = pool.get((n + k) % pool.size());
                 if (!taken.contains(base(c.getName()))) v = c;

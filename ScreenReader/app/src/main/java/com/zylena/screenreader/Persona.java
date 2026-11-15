@@ -23,7 +23,7 @@ final class Persona {
             + "the don|boss)\\b");
     private static final Pattern MAID = p("\\b(?:maid|housemaid|servant|housekeeper|nanny|katulong|kasambahay|yaya)\\b");
     private static final Pattern BUTLER = p("\\b(?:butler|valet)\\b");
-    private static final Pattern VILLAIN = p("\\b(?:villain|witch|sorcerer|sorceress|demon|devil|tyrant|warlock|dark lord)\\b");
+    private static final Pattern VILLAIN = p("\\b(?:villain|witch|sorcerer|sorceress|demon|devil|satan|satanas|lucifer|manunukso|tempter|tyrant|warlock|dark lord)\\b");
     private static final Pattern ELDER = p("\\b(?:old (?:man|woman|lady|gentleman|farmer|fisherman)|elderly|grandma|grandpa|grandmother|grandfather|granny|grandpa|lola|lolo|"
             + "matanda|gray-haired|grey-haired|white-haired|wrinkled|aged)\\b");
     private static final Pattern CHILD = p("\\b(?:little (?:boy|girl|kid|one|sister|brother)|toddler|baby|infant|kid|child|preschooler|kindergartener|bata|batang|paslit|musmos|sanggol)\\b");

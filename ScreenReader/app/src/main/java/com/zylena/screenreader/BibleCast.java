@@ -37,6 +37,8 @@ final class BibleCast {
             + "i|me|my|mine|thou|thee|thy|thine|you|ye|your|yours|we|us|our|hindi baga|ought)(?![\\p{L}])");
     private static final Pattern FIRST_PERSON = Pattern.compile("(?i)(?<![\\p{L}'])(?:ko|i|we|namin|natin|amin|tayo)(?![\\p{L}])");
     private static final Pattern DIVINE = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|cristo|christ|mesias|messias|dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|señor)(?![\\p{L}])");
+    /** The one who tempts or opposes: Satan speaks in a voice of his own, not Jesus's. */
+    private static final Pattern VILLAIN = Pattern.compile("(?i)(?<![\\p{L}])(?:satan|satanas|devil|diablo|lucifer|demon|demonyo|manunukso|tempter|serpent|ahas)(?![\\p{L}])");
     private static final Pattern FEMALE_CUE = Pattern.compile("(?i)(?<![\\p{L}])(?:babae|woman|women|reyna|queen|dalaga|maiden|damsel|ina|mother|she|siya'y babae|virgin|birhen)(?![\\p{L}])");
     private static final Pattern NAMED = Pattern.compile("(?:(?<![\\p{L}])(?:ni|si|ng|kay)\\s+(\\p{Lu}\\p{Ll}[\\p{L}'\u2019]+))"
             + "|(?:(\\p{Lu}\\p{Ll}[\\p{L}'\u2019]+)\\s+(?:said|saith|answered|spake|asked|replied|cried))"
@@ -89,6 +91,13 @@ final class BibleCast {
                 if (FIRST_PERSON.matcher(intro).find()) continue; // "sinabi ko sa inyo": the speaker's own words
                 String rest = v.substring(m.end()).trim();
                 if (rest.length() < 3 || rest.chars().noneMatch(Character::isLetter)) continue;
+                // "sumagot, at sinabi, Nasusulat…": the second "said" belongs to the introduction too.
+                java.util.regex.Matcher again = AGAIN.matcher(rest);
+                if (again.find()) {
+                    intro = intro + " " + again.group();
+                    rest = rest.substring(again.end()).trim();
+                    if (rest.length() < 3) continue;
+                }
                 narr = v.substring(0, m.start()) + intro;
                 speech = rest;
                 who = st.who(v.substring(Math.max(0, m.start() - 40), m.start()) + " " + intro, v.substring(0, m.start()));
@@ -121,6 +130,8 @@ final class BibleCast {
         return r;
     }
 
+    private static final Pattern AGAIN = Pattern.compile("(?i)^(?:at|and)\\s+(?:sinabi|nagsabi|said|saith|sumagot|answered)\\b[^,:]{0,40}[,:]\\s*");
+
     /** A verse that tells what happened: it begins like a story and nobody in it says "I" or "you". */
     private static boolean narrates(String v) {
         if (!NARRATION.matcher(v).matches()) return false;
@@ -140,6 +151,8 @@ final class BibleCast {
             Matcher d = DIVINE.matcher(nearIntro);
             if (d.find()) {
                 key = "divine";
+            } else if (VILLAIN.matcher(nearIntro).find()) {
+                key = "villain";
             } else {
                 // A named person: "sinabi ni Pedro", "Martha said", "said Peter".
                 Matcher c = NAMED.matcher(nearIntro);
@@ -158,6 +171,8 @@ final class BibleCast {
             if (key == null) {
                 // Only "he" / "niya": the other one of the two who talk, else somebody new.
                 String lastKey = history.isEmpty() ? null : history.get(history.size() - 1);
+                // Whoever answers the tempter, unnamed, is Jesus (or God).
+                if ("villain".equals(lastKey)) key = "divine";
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) if (!history.get(k).equals(lastKey)) key = history.get(k);
                 if (key == null) {
                     key = "#" + (++anon);
@@ -171,6 +186,7 @@ final class BibleCast {
                 keys.add(key);
                 String code;
                 if (key.equals("divine")) code = Cast.DIVINE_CODE;
+                else if (key.equals("villain")) code = "cm" + (men++) + "^villain";
                 else if (femaleKeys.contains(key) || TextPrep.WOMEN.contains(key)) code = "cf" + (women++);
                 else code = "cm" + (men++);
                 codes.add(code);
