@@ -144,10 +144,29 @@ public class TextTests {
                 {"3 Sinabi ng Diyos, ''Magkaroon ng liwanag\u201D at nagkaroon ng liwanag.", "Sinabi ng Diyos, \u201CMagkaroon ng liwanag\u201D at nagkaroon ng liwanag."},
                 {"9 And God said, Let the dry land appear: and it was so.", "And God said, \u201CLet the dry land appear:\u201D and it was so."},
                 {"9 At sinabi ni Jesus sa kaniya, Sumunod ka sa akin. At siya'y nagtindig, at sumunod sa kaniya.", "At sinabi ni Jesus sa kaniya, \u201CSumunod ka sa akin.\u201D At siya'y nagtindig, at sumunod sa kaniya."},
-                {"6 And God said, Let there be a firmament in the midst of the waters, and let it divide the waters from the waters.", "And God said, \u201CLet there be a firmament in the midst of the waters, and let it divide the waters from the waters.\u201D"}};
+                {"6 And God said, Let there be a firmament in the midst of the waters, and let it divide the waters from the waters.", "And God said, \u201CLet there be a firmament in the midst of the waters, and let it divide the waters from the waters.\u201D"},
+                {"39 And he arose, and rebuked the wind, and said unto the sea, Peace, be still. And the wind ceased, and there was a great calm.", "And he arose, and rebuked the wind, and said unto the sea, \u201CPeace, be still.\u201D And the wind ceased, and there was a great calm."},
+                {"39 At sinabi sa dagat, Pumayapa, tumahimik ka. At humimpil ang hangin, at humusay na totoo ang panahon.", "At sinabi sa dagat, \u201CPumayapa, tumahimik ka.\u201D At humimpil ang hangin, at humusay na totoo ang panahon."},
+                {"\u201CFollow me,\u201D Jesus said to him, and Matthew got up and followed him.", "\u201CFollow me,\u201D Jesus said to him, and Matthew got up and followed him."},
+                {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice in the garden.", "And the LORD God called unto Adam, and said unto him, \u201CWhere art thou?\u201D And he said, \u201CI heard thy voice in the garden.\u201D"},
+                {"3 And Jesus answering said unto him, Simon, I have somewhat to say unto thee. And he saith, Master, say on.", "And Jesus answering said unto him, \u201CSimon, I have somewhat to say unto thee.\u201D And he saith, \u201CMaster, say on.\u201D"},
+                {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice. 11 And he said, Who told thee that thou wast naked?", "And the LORD God called unto Adam, and said unto him, \u201CWhere art thou?\u201D And he said, \u201CI heard thy voice.\u201D And he said, \u201CWho told thee that thou wast naked?\u201D"},
+                {"3 And Jesus spake a parable unto them, saying, A sower went forth to sow; 4 And when he sowed, some seeds fell by the way side. 10 And the disciples came, and said unto him, Why speakest thou unto them in parables?", "And Jesus spake a parable unto them, saying, \u201CA sower went forth to sow;\u201D \u201CAnd when he sowed, some seeds fell by the way side.\u201D And the disciples came, and said unto him, \u201CWhy speakest thou unto them in parables?\u201D"}};
         for (String[] c : ends) {
             BibleCast.Result br = BibleCast.annotate(c[0]);
             check("words end: " + c[0], br != null && c[1].equals(br.text), "'" + (br == null ? "" : br.text) + "'");
+        }
+        // Who answers: the one who was spoken to; a prophet's words are his own; a man's father is not the Father.
+        String[][] turns = {
+                // {verses, the voice codes of what is said, in order}
+                {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice. 11 And he said, Who told thee that thou wast naked?", "cd0 cm0 cd0"},
+                {"1 Now the serpent was more subtil than any beast. And he said unto the woman, Yea, hath God said? 2 And the woman said unto the serpent, We may eat of the fruit.", "cm0^villain cf0"},
+                {"7 Jesus said unto him, It is written again, Thou shalt not tempt the Lord thy God. 8 Again, the devil taketh him up into an exceeding high mountain; 9 And saith unto him, All these things will I give thee. 10 Then saith Jesus unto him, Get thee hence, Satan.", "cd1 cm0^villain cd1"},
+                {"21 And the son said unto him, Father, I have sinned. 22 But the father said to his servants, Bring forth the best robe.", "cm0 cm1"}};
+        for (String[] c : turns) {
+            BibleCast.Result br = BibleCast.annotate(c[0]);
+            String got = br == null ? "" : String.join(" ", br.codes);
+            check("who speaks: " + c[0], c[1].equals(got), "'" + got + "'");
         }
         // The same in a lesson's own words, with quotation marks.
         String[][] lesson = {
