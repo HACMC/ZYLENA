@@ -72,6 +72,7 @@ final class Speaker {
 
     private Speaker(Context c) {
         ctx = c;
+        VoiceFx.loadCustom(c);
     }
 
     /** Shows or hides (null) a short note on screen while the reader waits for something. */
@@ -326,6 +327,8 @@ final class Speaker {
         List<TextPrep.Seg> runs = TextPrep.merge(segs, 350, 900, false, true);
         currentRuns = runs;
         castLogged = false;
+        castLoggedFor.clear();
+        noManLogged.clear();
         speakSystem(runs, gen);
     }
 
@@ -1002,8 +1005,9 @@ final class Speaker {
         if (s.cast != null && parts.size() > 1) {
             StringBuilder v = new StringBuilder();
             for (String[] pt : parts) if (v.indexOf(pt[3].isEmpty() ? "usual" : pt[3]) < 0) v.append(v.length() > 0 ? ", " : "").append(pt[3].isEmpty() ? "usual" : pt[3]);
-            if (v.indexOf(",") > 0 && !castLogged) {
+            if (v.indexOf(",") > 0 && !castLoggedFor.contains(s.lang)) {
                 castLogged = true;
+                castLoggedFor.add(s.lang);
                 Logs.d(ctx, "story voices for " + s.lang + ": " + castVoices(s.lang));
             }
             if (v.indexOf(",") > 0) Logs.d(ctx, "voices in run " + i + ": " + v);
@@ -1048,12 +1052,20 @@ final class Speaker {
                 effK = strength * 0.7f;
             }
             final VoiceFx.Style feelFx = dsp && !effCode.isEmpty() ? VoiceFx.forFeeling(effCode) : null;
-            final VoiceFx.Style fx = dsp ? VoiceFx.combine(styleFor(lang, parts.get(k)[3]), feelFx, effK) : null;
-            if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
-            else if (divineLine) r *= 0.92f; // slower, with weight
+            final VoiceFx.Style fx0 = dsp ? VoiceFx.combine(styleFor(lang, parts.get(k)[3]), feelFx, effK) : null;
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             float vm = applyVoice(lang, parts.get(k)[3]);
-            if (fx != null) p *= divineLine ? vm / divineDepth(Cast.voice(parts.get(k)[3])) : vm; // the pitch is changed afterwards
+            // No man's voice in this language for God's words (Tagalog on many phones): asking the voice to speak lower is
+            // ignored by online voices, so the sound itself is lowered that much more, and it comes out a man's.
+            final boolean noMan = fx0 != null && divineLine && vm / divineDepth(Cast.voice(parts.get(k)[3])) < 0.97f;
+            final VoiceFx.Style fx = noMan ? VoiceFx.lower(fx0, 0.82f) : fx0;
+            if (noMan && !noManLogged.contains(lang)) {
+                noManLogged.add(lang);
+                Logs.d(ctx, "voice fx: no man's voice for " + lang + ", God's words are made from the usual voice, lowered more");
+            }
+            if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
+            else if (divineLine) r *= 0.92f; // slower, with weight
+            if (fx != null) p *= divineLine ? (noMan ? 1f : vm / divineDepth(Cast.voice(parts.get(k)[3]))) : vm; // the pitch is changed afterwards
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = feelFx != null ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
@@ -1141,13 +1153,18 @@ final class Speaker {
      * voice. When the phone has only one voice for a man (or a woman) in this language, characters are told apart by how
      * the sound is changed, so that no two sound the same.
      */
+    /** The name of the kind of voice the Father, the Son or the Holy Spirit has in this language. */
+    private static String divineStyle(String lang, String v) {
+        String base = Cast.JESUS_CODE.equals(v) ? "jesus" : Cast.SPIRIT_CODE.equals(v) ? "spirit" : "deep";
+        return base + (lang.equals(TextPrep.FIL) ? "_fil" : "");
+    }
+
     private VoiceFx.Style styleFor(String lang, String who) {
         String v = Cast.voice(who);
         if (v == null || !Cast.isCode(v)) return null;
         if (v.startsWith("cd")) {
             // The Father, the Son, the Holy Spirit: each their own; gentler in Tagalog (only one man's voice there).
-            String base = v.equals(Cast.JESUS_CODE) ? "jesus" : v.equals(Cast.SPIRIT_CODE) ? "spirit" : "deep";
-            return VoiceFx.get(base + (lang.equals(TextPrep.FIL) ? "_fil" : ""));
+            return VoiceFx.get(divineStyle(lang, v));
         }
         String st = Persona.kindOf(Cast.styleOf(who));
         if (st.equals("plain")) return null;
@@ -1434,6 +1451,7 @@ final class Speaker {
 
     private static final float QUESTION_PITCH = 1.12f;
     private boolean castLogged;
+    private final java.util.Set<String> castLoggedFor = new java.util.HashSet<>(), noManLogged = new java.util.HashSet<>();
 
 
     /**
@@ -1561,6 +1579,20 @@ final class Speaker {
                 if (!av.equals(lastSet)) tts.setVoice(av);
                 lastSet = av;
                 return 1f;
+            }
+        }
+        // The phone voice the user chose for this one in the voice lab (Apply).
+        if (divine) {
+            String want = VoiceFx.customVoice(divineStyle(lang, Cast.voice(who)));
+            if (want != null) {
+                List<Voice> every = voicesFor(lang);
+                for (Voice c : every) {
+                    if (!base(c.getName()).equals(want)) continue;
+                    Voice t = twin(c, every);
+                    if (!t.equals(lastSet)) tts.setVoice(t);
+                    lastSet = t;
+                    return deep;
+                }
             }
         }
         List<Voice> all = castPool(lang, g);

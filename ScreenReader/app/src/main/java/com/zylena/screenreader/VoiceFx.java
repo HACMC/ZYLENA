@@ -71,19 +71,20 @@ final class VoiceFx {
         // The three are told apart by more than pitch, since a phone often has one man's voice for all of them (in Tagalog
         // nearly always): each has a pitch, a colour and a room of its own.
         // The Father: majestic and calm (a voice "as the sound of many waters"): deep, slow, full, and heard as in a great hall.
-        // Milder in Tagalog, where the one man's voice is lowered less to stay natural.
+        // In Tagalog the phone's voices are plainer, and the more the sound is changed the less natural it gets: so each is
+        // changed less there (less lowering, a smaller room), and told apart more by pace.
         divine("deep", 0.86f, 0.88f, 1f, 0.18f, 0.05f, 0.45f, 0f, 0.20f, 1.5f);
-        divine("deep_fil", 0.90f, 0.91f, 1f, 0.18f, 0.10f, 0.45f, 0f, 0.20f, 1.5f);
+        divine("deep_fil", 0.91f, 0.90f, 1f, 0.18f, 0.10f, 0.40f, 0f, 0.12f, 1.2f);
         // The Son took our nature, so His is a man's own voice and not the Father's made milder: natural in pitch, in the
         // open air beside the hearer (no hall around it). What sets it apart is how He spoke: "musical", "never raised in
         // high, strained notes", not "so rapidly that His words were crowded one upon another", "He distinctly enunciated
         // every word" (Ellen White), "clear", calm and earnest; "He shall not cry, nor lift up" (Isaiah 42:2). So: unhurried,
         // very clear, a little warm and bright, even in loudness.
         divine("jesus", 0.98f, 0.92f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
-        divine("jesus_fil", 0.98f, 0.93f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
+        divine("jesus_fil", 1.00f, 0.93f, 1f, 0.20f, 0.15f, 0.15f, 0.05f, 0f, 0.35f);
         // The Holy Spirit: soft, "a still small voice" (kept audible): a little lighter than the plain voice, slow, airy, with a soft glow around it.
         divine("spirit", 1.04f, 0.90f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
-        divine("spirit_fil", 1.04f, 0.92f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
+        divine("spirit_fil", 1.03f, 0.92f, 0.95f, 0.15f, 0f, 0f, 0.25f, 0.10f, 1.0f);
         add("child", 1.30f, 1.05f, 0f, 0f, 0f, 1f, false);
         add("squeaky", 1.38f, 1.08f, 0f, 0f, 0f, 1f, false);
         add("cute", 1.18f, 1.04f, 0f, 0f, 0f, 1f, false);
@@ -146,8 +147,106 @@ final class VoiceFx {
         return m;
     }
 
+    /** The same kind of voice made from a higher voice (a woman's, where the phone has no man's): lowered that much more. */
+    static Style lower(Style s, float by) {
+        Style m = new Style(s.name, s.pf * by, s.tf, s.vib, s.husk, s.drive, s.vol, s.dull);
+        m.level = s.level;
+        m.presence = s.presence;
+        m.warm = s.warm;
+        m.air = s.air;
+        m.space = s.space;
+        m.room = s.room;
+        return m;
+    }
+
+    /** The kind of voice by name: the user's own settings for it (applied in the voice lab) when there are any, else the built-in ones. */
     static Style get(String name) {
+        if (name == null || name.isEmpty()) return null;
+        Style mine = CUSTOM.get(name);
+        return mine != null ? mine : STYLES.get(name);
+    }
+
+    static Style builtIn(String name) {
         return name == null || name.isEmpty() ? null : STYLES.get(name);
+    }
+
+    // ------------------------------------------------------------ the user's own settings (voice lab > Apply)
+
+    private static final Map<String, Style> CUSTOM = new java.util.concurrent.ConcurrentHashMap<>();
+    private static final Map<String, String> CUSTOM_VOICE = new java.util.concurrent.ConcurrentHashMap<>();
+    private static volatile boolean customLoaded;
+
+    static boolean isCustom(String name) {
+        return name != null && CUSTOM.containsKey(name);
+    }
+
+    /** The phone voice the user chose for this kind of voice (its name without -local/-network), or null. */
+    static String customVoice(String name) {
+        return name == null ? null : CUSTOM_VOICE.get(name);
+    }
+
+    static void loadCustom(android.content.Context c) {
+        if (customLoaded) return;
+        customLoaded = true;
+        try {
+            for (Map.Entry<String, ?> e : c.getSharedPreferences("voice_custom", android.content.Context.MODE_PRIVATE).getAll().entrySet()) {
+                String k = e.getKey(), v = String.valueOf(e.getValue());
+                if (k.startsWith("fx_")) {
+                    Style st = decode(k.substring(3), v);
+                    if (st != null) CUSTOM.put(k.substring(3), st);
+                } else if (k.startsWith("voice_") && !v.isEmpty()) {
+                    CUSTOM_VOICE.put(k.substring(6), v);
+                }
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** These settings are how ZYLENA reads this kind of voice from now on; voice: the phone voice to make it from, or empty. */
+    static void setCustom(android.content.Context c, String name, Style st, String voice) {
+        loadCustom(c);
+        CUSTOM.put(name, st);
+        android.content.SharedPreferences.Editor ed = c.getSharedPreferences("voice_custom", android.content.Context.MODE_PRIVATE).edit();
+        ed.putString("fx_" + name, encode(st));
+        if (voice == null || voice.isEmpty()) {
+            CUSTOM_VOICE.remove(name);
+            ed.remove("voice_" + name);
+        } else {
+            CUSTOM_VOICE.put(name, voice);
+            ed.putString("voice_" + name, voice);
+        }
+        ed.apply();
+    }
+
+    static void clearCustom(android.content.Context c, String name) {
+        loadCustom(c);
+        CUSTOM.remove(name);
+        CUSTOM_VOICE.remove(name);
+        c.getSharedPreferences("voice_custom", android.content.Context.MODE_PRIVATE).edit().remove("fx_" + name).remove("voice_" + name).apply();
+    }
+
+    static String encode(Style s) {
+        return String.format(java.util.Locale.US, "%.3f,%.3f,%.4f,%.3f,%.3f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.2f",
+                s.pf, s.tf, s.vib, s.husk, s.drive, s.vol, s.dull ? 1 : 0, s.level, s.presence, s.warm, s.air, s.space, s.room);
+    }
+
+    static Style decode(String name, String v) {
+        try {
+            String[] p = v.split(",");
+            if (p.length < 13) return null;
+            float[] f = new float[13];
+            for (int i = 0; i < 13; i++) f[i] = Float.parseFloat(p[i]);
+            Style st = new Style(name, f[0], f[1], f[2], f[3], f[4], f[5], f[6] > 0.5f);
+            st.level = f[7];
+            st.presence = f[8];
+            st.warm = f[9];
+            st.air = f[10];
+            st.space = f[11];
+            st.room = f[12];
+            return st;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** The names of the kinds of voice, for the voice lab. */

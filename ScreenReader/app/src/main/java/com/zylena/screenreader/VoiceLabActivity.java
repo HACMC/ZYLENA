@@ -33,8 +33,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The voice lab: a place to try a kind of voice (God's, a child's, a boss's) with exact numbers, away from the real settings.
- * Nothing here changes how ZYLENA reads; the numbers can be copied and sent, and become the real ones when they are asked for.
+ * The voice lab: a place to try a kind of voice (God's, a child's, a boss's) with exact numbers. Settings sent as text are
+ * pasted in and heard at once; nothing changes how ZYLENA reads until Apply is pressed, which makes them that kind of voice's own.
  */
 public class VoiceLabActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -62,6 +62,7 @@ public class VoiceLabActivity extends Activity {
         super.onCreate(b);
         Theme.applyWindow(this);
         lab = getSharedPreferences("voice_lab", MODE_PRIVATE); // apart from ZYLENA's own settings
+        VoiceFx.loadCustom(this);
         lang = lab.getString("lang", TextPrep.EN);
         voiceName = lab.getString("voice", "");
         preset = lab.getString("preset", "deep");
@@ -77,8 +78,8 @@ public class VoiceLabActivity extends Activity {
 
         col.addView(Theme.eyebrow(this, "Screen Reader"));
         col.addView(Theme.title(this, "Voice lab", 32));
-        col.addView(Theme.body(this, "Try a kind of voice with exact numbers. Nothing here changes how ZYLENA reads. When it sounds right, "
-                + "copy the numbers and send them to me.", Theme.FAINT, 13), Theme.spaced(this, 2));
+        col.addView(Theme.body(this, "Try a kind of voice with exact numbers. Copy settings you were sent and press Paste and play to hear them. "
+                + "Nothing changes how ZYLENA reads until you press Apply to reading.", Theme.FAINT, 13), Theme.spaced(this, 2));
 
         sample = new EditText(this);
         sample.setTextColor(Theme.INK);
@@ -99,6 +100,38 @@ public class VoiceLabActivity extends Activity {
         }
         col.addView(row1, Theme.spaced(this, 10));
         col.addView(presetBtn, Theme.spaced(this, 8));
+        // Settings sent as text: copied, then pasted here and heard at once.
+        LinearLayout row0 = new LinearLayout(this);
+        Button paste = Theme.button(this, "Paste and play", true);
+        Button apply = Theme.button(this, "Apply to reading", true);
+        for (Button x : new Button[]{paste, apply}) {
+            x.setMinHeight(Theme.dp(this, 44));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            lp.setMarginEnd(Theme.dp(this, 8));
+            row0.addView(x, lp);
+        }
+        col.addView(row0, Theme.spaced(this, 8));
+        paste.setOnClickListener(v -> {
+            ClipData cd = ((ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip();
+            CharSequence t = cd == null || cd.getItemCount() == 0 ? null : cd.getItemAt(0).coerceToText(this);
+            int n = t == null ? 0 : take(t.toString());
+            if (n == 0) {
+                say("No voice settings in what was copied. Copy the settings text first.");
+                return;
+            }
+            buildSliders();
+            refresh();
+            play(true);
+        });
+        apply.setOnClickListener(v -> {
+            keep();
+            VoiceFx.Style st = style();
+            st.level = level;
+            st.presence = presence;
+            VoiceFx.setCustom(this, preset, st, voiceName.isEmpty() ? "" : Speaker.base(voiceName));
+            refresh();
+            Toast.makeText(this, "ZYLENA now reads \"" + preset + "\" with these settings", Toast.LENGTH_LONG).show();
+        });
         langBtn.setOnClickListener(v -> pickLanguage());
         voiceBtn.setOnClickListener(v -> pickVoice());
         presetBtn.setOnClickListener(v -> pickPreset());
@@ -135,7 +168,7 @@ public class VoiceLabActivity extends Activity {
         LinearLayout row3 = new LinearLayout(this);
         Button copy = Theme.button(this, "Copy numbers", true);
         Button share = Theme.button(this, "Share", false);
-        Button reset = Theme.button(this, "Start again from the preset", false);
+        Button reset = Theme.button(this, "Back to built-in", false);
         for (Button x : new Button[]{copy, share, reset}) {
             x.setMinHeight(Theme.dp(this, 44));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -150,6 +183,7 @@ public class VoiceLabActivity extends Activity {
         share.setOnClickListener(v -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
                 .putExtra(Intent.EXTRA_SUBJECT, "ZYLENA voice lab numbers").putExtra(Intent.EXTRA_TEXT, summaryText()), "Share")));
         reset.setOnClickListener(v -> {
+            VoiceFx.clearCustom(this, preset); // what was applied to reading goes too
             load(preset, true);
             buildSliders();
             refresh();
@@ -196,8 +230,8 @@ public class VoiceLabActivity extends Activity {
 
     /** The preset's numbers, or the ones last kept for it here. */
     private void load(String name, boolean fresh) {
-        VoiceFx.Style s = VoiceFx.get(name);
-        if (s == null) s = VoiceFx.get("deep");
+        VoiceFx.Style s = fresh ? VoiceFx.builtIn(name) : VoiceFx.get(name);
+        if (s == null) s = VoiceFx.builtIn("deep");
         preset = name;
         pf = s.pf;
         tf = s.tf;
@@ -310,12 +344,97 @@ public class VoiceLabActivity extends Activity {
         sb.append(String.format(Locale.US, "pitch %.2f, tempo %.2f, tremble %.3f, breath %.2f, grit %.2f%n", pf, tf, vib, husk, drive));
         sb.append(String.format(Locale.US, "clarity %.2f, level %.2f, volume %.2f, muffle %s%n", presence, level, vol, dull ? "on" : "off"));
         sb.append(String.format(Locale.US, "warmth %.2f, air %.2f, room %.2f, room size %.1f s%n", warm, air, space, room));
-        VoiceFx.Style s = VoiceFx.get(preset);
+        sb.append("applied to reading: ").append(VoiceFx.isCustom(preset) ? "yes (your own settings)" : "no (built-in)").append('\n');
+        VoiceFx.Style s = VoiceFx.builtIn(preset);
         if (s != null) {
             sb.append(String.format(Locale.US, "(the preset's own: pitch %.2f, tempo %.2f, tremble %.3f, breath %.2f, grit %.2f, volume %.2f, muffle %s)%n",
                     s.pf, s.tf, s.vib, s.husk, s.drive, s.vol, s.dull ? "on" : "off"));
         }
         return sb.toString().trim();
+    }
+
+    private static final java.util.regex.Pattern P_PRESET = java.util.regex.Pattern.compile("(?i)preset\\)?\\s*[:=]\\s*([a-z_]+)"),
+            P_LANG = java.util.regex.Pattern.compile("(?i)language\\s*[:=]\\s*(tagalog|filipino|english|fil|tl|en)"),
+            P_VOICE = java.util.regex.Pattern.compile("(?i)(?<!of )voice\\s*[:=]\\s*(the usual voice|usual|[\\w-]+)"),
+            P_NUM = java.util.regex.Pattern.compile("(?i)(?<![a-z])(pitch|tempo|tremble|breath|grit|clarity|level|volume|warmth|air|room size|room)\\s*[:=]?\\s*(\\d+(?:\\.\\d+)?)"),
+            P_MUFFLE = java.util.regex.Pattern.compile("(?i)muffle\\s*[:=]?\\s*(on|off)");
+
+    private static float within(float v, float lo, float hi) {
+        return Math.max(lo, Math.min(hi, v));
+    }
+
+    /**
+     * Takes voice settings from text (what Copy numbers makes, or a line such as
+     * "preset: jesus_fil, language: Tagalog, voice: fid, pitch 1.00, tempo 0.93, clarity 0.15"): the kind of voice, the language,
+     * the phone voice and every number named. What is not named stays as it is. Returns how many things were taken.
+     */
+    private int take(String text) {
+        String t = text.replaceAll("(?m)^\\(the preset's own.*$", "");
+        int n = 0;
+        java.util.regex.Matcher m = P_LANG.matcher(t);
+        if (m.find()) {
+            String l = m.group(1).toLowerCase(Locale.ROOT).startsWith("e") ? TextPrep.EN : TextPrep.FIL;
+            if (!l.equals(lang)) {
+                keep();
+                lang = l;
+                voiceName = "";
+                sample.setText(lab.getString("text_" + lang, lang.equals(TextPrep.FIL) ? SAMPLE_FIL : SAMPLE_EN));
+            }
+            n++;
+        }
+        m = P_PRESET.matcher(t);
+        if (m.find() && VoiceFx.builtIn(m.group(1).toLowerCase(Locale.ROOT)) != null) {
+            keep();
+            load(m.group(1).toLowerCase(Locale.ROOT), false);
+            n++;
+        }
+        m = P_VOICE.matcher(t);
+        if (m.find()) {
+            String w = m.group(1).toLowerCase(Locale.ROOT);
+            if (w.contains("usual")) {
+                voiceName = "";
+                n++;
+            } else {
+                for (Voice v : voices()) {
+                    String b = Speaker.base(v.getName()).toLowerCase(Locale.ROOT);
+                    if (b.equals(w) || b.endsWith("-" + w)) {
+                        voiceName = v.getName();
+                        n++;
+                        break;
+                    }
+                }
+            }
+        }
+        m = P_NUM.matcher(t);
+        while (m.find()) {
+            float v;
+            try {
+                v = Float.parseFloat(m.group(2));
+            } catch (Exception e) {
+                continue;
+            }
+            switch (m.group(1).toLowerCase(Locale.ROOT)) {
+                case "pitch": pf = within(v, 0.60f, 1.50f); break;
+                case "tempo": tf = within(v, 0.60f, 1.30f); break;
+                case "tremble": vib = within(v, 0f, 0.06f); break;
+                case "breath": husk = within(v, 0f, 0.40f); break;
+                case "grit": drive = within(v, 0f, 0.60f); break;
+                case "clarity": presence = within(v, 0f, 1f); break;
+                case "level": level = within(v, 0.08f, 0.30f); break;
+                case "volume": vol = within(v, 0.30f, 1f); break;
+                case "warmth": warm = within(v, 0f, 1f); break;
+                case "air": air = within(v, 0f, 1f); break;
+                case "room size": room = within(v, 0.2f, 3f); break;
+                default: space = within(v, 0f, 0.50f); break;
+            }
+            n++;
+        }
+        m = P_MUFFLE.matcher(t);
+        if (m.find()) {
+            dull = m.group(1).equalsIgnoreCase("on");
+            n++;
+        }
+        return n;
     }
 
     private void refresh() {
