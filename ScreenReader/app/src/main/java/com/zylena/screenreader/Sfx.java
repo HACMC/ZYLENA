@@ -58,13 +58,8 @@ final class Sfx {
         cue("footsteps", "\\bfootsteps?\\b|\\bfootfalls?\\b|\\btiptoed?\\b|\\bheels (?:clicked|clacked|echoed)\\b|\\b(?:boots|shoes) (?:thudded|echoed|clicked|scuffed)\\b|\\bpaa?ng yabag\\b|\\byabag\\b");
         cue("rain", "\\brain (?:pattered|poured|fell|drummed|pounded|began to fall)\\b|\\bpouring rain\\b|\\bdownpour\\b|\\braindrops\\b|\\bumuulan\\b|\\bbumuhos ang ulan\\b");
         cue("wind", "\\bwind (?:howled|whistled|roared|blew|rushed|whipped|moaned)\\b|\\bgust of wind\\b|\\bhuni ng hangin\\b|\\bhumangin nang malakas\\b");
-        cue("laugh", "\\b(?:laugh(?:ed|s|ing|ter)?|chuckl\\w+|cackl\\w+|guffaw\\w*|howled with laughter|burst out laughing|tumawa|humalakhak|tawanan)\\b");
-        cue("giggle", "\\b(?:giggl\\w+|snicker\\w*|tittered|humagikgik|hagikgik)\\b");
-        cue("scream", "\\b(?:scream(?:ed|s|ing)?|shriek\\w*|screech\\w*|tumili|tili|sumigaw nang malakas)\\b");
-        cue("gasp", "\\b(?:gasp(?:ed|s|ing)?|napasinghap|singhap)\\b");
         cue("cough", "\\b(?:cough(?:ed|s|ing)?|cleared (?:his|her|their) throat|umubo|ubo)\\b|\\bahem\\b");
         cue("sneeze", "\\b(?:sneez\\w+|bumahing|hatsing)\\b");
-        cue("sigh", "\\b(?:sigh(?:ed|s|ing)?|buntong-?hininga|huminga nang malalim)\\b");
         cue("whistle", "\\b(?:whistl(?:ed|es|ing)|sumipol|pito)\\b");
         cue("kiss", "\\b(?:kiss(?:ed|es|ing)?|hinalikan|humalik|halik)\\b");
         cue("sword", "\\bswords?\\b[^.!?]{0,20}\\b(?:clashed|clanged|drew|swung|rang|struck)\\b|\\bunsheathed\\b|\\bclash of (?:swords|steel)\\b");
@@ -84,6 +79,9 @@ final class Sfx {
         for (Map.Entry<String, Pattern> e : CUES.entrySet()) if (e.getValue().matcher(sentence).find()) return e.getKey();
         return "";
     }
+
+    /** Read with expression (see Mood), never played as a sound. */
+    private static final java.util.Set<String> EXPRESSED = new java.util.HashSet<>(java.util.Arrays.asList("laugh", "giggle", "scream", "gasp", "sigh"));
 
     private static final Map<String, String> SOUND_WORDS = new HashMap<>();
 
@@ -143,6 +141,8 @@ final class Sfx {
             if (fx == null) fx = e;
             if (++words > 4) return null;
         }
+        // A laugh, a scream, a sigh written out ("Ha ha ha!") is said as written, with expression, not played as a sound.
+        if (fx != null && EXPRESSED.contains(fx)) return null;
         return fx;
     }
 

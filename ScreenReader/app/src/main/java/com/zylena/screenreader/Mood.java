@@ -97,10 +97,13 @@ final class Mood {
                     + "|bulong|ibinulong|pabulong|bumulong|anas|mahinang|mahina"},
             {"s", "shout|shouted|shouts|yell|yelled|yells|yelling|shouting|screaming|scream|screamed|screams|roared|bellowed|shrieked|screeched|hollered|barked|loudly|exclaimed|exclaims|cried out|burst out"
                     + "|sigaw|sumigaw|isinigaw|pasigaw|hiyaw|humiyaw|bulyaw|binulyawan|tili|tumili|malakas"},
+            {"h", "sigh|sighed|sighs|sighing|exhaled|huminga nang malalim|buntong-hininga|napabuntong-hininga"},
             {"d", "sob|sobbed|sobs|cried|cries|wept|wailed|sniffled|sadly|tearfully"
-                    + "|hikbi|humihikbi|umiiyak|umiyak|iyak|daing|malungkot|buntong-hininga|napabuntong-hininga|garalgal"},
-            {"j", "laugh|laughed|laughs|giggled|giggles|chuckled|chuckles|joked|jokes|grinned|beamed|cheered|happily|excitedly|teased|squealed"
-                    + "|tawa|tumawa|natatawa|natawa|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|natatawang|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
+                    + "|hikbi|humihikbi|umiiyak|umiyak|iyak|daing|malungkot|garalgal"},
+            {"l", "laugh|laughed|laughs|laughing|laughter|giggled|giggles|giggling|chuckled|chuckles|chuckling|cackled|snickered|burst out laughing|with a laugh|with a giggle|with a chuckle"
+                    + "|tawa|tumawa|natatawa|natawa|humagikgik|hagikgik|humalakhak|natatawang"},
+            {"j", "joked|jokes|grinned|beamed|cheered|happily|excitedly|teased|squealed"
+                    + "|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
             {"a", "argued|argues|protested|retorted|scowled|seethed|gritted|snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
                     + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik"},
             {"f", "stammered|stuttered|gasped|trembled|trembling|nervously|panicked|shakily|whimpered"
@@ -113,7 +116,7 @@ final class Mood {
 
     /**
      * How the quoted words are said, from the words around them ("she whispered", "pasigaw na sabi niya") and
-     * from the words themselves (ALL IN CAPITALS is shouted): "w" whispered, "s" shouted, "d" sad, "j" glad,
+     * from the words themselves (ALL IN CAPITALS is shouted): "w" whispered, "s" shouted, "d" sad, "j" glad, "l" laughing, "h" sighing,
      * "a" angry, "f" afraid, or "" plainly.
      */
     static String feeling(String narration, String quote) {
@@ -149,6 +152,10 @@ final class Mood {
                 return new float[]{0.90f, 0.88f, 0.85f};
             case "j":
                 return new float[]{1.12f, 1.06f, 1.05f};
+            case "l": // laughing while speaking: lighter, quicker, brighter
+                return new float[]{1.15f, 1.10f, 1.08f};
+            case "h": // a sigh: breathy, slow, low
+                return new float[]{0.92f, 0.86f, 0.8f};
             case "a":
                 return new float[]{0.90f, 1.08f, 1.25f};
             case "f":
