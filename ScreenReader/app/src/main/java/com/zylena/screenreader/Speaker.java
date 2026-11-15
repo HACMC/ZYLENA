@@ -40,6 +40,8 @@ final class Speaker {
     private Runnable whenReady;
     private final List<Runnable> pendingVoiceCallbacks = new ArrayList<>();
 
+    /** Where in a run the sound effect plays: the number of the piece (a character's words come first, then "she laughed"). */
+    private final java.util.Map<Integer, Integer> sfxAt = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile int curRun; // index of the run being spoken, for pause, back and skip
     /** Where in the spoken run the voice is: per utterance {where it starts in the run, its share of the run, its length}. */
     private final java.util.Map<String, float[]> partSpan = new java.util.concurrent.ConcurrentHashMap<>();
@@ -138,6 +140,16 @@ final class Speaker {
         progress = p;
     }
 
+    /** A piece of run i began to be said: the run's sound effect plays at its piece. */
+    private void partStarted(int i, int k, int gen) {
+        List<TextPrep.Seg> runs = currentRuns;
+        if (gen != generation || i < 0 || i >= runs.size()) return;
+        TextPrep.Seg r = runs.get(i);
+        if (r.sfx.isEmpty()) return;
+        Integer at = sfxAt.get(i);
+        if (k == (at == null ? 0 : at)) Sfx.play(ctx, r.sfx);
+    }
+
     private void runStarted(int i, int gen) {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
@@ -158,7 +170,6 @@ final class Speaker {
         runStartedAt = System.currentTimeMillis();
         if (!translating && !Prefs.testMode(ctx)) main.post(() -> queueAhead(runs, gen, i));
         TextPrep.Seg r = runs.get(i);
-        if (!r.sfx.isEmpty()) Sfx.play(ctx, r.sfx);
         Logs.d(ctx, "speaking run " + i + "/" + runs.size() + " [" + r.lang + "] lines " + r.line + "-" + r.lastLine
                 + ": " + (r.translated ? (r.text.length() > 600 ? r.text.substring(0, 600) + "…" : r.text)
                 : Logs.snip(Bible.sayRefs(r.text, r.lang.equals(TextPrep.FIL)))));
@@ -281,6 +292,7 @@ final class Speaker {
         if (segs.isEmpty()) return;
         curRun = 0;
         partSpan.clear();
+        sfxAt.clear();
         final int gen = ++generation;
         tracking = track;
         setSpeaking(true);
@@ -518,6 +530,8 @@ final class Speaker {
                         }
                         try {
                             String[] p = id.split(":");
+                            int piece = p.length > 2 && p[2].startsWith("p") ? Integer.parseInt(p[2].substring(1)) : 0;
+                            partStarted(Integer.parseInt(p[1]), piece, Integer.parseInt(p[0]));
                             // A run spoken in several pieces (two voices) starts once, with its first piece.
                             if (p.length > 2 && p[2].startsWith("p") && !p[2].equals("p0")) return;
                             runStarted(Integer.parseInt(p[1]), Integer.parseInt(p[0]));
@@ -852,6 +866,19 @@ final class Speaker {
             if (!tone) parts.add(new String[]{said, vp[1], "", vp[2]});
             else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1], vp[2]});
         }
+        // The sound effect of a sentence like "...," she answered with a laugh: it plays at the narration, after the character's words.
+        if (!s.sfx.isEmpty()) {
+            int at = 0;
+            if (!parts.isEmpty() && Cast.isCode(Cast.voice(parts.get(0)[3]))) {
+                for (int k = 1; k < parts.size(); k++) {
+                    if (!Cast.isCode(Cast.voice(parts.get(k)[3]))) {
+                        at = k;
+                        break;
+                    }
+                }
+            }
+            sfxAt.put(i, at);
+        }
         if (s.cast != null && parts.size() > 1) {
             StringBuilder v = new StringBuilder();
             for (String[] pt : parts) if (v.indexOf(pt[3].isEmpty() ? "usual" : pt[3]) < 0) v.append(v.length() > 0 ? ", " : "").append(pt[3].isEmpty() ? "usual" : pt[3]);
@@ -1162,6 +1189,7 @@ final class Speaker {
             tr.write(pcm, 0, pcm.length);
             tr.setVolume(Math.min(1f, d.loud));
             if (d.part == 0) runStarted(d.run, gen);
+            partStarted(d.run, d.part, gen);
             deepTrack = tr;
             tr.play();
             Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms" + (d.pre ? " (recorded ahead)" : ""));

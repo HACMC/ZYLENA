@@ -1321,6 +1321,7 @@ final class TextPrep {
         String[] cast = null;
         String mood = "";
         boolean story = false, sceneRun = false;
+        String sfxRun = "";
         int[] castState = {0, 0}; // quoted parts of this paragraph already given out, and 1 when the last is still open
         for (Seg s : segs) {
             int max = out.isEmpty() ? firstMax : maxChars;
@@ -1338,13 +1339,15 @@ final class TextPrep {
             boolean tooLong = sb.length() + s.text.length() > max && !midSentence;
             boolean newWho = lang != null && !who.equals(s.who); // another voice reads from here
             boolean newScene = lang != null && s.scene; // a scene change always starts a run of its own
-            if (lang != null && (newLang || newLine || newKind || tooLong || newWho || newScene)) {
+            boolean newFx = lang != null && !s.sfx.isEmpty(); // so does a sentence with a sound effect: the sound plays where it starts
+            if (lang != null && (newLang || newLine || newKind || tooLong || newWho || newScene || newFx)) {
                 out.add(new Seg(sb.toString(), lang, first, last, head, done));
                 out.get(out.size() - 1).ref = ref;
                 out.get(out.size() - 1).who = who;
                 out.get(out.size() - 1).mood = mood;
                 out.get(out.size() - 1).story = story;
                 out.get(out.size() - 1).scene = sceneRun;
+                out.get(out.size() - 1).sfx = sfxRun;
                 castState = castOf(out.get(out.size() - 1), cast, castState, s.line);
                 cast = null;
                 ref = null;
@@ -1364,6 +1367,7 @@ final class TextPrep {
                 mood = s.mood;
                 story = s.story;
                 sceneRun = s.scene;
+                sfxRun = s.sfx;
             } else if (s.line != last && (cast != null || s.cast != null)) {
                 // Two screen lines read as one sentence: the second one's characters follow the first one's.
                 int had = Cast.quoteSpans(sb.toString(), false).size();
@@ -1387,6 +1391,7 @@ final class TextPrep {
             out.get(out.size() - 1).mood = mood;
             out.get(out.size() - 1).story = story;
             out.get(out.size() - 1).scene = sceneRun;
+            out.get(out.size() - 1).sfx = sfxRun;
             castOf(out.get(out.size() - 1), cast, castState, -1);
         }
         return out;
