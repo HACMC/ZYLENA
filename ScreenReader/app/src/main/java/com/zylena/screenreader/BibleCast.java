@@ -562,7 +562,22 @@ final class BibleCast {
         final List<String> keys = new ArrayList<>(); // speakers in order of first speech
         final List<String> codes = new ArrayList<>();
         final List<String> history = new ArrayList<>(); // one entry per turn
-        int men = 0, women = 0, anon;
+        int anon;
+        final java.util.Set<Integer> usedM = new java.util.HashSet<>(), usedF = new java.util.HashSet<>();
+
+        /** The first number not taken yet; the villain takes one too. */
+        int firstFree(java.util.Set<Integer> used) {
+            int n = 0;
+            while (used.contains(n)) n++;
+            used.add(n);
+            return n;
+        }
+
+        /** A person by name (Peter, Pedro, Sarah), not "the woman" or "someone#1". */
+        boolean isName(String key) {
+            return key.length() >= 3 && !key.startsWith("#") && !key.contains(" ") && !PERSON.matcher(key).matches()
+                    && !key.equals("people") && !key.equals("multitude") && !key.equals("disciples") && !key.equals("pharisees") && !key.equals("scribes");
+        }
         String spokenTo; // who the last words were said to, when that is told
         String mentioned; // "jesus" or "father" when the verses have spoken of him lately
         boolean gospelSeen; // the verses read so far are about Jesus and his disciples: "the Lord" is Jesus
@@ -689,9 +704,15 @@ final class BibleCast {
                 if (key.equals("father")) code = Cast.DIVINE_CODE;
                 else if (key.equals("jesus")) code = Cast.JESUS_CODE;
                 else if (key.equals("spirit")) code = Cast.SPIRIT_CODE;
-                else if (key.equals("villain")) code = "cm" + (men++) + "^villain";
-                else if (femaleKeys.contains(key) || TextPrep.WOMEN.contains(key) || FEMALE_CUE.matcher(key).find()) code = "cf" + (women++);
-                else code = "cm" + (men++);
+                else if (key.equals("villain")) code = "cm" + firstFree(usedM) + "^villain";
+                else {
+                    boolean woman = femaleKeys.contains(key) || TextPrep.WOMEN.contains(key) || BibleCharacters.isWoman(key) || FEMALE_CUE.matcher(key).find();
+                    java.util.Set<Integer> used = woman ? usedF : usedM;
+                    // A named person has a voice slot of their own, the same on every page and in both languages; the rest take the next free one.
+                    int n = isName(key) ? BibleCharacters.slot(key, used) : firstFree(used);
+                    used.add(n);
+                    code = (woman ? "cf" : "cm") + n;
+                }
                 // A child, an old man, a youth: told by how the verse names the one who speaks ("the old man said", "sinabi ng bata").
                 if (!code.contains("^") && !code.startsWith("cd")) {
                     Matcher rs = ROLE_SPEAKER.matcher(nearIntro);

@@ -159,7 +159,7 @@ public class TextTests {
         // Who answers: the one who was spoken to; a prophet's words are his own; a man's father is not the Father.
         String[][] turns = {
                 // {verses, the voice codes of what is said, in order}
-                {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice. 11 And he said, Who told thee that thou wast naked?", "cd0 cm0 cd0"},
+                {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice. 11 And he said, Who told thee that thou wast naked?", "cd0 cm" + BibleCharacters.slot("adam", new java.util.HashSet<>()) + " cd0"},
                 {"1 Now the serpent was more subtil than any beast. And he said unto the woman, Yea, hath God said? 2 And the woman said unto the serpent, We may eat of the fruit.", "cm0^villain cf0"},
                 {"7 Jesus said unto him, It is written again, Thou shalt not tempt the Lord thy God. 8 Again, the devil taketh him up into an exceeding high mountain; 9 And saith unto him, All these things will I give thee. 10 Then saith Jesus unto him, Get thee hence, Satan.", "cd1 cm0^villain cd1"},
                 {"3 And he spake many things unto them in parables, saying, Behold, a sower went forth to sow; 4 And when he sowed, some seeds fell by the way side.", "cd1 cd1"},
@@ -244,6 +244,21 @@ public class TextTests {
             check("'saith the LORD' in the middle: both parts are God's", ft != null && ft.codes.length == 2 && ft.codes[0].equals("cd0") && ft.codes[1].equals("cd0"), ft == null ? "none" : String.join(" ", ft.codes));
             BibleCast.Result tn = BibleCast.annotate("8 Ako ang Alpha at ang Omega, sabi ng Panginoong Dios, ngayon at nang nakaraan at sa darating, ang Makapangyarihan sa lahat.");
             check("Alpha at Omega (Tagalog): both parts are said by the Lord God", tn != null && tn.codes.length == 2 && tn.codes[0].equals("cd0") && tn.codes[1].equals("cd0"), tn == null ? "none" : String.join(" ", tn.codes));
+            BibleCast.forget();
+        }
+        // The Bible's people: the same voice slot wherever they are met, in either language; the women are women.
+        {
+            BibleCast.forget();
+            BibleCast.Result p1 = BibleCast.annotate("And Peter answered and said unto Jesus, Lord, it is good for us to be here.");
+            BibleCast.Result p2 = BibleCast.annotate("At sumagot si Pedro, at sinabi kay Jesus, Panginoon, mabuti sa atin ang tayo'y dumito.");
+            BibleCast.Result p3 = BibleCast.annotate("Then Peter said, Though I should die with thee, yet will I not deny thee.");
+            check("Peter has the same voice in every verse and in Tagalog", p1 != null && p2 != null && p3 != null && p1.codes[0].equals(p2.codes[0]) && p1.codes[0].equals(p3.codes[0]) && p1.codes[0].startsWith("cm"),
+                    (p1 == null ? "-" : p1.codes[0]) + " " + (p2 == null ? "-" : p2.codes[0]) + " " + (p3 == null ? "-" : p3.codes[0]));
+            BibleCast.Result rh = BibleCast.annotate("And Rahab said unto the men, I know that the LORD hath given you the land.");
+            check("Rahab is a woman", rh != null && rh.codes[0].startsWith("cf"), rh == null ? "none" : rh.codes[0]);
+            BibleCast.Result dl = BibleCast.annotate("At sinabi ni Dalila kay Samson, Saysayin mo sa akin kung saan nanggagaling ang iyong lakas.");
+            check("Dalila is a woman", dl != null && dl.codes[0].startsWith("cf"), dl == null ? "none" : dl.codes[0]);
+            check("Pedro is Peter, Sara is Sarah", BibleCharacters.canonical("Pedro").equals("peter") && BibleCharacters.isWoman("Sara") && !BibleCharacters.isWoman("Pedro"), "");
             BibleCast.forget();
         }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
