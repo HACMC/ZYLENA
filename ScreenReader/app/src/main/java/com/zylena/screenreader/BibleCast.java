@@ -598,6 +598,7 @@ final class BibleCast {
     /** The story takes up again after Jesus's words, the surest signs: "And it came to pass", "his mother and his brethren came", "Nangyari nga", "nagsilapit". */
     private static final Pattern STORY_AGAIN = Pattern.compile("(?i)^\\W*(?:(?:and|then|now|but)\\s+)?(?:it\\s+came\\s+to\\s+pass|there\\s+came\\s+(?:then\\s+)?(?:to|unto|his|a|certain)|then\\s+came\\s+(?:his|the|to)|his\\s+mother\\s+and\\s+his\\s+brethren)"
             + "|^\\W*(?:(?:at|datapuwa't|nang)\\s+)?(?:nangyari|nagsiparoon|nagsilapit|nagsidating|dumating\\s+(?:ang\\s+kaniyang|nga)|ang\\s+kaniyang\\s+ina\\s+at\\s+ang\\s+kaniyang\\s+mga\\s+kapatid)");
+    private static final Pattern JESUS_FIRST = Pattern.compile("(?i)^\\W*(?:(?:and|then|now|but|at|nang|datapuwa't|sa\\s+gayo'y)\\s+)*(?:ang\\s+|si\\s+|the\\s+)?(?:jesus|hesus|panginoong\\s+jesus)(?![\\p{L}])");
     private static final Pattern EXPLAINS = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:these|those)\\s+(?:are|be)\\s+they|^\\W*(?:and\\s+|at\\s+)?(?:ito|ang\\s+mga\\s+ito|ang\\s+mga\\s+nasa)\\s+(?:ang|ay|yaong)\\s+");
     private static final Pattern HE_SAID_LEAD = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)\\s*(?:unto\\s+them|sa\\s+kanila)?\\s*[,:]?\\s*");
     private static final Pattern HE_SAID = Pattern.compile("(?i)^\\W*(?:and|at|then)?\\s*(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)(?![\\p{L}])");
@@ -630,6 +631,7 @@ final class BibleCast {
         final List<String> history = new ArrayList<>(); // one entry per turn
         int anon;
         final java.util.Set<Integer> usedM = new java.util.HashSet<>(), usedF = new java.util.HashSet<>();
+        final java.util.Set<String> unsureKeys = new java.util.HashSet<>(); // speakers who could only be guessed, with the Lord or his people near
 
         /** The first number not taken yet; the villain takes one too. */
         int firstFree(java.util.Set<Integer> used) {
@@ -730,6 +732,8 @@ final class BibleCast {
                 // Only "he" / "niya": the other one of the two who talk, else somebody new.
                 String lastKey = history.isEmpty() ? null : history.get(history.size() - 1);
                 // Whoever answers the tempter, unnamed, is Jesus (or God).
+                // "And Jesus answered and spake unto them again by parables, and said,": he is the subject of the verse, though far back.
+                if (key == null && JESUS_FIRST.matcher(before).find() && !"jesus".equals(toWhom)) key = "jesus";
                 // "there came also another, and said," / "a messenger came unto Job, and said,": somebody new, not who spoke before.
                 if (ANOTHER.matcher(nearIntro).find()) {
                     key = "#" + (++anon);
@@ -762,6 +766,10 @@ final class BibleCast {
                     key = "#" + (++anon);
                     String cue = before + " " + nearIntro;
                     if (FEMALE_CUE.matcher(cue).find()) femaleKeys.add(key);
+                    // Nothing says who this is, and Jesus, God or his disciples are in the verses: a guess would be a wrong voice for words
+                    // that may be theirs. The words are said in the storyteller's voice, not in a character's.
+                    if (toWhom == null && !OF_GOD.matcher(rawIntro).find()
+                            && gospelSeen) unsureKeys.add(key); // (somebody who speaks to the Lord, or a man of God, is a person)
                 }
             }
             spokenTo = to != null && !to.equals(key) ? to : null;
@@ -790,7 +798,7 @@ final class BibleCast {
                 codes.add(code);
                 at = keys.size() - 1;
             }
-            return codes.get(at);
+            return unsureKeys.contains(key) ? "" : codes.get(at);
         }
 
         final java.util.Set<String> femaleKeys = new java.util.HashSet<>();

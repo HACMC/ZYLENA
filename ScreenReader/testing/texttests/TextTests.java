@@ -300,6 +300,15 @@ public class TextTests {
             BibleDirector.reset();
             Bible.source = was;
         }
+        // When it can only be guessed who speaks, with Jesus's people about, the words are said by the storyteller, not by a wrong voice.
+        {
+            BibleCast.forget();
+            BibleCast.Result un = BibleCast.annotate("1 And seeing the multitudes, he went up into a mountain: and when he was set, his disciples came unto him: 2 And he opened his mouth, and taught them, saying, Blessed are the poor in spirit: for theirs is the kingdom of heaven.");
+            check("an unsure speaker among the disciples is the storyteller's", un != null && un.codes.length == 1 && un.codes[0].isEmpty(), un == null ? "none" : "'" + String.join(" ", un.codes) + "'");
+            BibleCast.Result sure = BibleCast.annotate("1 And Jesus went up into a mountain: and his disciples came unto him. 2 And he opened his mouth, and taught them, saying, Blessed are the poor in spirit.");
+            check("a sure speaker keeps the voice", sure != null && sure.codes.length == 1 && sure.codes[0].equals("cd1"), sure == null ? "none" : String.join(" ", sure.codes));
+            BibleCast.forget();
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");
