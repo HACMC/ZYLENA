@@ -81,14 +81,11 @@ final class VoiceFx {
         // every word" (Ellen White), "clear", calm and earnest; "He shall not cry, nor lift up" (Isaiah 42:2). So: unhurried,
         // very clear, a little warm and bright, even in loudness.
         divine("jesus", 0.98f, 0.92f, 1f, 0.20f, 0.22f, 0.22f, 0.10f, 0.03f, 0.35f);
-        divine("jesus_fil", 0.92f, 0.92f, 1f, 0.12f, 0.20f, 0.45f, 0.08f, 0.10f, 0.9f);
+        // In Tagalog the Son and the Holy Spirit share one voice (the Spirit speaks in only a few verses): clean and natural, as chosen by ear.
+        divine("jesus_fil", 0.99f, 0.98f, 1f, 0.10f, 0.15f, 0.20f, 0.08f, 0.10f, 1.0f);
         // The Holy Spirit: soft, "a still small voice" (kept audible): a little lighter than the plain voice, slow, airy, with a soft glow around it.
         divine("spirit", 1.04f, 0.90f, 0.95f, 0.15f, 0f, 0f, 0.35f, 0.16f, 1.1f);
-        STYLES.put("spirit_fil", new Style("spirit_fil", 0.98f, 0.90f, 0f, 0.02f, 0f, 1f, false)); // a little breath
-        {
-            Style sp = STYLES.get("spirit_fil");
-            sp.level = 0.10f; sp.presence = 0.18f; sp.warm = 0.40f; sp.air = 0.15f; sp.space = 0.25f; sp.room = 1.8f;
-        }
+        divine("spirit_fil", 0.99f, 0.98f, 1f, 0.10f, 0.15f, 0.20f, 0.08f, 0.10f, 1.0f);
         add("child", 1.30f, 1.05f, 0f, 0f, 0f, 1f, false);
         add("squeaky", 1.38f, 1.08f, 0f, 0f, 0f, 1f, false);
         add("cute", 1.18f, 1.04f, 0f, 0f, 0f, 1f, false);
