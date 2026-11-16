@@ -79,7 +79,7 @@ final class BibleCast {
      * Somebody who only belongs to God, or is filled with the Spirit, is not God speaking: "the man of God said,", "ang anghel ng
      * Panginoon", "Peter, filled with the Holy Ghost, said unto them,".
      */
-    private static final Pattern OF_GOD = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:the\\s+)?(?:holy\\s+)?spirit\\s+of\\s+(?:the\\s+)?(?:god|lord)\\s+(?:came|fell|rested|was|entered|clothed|moved)\\s+(?:upon|on|in|him|them)(?:\\s+\\p{L}+)?|(?:ang\\s+)?espiritu\\s+ng\\s+(?:dios|diyos|panginoon)\\s+(?:ay\\s+)?(?:dumating|lumapit|sumakaniya|napasa|suma)\\s+\\p{L}+(?:\\s+\\p{L}+)?|(?:man|men|woman|servants?|prophets?|priests?|people|children|house|temple|ark|angels?|sons?|"
+    private static final Pattern OF_GOD = Pattern.compile("(?i)(?<![\\p{L}])(?:(?:the\\s+)?lord['\u2019]s\\s+day|araw\\s+ng\\s+panginoon|(?:the\\s+)?(?:holy\\s+)?spirit\\s+of\\s+(?:the\\s+)?(?:god|lord)\\s+(?:came|fell|rested|was|entered|clothed|moved)\\s+(?:upon|on|in|him|them)(?:\\s+\\p{L}+)?|(?:ang\\s+)?espiritu\\s+ng\\s+(?:dios|diyos|panginoon)\\s+(?:ay\\s+)?(?:dumating|lumapit|sumakaniya|napasa|suma)\\s+\\p{L}+(?:\\s+\\p{L}+)?|(?:man|men|woman|servants?|prophets?|priests?|people|children|house|temple|ark|angels?|sons?|"
             + "lingkod|alipin|propeta|saserdote|bayan|anghel|lalake|lalaki|bahay|templo|kaban|anak|mga\\s+anak)\\s+(?:of|ng)\\s+(?:the\\s+)?(?:lord|god|dios|diyos|panginoon)"
             + "|(?:filled\\s+with|full\\s+of|in|by|through|puspos\\s+ng|napuspos\\s+ng|sa\\s+pamamagitan\\s+ng)\\s+(?:the\\s+)?(?:holy\\s+|banal\\s+na\\s+)?(?:spirit|ghost|espiritu)(?:\\s+santo)?)(?![\\p{L}])");
     /** An unclean spirit is not the Holy Spirit: it speaks as the tempter does. */
@@ -207,6 +207,7 @@ final class BibleCast {
             if (mk != null) st.mentioned = mk;
             if (EVIL_SPIRIT.matcher(v).find()) st.evilSeen = true;
             if (JESUS.matcher(v).find() || GOSPEL.matcher(v).find()) st.gospelSeen = true;
+            st.hintStrong = JESUS_ONLY.matcher(v).find();
             st.hintJesus = PARABLE_TOLD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
             final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
@@ -509,6 +510,11 @@ final class BibleCast {
     private static final Pattern HOLY = Pattern.compile("(?i)(?<![\\p{L}])(?:holy|banal|santo|ghost)(?![\\p{L}])");
     /** "and rent him sore, and came out of him": what the spirit did, not words it says. */
     private static final Pattern DID = Pattern.compile("(?i)^\\W*(?:with\\s+(?:a\\s+)?(?:\\p{L}+\\s+){0,2}voice\\W+)?(?:(?:and|he|she|they)\\s+)?(?:\\p{L}+ed|rent|tare|came|fell|ran|went|took|rose|arose|saw|was|were|had|brake|departed|threw|cast)(?![\\p{L}])");
+    /** Words that are Jesus's alone, said by the voice in Revelation and in the Gospels, when nothing around them names him. */
+    private static final Pattern JESUS_ONLY = Pattern.compile("(?i)write\\s+in\\s+a\\s+book,?\\s+and\\s+send\\s+it\\s+unto\\s+the\\s+seven|isulat\\s+mo\\s+sa\\s+isang\\s+aklat\\s+at\\s+iyong\\s+ipadala\\s+sa\\s+pitong|"
+            + "i\\s+am\\s+(?:he\\s+that\\s+liveth|the\\s+first\\s+and\\s+the\\s+last|alpha\\s+and\\s+omega,\\s+the\\s+first)|ako\\s+ang\\s+(?:una\\s+at\\s+ang\\s+huli|buhay\\s+at)|"
+            + "i\\s+have\\s+the\\s+keys\\s+of\\s+(?:hell|death)|nasa\\s+akin\\s+ang\\s+mga\\s+susi|behold,?\\s+i\\s+stand\\s+at\\s+the\\s+door|narito,?\\s+ako'?y\\s+nakatayo\\s+sa\\s+pintuan|"
+            + "behold,?\\s+i\\s+come\\s+quickly|narito,?\\s+ako'?y\\s+pumaparito\\s+na\\s+madali");
     private static final Pattern EXPLAINS = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:these|those)\\s+(?:are|be)\\s+they|^\\W*(?:and\\s+|at\\s+)?(?:ito|ang\\s+mga\\s+ito|ang\\s+mga\\s+nasa)\\s+(?:ang|ay|yaong)\\s+");
     private static final Pattern HE_SAID_LEAD = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)\\s*(?:unto\\s+them|sa\\s+kanila)?\\s*[,:]?\\s*");
     private static final Pattern HE_SAID = Pattern.compile("(?i)^\\W*(?:and|at|then)?\\s*(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)(?![\\p{L}])");
@@ -543,6 +549,7 @@ final class BibleCast {
         boolean gospelSeen; // the verses read so far are about Jesus and his disciples: "the Lord" is Jesus
         boolean evilSeen;
         boolean jesusTeaching; // Jesus is in the middle of a long teaching or a parable: "And he said," goes on with the same one
+        boolean hintStrong; // the words are ones only Jesus says ("write in a book and send it to the seven churches")
         boolean hintJesus; // the verse being read tells a parable or says what only he says: an unnamed "he" is Jesus
 
         boolean lordIsJesus(String s) {
@@ -635,6 +642,8 @@ final class BibleCast {
                 // "And he spake many things unto them in parables, saying, Behold, a sower went forth to sow": nobody else tells parables.
                 if (key == null && (hintJesus || jesusTeaching || (gospelSeen && history.contains("jesus") && !"jesus".equals(lastKey) && SAYS_TO_THEM.matcher(rawIntro).find())) && !"jesus".equals(toWhom) && HE.matcher(nearIntro).find() && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()
                         && !(nearIntro).replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus"; // (somebody named is not he)
+                // "…a great voice, as of a trumpet, | saying, What thou seest, write in a book": words only he says, though nobody is named.
+                if (key == null && hintStrong && !"jesus".equals(toWhom)) key = "jesus";
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) {
                     // (The tempter or an unclean spirit answers again only when the verse tells of it: not "he saith unto the ruler".)
                     boolean bad = "villain".equals(history.get(k)) && !VILLAIN.matcher(before + " " + nearIntro).find() && !EVIL_SPIRIT.matcher(before + " " + nearIntro).find();

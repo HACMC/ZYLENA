@@ -226,6 +226,15 @@ public class TextTests {
             check("the narrator is not moved by what is said", Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D").isEmpty(), Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D"));
             BibleCast.forget();
         }
+        // Revelation 1:11, read as a verse of its own: the voice that says "write in a book" is the Son of man.
+        {
+            BibleCast.forget();
+            BibleCast.Result rv = BibleCast.annotate("11 Na nagsasabi, Ang iyong nakikita, ay isulat mo sa isang aklat at iyong ipadala sa pitong iglesia: sa Efeso, at sa Smirna.");
+            check("Revelation 1:11 is Jesus (Tagalog)", rv != null && rv.codes[0].equals("cd1"), rv == null ? "none" : rv.codes[0]);
+            BibleCast.Result re = BibleCast.annotate("10 I was in the Spirit on the Lord's day, and heard behind me a great voice, as of a trumpet, 11 Saying, What thou seest, write in a book, and send it unto the seven churches which are in Asia.");
+            check("Revelation 1:10-11 is Jesus (English)", re != null && re.codes[0].equals("cd1"), re == null ? "none" : re.codes[0]);
+            BibleCast.forget();
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");
