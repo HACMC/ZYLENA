@@ -1027,6 +1027,37 @@ final class TextPrep {
         povCarry = "";
     }
 
+    /** What a story has shown so far, per app: {Tagalog words, English words, Taglish (1), when it was last read}. */
+    private static final java.util.Map<String, long[]> STORY_LANG = new java.util.concurrent.ConcurrentHashMap<>();
+
+    /**
+     * Whether the story being read is Taglish. Once it has shown itself so (on any page of it), it stays so for the rest of the story:
+     * its people and its storyteller keep one voice, instead of changing with how much Tagalog this one page happens to have.
+     */
+    private static boolean storyTaglish(String scope, List<String> lines, boolean pageSays) {
+        int fil = 0, en = 0;
+        for (String l : lines) {
+            for (String w : l.toLowerCase(Locale.ROOT).split("[^\\p{L}']+")) {
+                if (TAGALOG.contains(w)) fil++;
+                else if (ENGLISH.contains(w)) en++;
+            }
+        }
+        long now = System.currentTimeMillis();
+        long[] t = STORY_LANG.computeIfAbsent(scope, k -> new long[4]);
+        synchronized (t) {
+            if (now - t[3] > 15 * 60 * 1000L) {
+                t[0] = 0;
+                t[1] = 0;
+                t[2] = 0; // a different story, after a break
+            }
+            t[3] = now;
+            t[0] += fil;
+            t[1] += en;
+            if (pageSays || (t[0] >= 8 && t[0] * 8 >= t[0] + t[1])) t[2] = 1;
+            return t[2] == 1;
+        }
+    }
+
     private static final Pattern POV_AFTER = Pattern.compile("(?i)^[^\\p{L}]*(.{2,40}?)(?:['\u2019]s|['\u2019])?\\s+(?:P\\.?O\\.?V\\.?|point of view)[^\\p{L}]*$");
     private static final Pattern POV_BEFORE = Pattern.compile("(?i)^[^\\p{L}]*(?:P\\.?O\\.?V\\.?|point of view)(?:\\s+(?:ni|of|kay))?\\s*[:\\-\u2013\u2014]?\\s*(.{2,40}?)[^\\p{L}]*$");
     static final java.util.Set<String> MEN = new java.util.HashSet<>(Arrays.asList((
@@ -1196,7 +1227,7 @@ final class TextPrep {
         // Scripture themselves are never changed or left out for them).
         final boolean bibleStory = verse && castOn;
         final boolean feat = cast != null || bibleStory; // (a lesson with a few quotations has them too)
-        final boolean taglishStory = cast != null && hasTagalog(lines);
+        final boolean taglishStory = cast != null && storyTaglish(povScope, lines, hasTagalog(lines));
         lastCast = cast == null ? "" : Cast.lastSummary;
         String mood = moodMode.equals("off") ? "" : moodMode.equals("auto") ? Mood.of(lines, verse) : moodMode;
         lastMood = moodMode.equals("auto") ? Mood.lastWhy : "";
