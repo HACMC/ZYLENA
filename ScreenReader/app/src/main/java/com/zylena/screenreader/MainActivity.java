@@ -564,7 +564,7 @@ public class MainActivity extends Activity {
         Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a drama sample",
                 "A short story with a mob boss, a child, a maid, an old woman, Jesus, sound effects and a scene change, to check how voices and sounds come out on this phone", this::hearSample).view);
         Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a Bible drama sample",
-                "Scenes from the Bible with the serpent, the devil, Jesus, a storm at sea, trumpets, a crowd, a rooster and an earthquake, to hear the voices and sounds", this::hearBibleSample).view);
+                "Scenes from the Bible with the serpent, the devil, Jesus, a storm at sea, trumpets, a crowd, a rooster, an earthquake and war, to hear the voices and sounds", this::hearBibleSample).view);
         Ui.add(st, Ui.nav(this, R.drawable.ic_tune, "Voice lab",
                 "Try a kind of voice (God's, a child's, a boss's) with exact settings, apart from the real ones, then send me the numbers", () ->
                         startActivity(new android.content.Intent(this, VoiceLabActivity.class))).view);
@@ -1014,7 +1014,9 @@ public class MainActivity extends Activity {
             "9 Pilate saith unto them, What shall I do then with Jesus which is called Christ? They all say unto him, Let him be crucified.",
             "10 And the governor said, Why, what evil hath he done? But they cried out the more, saying, Let him be crucified.",
             "11 Then began Peter to curse and to swear, saying, I know not the man. And immediately the cock crew.",
-            "12 And, behold, the veil of the temple was rent in twain from the top to the bottom; and the earth did quake, and the rocks rent."};
+            "12 And, behold, the veil of the temple was rent in twain from the top to the bottom; and the earth did quake, and the rocks rent.",
+            "13 And Joshua smote all the country of the hills, and of the south, and of the vale, and of the springs, and all their kings: he left none remaining.",
+            "14 And a certain man drew a bow at a venture, and smote the king of Israel between the joints of the harness."};
 
     /** The same, as a page of the Bible: voices for the speakers, expression, and the sounds that go with the verses. */
     private void hearBibleSample() {

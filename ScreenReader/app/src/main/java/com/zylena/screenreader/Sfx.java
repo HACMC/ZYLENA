@@ -79,7 +79,11 @@ final class Sfx {
         cue("earthquake", "\\bearthquakes?\\b|\\bearth (?:did )?quake\\w*|\\b(?:earth|ground|foundations?)\\b[^.!?]{0,15}\\b(?:shook|trembled|quaked|moved)\\b|\\blindol\\b|\\bnayanig ang (?:lupa|lupain)\\b|\\bnanginig ang (?:lupa|lupain)\\b");
         cue("waves", "\\b(?:great )?(?:tempest|storm)\\b[^.!?]{0,30}\\b(?:sea|ship|boat|waves)\\b|\\b(?:sea|ship|boat)\\b[^.!?]{0,30}\\b(?:tempest|storm|waves|billows)\\b|\\bwaves? (?:beat|broke|rose|arose|raged)\\b|\\bbillows?\\b|\\bbagyo (?:sa|ng) (?:dagat|laot)\\b|\\bmalaking bagyo\\b|\\bmga alon\\b");
         cue("crowd", "\\b(?:multitude|crowd|throng|people)s?\\b[^.!?]{0,40}\\b(?:cried out|shouted|shouting|cheered|clamou?r\\w*|murmur\\w*|rushed|uproar)\\b|\\b(?:crucify him|let him be crucified|hosanna)\\b|\\buproar\\b|\\bipako (?:siya )?sa krus\\b|\\bhosana\\b|\\bsumigaw ang (?:karamihan|mga tao|bayan)\\b");
-        cue("hiss","\\b(?:snake|serpent|viper|cobra|python|rattlesnake)s?\\b[^.!?]{0,20}\\b(?:hissed|hissing|slithered|slithering|rattled|struck)\\b|\\bhiss(?:ed|es|ing)?\\b|\\bsumitsit\\b|\\bsumisitsit\\b");
+        // War, as the Old Testament tells it.
+        cue("chariots", "\\b(?:chariots?|horsemen|horses?|cavalry)\\b[^.!?]{0,30}\\b(?:rushed|charged|rattled|thundered|galloped|pursued|pursue|rode|rumbled|came)\\b|\\bchariots? of iron\\b|\\bmga karo\\b|\\bsakay sa kabayo\\b|\\bnagsitakbo ang mga kabayo\\b");
+        cue("arrows", "\\b(?:arrows?|bows?|archers?)\\b[^.!?]{0,25}\\b(?:shot|flew|drew|drawn|loosed|fired|rained|bent)\\b|\\bdrew (?:a|his|the) bow\\b|\\bshot (?:an )?arrows?\\b|\\bpumana\\b|\\bpana\\b[^.!?]{0,20}\\b(?:pinakawalan|pinaulan)\\b");
+        cue("battle", "\\b(?:battles?|armies|hosts?)\\b[^.!?]{0,30}\\b(?:joined|met|fought|engaged|clashed|raged|array)\\b|\\bjoined battle\\b|\\b(?:smote|smite|smitten|slew|put to the sword|edge of the sword)\\b|\\bwent out to battle\\b|\\bnaglaban\\b|\\bdigmaan\\b|\\bsumalakay\\b|\\bpinatay (?:nila )?sa tabak\\b|\\btalim ng tabak\\b|\\bnilipol\\b");
+        cue("hiss", "\\b(?:snake|serpent|viper|cobra|python|rattlesnake)s?\\b[^.!?]{0,20}\\b(?:hissed|hissing|slithered|slithering|rattled|struck)\\b|\\bhiss(?:ed|es|ing)?\\b|\\bsumitsit\\b|\\bsumisitsit\\b");
         // The sounds of things hitting things, whatever the object: strong verbs on their own, weak ones with something hard or the floor.
         cue("crash", "\\b(?:car|truck|plane|vehicle|bus|motorcycle|bike|van|train)\\b[^.!?]{0,25}\\b(?:crashed|collided|rammed|skidded|smashed)\\b|\\b(?:crashed|rammed|smashed|plowed|slammed) into\\b"
                 + "|\\btires? screech\\w*|\\bscreeched to a halt\\b|\\bbumangga\\b|\\bnabangga\\b|\\bnagkabanggaan\\b|\\bsumalpok\\b");
@@ -185,7 +189,7 @@ final class Sfx {
     private static Handler main;
 
     private static final java.util.Set<String> AMBIENT = new java.util.HashSet<>(java.util.Arrays.asList(
-            "trumpet", "rooster", "earthquake", "waves", "crowd", "hiss", "thunder", "wind", "rain"));
+            "trumpet", "rooster", "earthquake", "waves", "crowd", "hiss", "thunder", "wind", "rain", "battle", "arrows", "chariots"));
 
     /** A long sound that plays under the voice without the reading waiting for it. */
     static boolean ambient(String name) {
@@ -345,6 +349,35 @@ final class Sfx {
                 noise(b, 0.0f, 3.0f, 0.55f, 1300f, 1f);
                 bandNoise(b, 0.3f, 2.4f, 300f, 2200f, 0.55f, 0.6f);
                 bandNoise(b, 0.9f, 1.6f, 500f, 3000f, 0.35f, 0.55f);
+                break;
+            case "battle": // swords on shields, many men shouting
+                b = buf(3.6f);
+                noise(b, 0.0f, 3.4f, 0.40f, 1500f, 1f);
+                bandNoise(b, 0.2f, 3.0f, 350f, 2600f, 0.45f, 0.5f);
+                for (int i = 0; i < 9; i++) {
+                    float at = 0.15f + i * 0.37f + (i % 3) * 0.05f;
+                    click(b, at, 0.7f);
+                    bell(b, at, 1900f + (i % 4) * 430f, 0.22f, 0.30f);
+                    thump(b, at, 150f, 0.07f, 0.45f);
+                }
+                break;
+            case "arrows": // a volley: whooshes, then the thuds where they land
+                b = buf(2.2f);
+                for (int i = 0; i < 7; i++) {
+                    float at = 0.05f + i * 0.13f + (i % 2) * 0.04f;
+                    bandNoise(b, at, 0.38f, 2500f, 7500f, 0.45f, 0.35f);
+                    thump(b, at + 0.45f, 170f, 0.05f, 0.40f);
+                }
+                break;
+            case "chariots": // hooves at a gallop with a rumble and the rattle of wheels
+                b = buf(3.4f);
+                noise(b, 0.0f, 3.2f, 0.45f, 220f, 1f);
+                noise(b, 0.2f, 2.8f, 0.14f, 2600f, 1f);
+                for (int i = 0; i < 16; i++) {
+                    float at = 0.05f + i * 0.17f;
+                    thump(b, at, 100f + (i % 2) * 18f, 0.08f, 0.65f);
+                    click(b, at + 0.04f, 0.25f);
+                }
                 break;
             case "hiss": // a snake: a long, thin "ssss" with a shorter one after it
                 b = buf(1.5f);
