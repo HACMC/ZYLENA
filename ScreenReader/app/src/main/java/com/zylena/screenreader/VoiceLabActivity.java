@@ -116,9 +116,11 @@ public class VoiceLabActivity extends Activity {
             CharSequence t = cd == null || cd.getItemCount() == 0 ? null : cd.getItemAt(0).coerceToText(this);
             int n = t == null ? 0 : take(t.toString());
             if (n == 0) {
+                Logs.d(this, "voice lab: pasted text had no settings" + (t == null ? " (nothing copied)" : ": " + Logs.snip(t.toString())));
                 say("No voice settings in what was copied. Copy the settings text first.");
                 return;
             }
+            Logs.d(this, "voice lab: pasted " + n + " settings");
             buildSliders();
             refresh();
             play(true);
