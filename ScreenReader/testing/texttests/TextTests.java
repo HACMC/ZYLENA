@@ -344,6 +344,19 @@ public class TextTests {
             check("voice for: " + c[0], c[1].equals("!cd") ? !got.isEmpty() && !got.startsWith("cd") : got.startsWith(c[1]), "'" + got + "'");
         }
 
+        // The built-in pronunciations are for the Tagalog voice only.
+        {
+            String t = TextPrep.say("Sumama ka sa us earlier, at gayon ang nangyari; magkagayo\u2019y sumuway siya.", TextPrep.FIL);
+            check("built-in: Tagalog voice respells", t.contains(" as ") && t.contains("earliier") && t.contains("ga-yon") && t.contains("magkagayoy") && t.contains("sumuwai"), t);
+            String e = TextPrep.say("He told us earlier that the bus was late.", TextPrep.EN);
+            check("built-in: English voice keeps us", e.contains(" us ") && e.contains("earlier") && e.contains("bus"), e);
+            String g = TextPrep.say("Ang mga Gentil ay nakinig.", TextPrep.FIL);
+            check("built-in: Gentil", g.contains("hentil"), g);
+        }
+
+        check("hapon (afternoon) is not a foreigner", Persona.ofAccent("Dumating si Mia kaninang hapon.").isEmpty(), Persona.ofAccent("Dumating si Mia kaninang hapon."));
+        check("isang Hapones is a foreigner", "us".equals(Persona.ofAccent("Si Kenji ay isang Hapones.")), Persona.ofAccent("Si Kenji ay isang Hapones."));
+
         System.out.println(passed + " passed, " + failed + " failed");
         if (failed > 0) System.exit(1);
     }

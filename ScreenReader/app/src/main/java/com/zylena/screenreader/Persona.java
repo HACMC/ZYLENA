@@ -121,7 +121,7 @@ final class Persona {
 
     /** Somebody from abroad ("an American man", "a Korean girl", "isang Koreano", "dayuhan"): in a Tagalog story such a person speaks English. */
     private static final Pattern FOREIGN = p("\\b(?:an?|the)\\s+(?:american|korean|japanese|chinese|french|german|spanish|italian|russian|canadian)\\s+(?:man|woman|guy|girl|gentleman|lady|boy|actor|actress|singer|model|student|businessman|prince|princess|agent|doctor|teacher)\\b"
-            + "|\\b(?:an?|the)\\s+foreigner\\b|\\b(?:amerikano|amerikana|kano|dayuhan|banyaga|koreano|koreana|hapon|hapones|intsik|tsino|espanyol|italyano|pranses|aleman)\\b");
+            + "|\\b(?:an?|the)\\s+foreigner\\b|\\b(?:amerikano|amerikana|kano|dayuhan|banyaga|koreano|koreana|hapones|intsik|tsino|espanyol|italyano|pranses|aleman)\\b");
 
     /** The country of the accent a sentence gives somebody ("a British accent", "an Irish girl"): gb, ie, au, in; or "" when none is said. */
     static String ofAccent(String s) {

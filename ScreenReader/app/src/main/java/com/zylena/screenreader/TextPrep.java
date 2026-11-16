@@ -250,7 +250,33 @@ final class TextPrep {
         return sb.toString();
     }
 
+    /**
+     * Words the phone's Tagalog voice says wrong, respelled the way that comes out right: Tagalog words it
+     * stumbles on, and English words in a Taglish story ("us", "earlier") said with the Tagalog voice. Only for
+     * that voice, so the English voice still says "us". A line in "My pronunciations" for the same word wins.
+     */
+    static final String[][] VOICE_SAY = {
+            {"Gentil", "hentil"}, {"Sigurado ka okay", "Okay ka lang"}, {"earlier", "earliier"}, {"us", "as"},
+            {"realizing", "realiziing"}, {"sumuway", "sumuwai"}, {"pung", "pong"}, {"tutubos", "tu-tu-bus"},
+            {"gayon", "ga-yon"}, {"haling", "ha-ling"}, {"magkagayo'y", "magkagayoy"}, {"nangabuksan", "na-nga-buk-san"}};
+    private static final Pattern[] VOICE_SAY_P = new Pattern[VOICE_SAY.length];
+
+    static {
+        for (int i = 0; i < VOICE_SAY.length; i++) VOICE_SAY_P[i] = Pattern.compile("(?<![\\p{L}\\d'\u2019])"
+                + Pattern.quote(VOICE_SAY[i][0]).replace("'", "\\E['\u2019]\\Q") + "(?![\\p{L}\\d'\u2019])", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+    }
+
+    private static String voiceSay(String s) {
+        for (int i = 0; i < VOICE_SAY.length; i++) {
+            boolean mine = false;
+            for (String[] p : userSay) if (p[0].equalsIgnoreCase(VOICE_SAY[i][0])) mine = true;
+            if (!mine) s = VOICE_SAY_P[i].matcher(s).replaceAll(java.util.regex.Matcher.quoteReplacement(VOICE_SAY[i][1]));
+        }
+        return s;
+    }
+
     static String sayTagalog(String s) {
+        s = voiceSay(s);
         if (modernSpelling) s = modernTagalog(s);
         if (respellNames) for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
         if (!respellSyon) return s;

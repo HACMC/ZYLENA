@@ -415,8 +415,27 @@ final class Prefs {
         applyLists(c);
     }
 
+    /**
+     * Once: lines of "My pronunciations" that are now built in (TextPrep.VOICE_SAY) come out of the list, so they
+     * are said only by the Tagalog voice: "us = as" in the list changed "us" for the English voice too.
+     * "inyo = inyo" changes nothing and goes too.
+     */
+    private static void builtInSay(Context c) {
+        if (sp(c).getBoolean("say_builtin_1", false)) return;
+        StringBuilder keep = new StringBuilder();
+        for (String l : sayList(c).split("\n")) {
+            String[] p = l.split("\\s*(?:=|->|\u2192)\\s*", 2);
+            boolean drop = p.length == 2 && p[0].trim().equalsIgnoreCase(p[1].trim()) && !p[0].trim().isEmpty();
+            if (p.length == 2) for (String[] d : TextPrep.VOICE_SAY)
+                if (d[0].equalsIgnoreCase(p[0].trim().replace('\u2019', '\'')) && d[1].equalsIgnoreCase(p[1].trim())) drop = true;
+            if (!drop && !l.trim().isEmpty()) keep.append(keep.length() > 0 ? "\n" : "").append(l);
+        }
+        sp(c).edit().putString("say_list", keep.toString()).putBoolean("say_builtin_1", true).apply();
+    }
+
     /** Hands the saved lists to the text preparation. */
     static void applyLists(Context c) {
+        builtInSay(c);
         TextPrep.userSay = TextPrep.parseSay(sayList(c));
         TextPrep.userSkip = TextPrep.parseSkip(skipList(c));
         Bible.englishNames = englishBooks(c);

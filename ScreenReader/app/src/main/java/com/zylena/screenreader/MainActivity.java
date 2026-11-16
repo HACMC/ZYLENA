@@ -1493,7 +1493,9 @@ public class MainActivity extends Activity {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(p, Theme.dp(this, 8), p, 0);
-        box.addView(Theme.body(this, say ? "One per line: word = how to say it" : "One word or phrase per line. They are never read.",
+        StringBuilder built = new StringBuilder();
+        for (String[] d : TextPrep.VOICE_SAY) built.append(built.length() > 0 ? ", " : "").append(d[0]);
+        box.addView(Theme.body(this, say ? "One per line: word = how to say it\nBuilt in for the Tagalog voice: " + built : "One word or phrase per line. They are never read.",
                 Theme.MUTED, 13));
         box.addView(e);
         new AlertDialog.Builder(this)
