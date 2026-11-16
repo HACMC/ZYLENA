@@ -376,6 +376,24 @@ public class TextTests {
             String cg = gv == null ? "none" : Arrays.toString(gv.codes);
             check("the governor is Pilate, the crowd is not", gv != null && gv.codes.length == 4 && gv.codes[0].equals(gv.codes[2]) && !gv.codes[1].equals(gv.codes[0]) && !gv.codes[2].startsWith("cd"), cg);
         }
+        // A lesson's passage from a Gospel, with no "Jesus" in it: the one called Guro answers, and he is Jesus.
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 42;
+            BibleCast.Result lk = BibleCast.annotateVerses(Arrays.asList(
+                    "At narito, ang isang tagapagtanggol ng kautusan ay nagtindig at siya'y tinutukso, na sinasabi, Guro, anong aking gagawin upang magmana ng walang hanggang buhay?",
+                    "At sinabi niya sa kaniya, Ano ang nasusulat sa kautusan? ano ang nababasa mo?"), '\u201C', '\u201D', false);
+            String cl = lk == null ? "none" : Arrays.toString(lk.codes);
+            check("Luke 10: the lawyer, then Jesus", lk != null && lk.codes.length == 2 && !lk.codes[0].startsWith("cd") && !lk.codes[0].isEmpty() && lk.codes[1].startsWith("cd1"), cl);
+            BibleCast.forget();
+            BibleCast.bookHint = 40;
+            BibleCast.Result ls = BibleCast.annotateVerses(Arrays.asList(
+                    "And as they did eat, he said, Verily I say unto you, that one of you shall betray me.",
+                    "The Son of man goeth as it is written of him: but woe unto that man by whom the Son of man is betrayed! it had been good for that man if he had not been born.",
+                    "Then Judas, which betrayed him, answered and said, Master, is it I? He said unto him, Thou hast said."), '\u201C', '\u201D', false);
+            String cs = ls == null ? "none" : Arrays.toString(ls.codes);
+            check("Last Supper: Jesus, Judas, Jesus", ls != null && ls.codes.length >= 4 && ls.codes[0].startsWith("cd1") && !ls.codes[ls.codes.length - 2].startsWith("cd") && ls.codes[ls.codes.length - 1].startsWith("cd1"), cs);
+        }
         check("hapon (afternoon) is not a foreigner", Persona.ofAccent("Dumating si Mia kaninang hapon.").isEmpty(), Persona.ofAccent("Dumating si Mia kaninang hapon."));
         check("isang Hapones is a foreigner", "us".equals(Persona.ofAccent("Si Kenji ay isang Hapones.")), Persona.ofAccent("Si Kenji ay isang Hapones."));
 

@@ -137,6 +137,7 @@ final class BibleDirector {
             verses.add(t);
         }
         if (verses.size() == context) return null;
+        BibleCast.bookHint = book;
         BibleCast.Result[] per = BibleCast.annotateChapter(verses, context);
         BibleCast.Result[] byVerse = java.util.Arrays.copyOfRange(per, context, per.length);
         synchronized (PLANS) {

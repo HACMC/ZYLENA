@@ -262,6 +262,7 @@ final class Bible {
                 List<String> before = verseContext(src, tl, book, Integer.parseInt(m.group("c")), v);
                 List<String> both = new ArrayList<>(before);
                 both.addAll(passageVerses(src, tl, book, Integer.parseInt(m.group("c")), v));
+                BibleCast.bookHint = book;
                 BibleCast.Result bc = BibleCast.annotateVerses(both, '\u00AB', '\u00BB', true, before.size());
                 if (bc != null) words = bc.text;
             }

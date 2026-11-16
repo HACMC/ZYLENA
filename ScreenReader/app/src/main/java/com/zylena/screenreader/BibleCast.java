@@ -57,6 +57,13 @@ final class BibleCast {
         }
         // "The woman saith unto him,": somebody else answers, even in the middle of Jesus's long words.
         if (NOUN_SAID.matcher(part).find()) return true;
+        // "Then Judas, which betrayed him, answered and said,": a verse that begins with somebody's name.
+        Matcher ln = LEAD_NAME.matcher(part);
+        if (ln.find()) {
+            String w = ln.group(1).toLowerCase(Locale.ROOT);
+            if (!NOT_NAMES.contains(w) && !FATHER.matcher(w).matches() && (TextPrep.MEN.contains(w) || TextPrep.WOMEN.contains(w) || BibleCharacters.known(w)
+                    || part.substring(ln.end()).matches("(?s)^,\\s*(?:which|who|that|the|na|ang)\\s.*"))) return true;
+        }
         return VILLAIN.matcher(part).find() || SPIRIT.matcher(OF_GOD.matcher(part).replaceAll(" ")).find();
     }
 
@@ -219,6 +226,14 @@ final class BibleCast {
         int said = 0; // how much the one speaking has said so far
         State st = new State();
         st.passage = String.join(" ", verses);
+        // The book being read, when the caller knows it: in Matthew, Mark, Luke and John an unnamed "he" teaching is Jesus.
+        final int book = bookHint;
+        bookHint = 0;
+        if (book >= 40 && book <= 43) {
+            st.gospelSeen = true;
+            st.gospelBook = true;
+            if (st.mentioned == null) st.mentioned = "jesus";
+        }
         // A page is often one verse of a chapter: who the last page was about carries on to the next, for a little while.
         synchronized (BibleCast.class) {
             if (useMemory && memory != null && contextVerses == 0 && System.currentTimeMillis() - memoryAt < 180000L) st.mentioned = memory;
@@ -531,6 +546,11 @@ final class BibleCast {
                 continue;
             }
             if (!ctxV) any = true;
+            // "Guro, anong aking gagawin…", "Master, what shall I do…": said to Jesus, who answers next.
+            if (st.gospelSeen && TEACHER_CALL.matcher(speech).find()) {
+                String lastK = st.history.isEmpty() ? null : st.history.get(st.history.size() - 1);
+                if (!"jesus".equals(lastK)) st.spokenTo = "jesus";
+            }
             {
                 String vn = vocName(speech);
                 String lastK = st.history.isEmpty() ? null : st.history.get(st.history.size() - 1);
@@ -591,6 +611,9 @@ final class BibleCast {
         return r;
     }
 
+    /** The number of the book (Genesis 1 … Revelation 66) the next call reads, set by the caller just before; 0 when not known. */
+    static volatile int bookHint;
+
     private static String memory; // "jesus" or "father": who the verses read lately were about
     private static long memoryAt;
 
@@ -649,7 +672,10 @@ final class BibleCast {
     /** Words only Jesus says, as the Gospels have him: "I say unto you", "you have heard that it was said". */
     private static final Pattern JESUS_SAYS = Pattern.compile("(?i)(?:katotohanang\\s+sinasabi\\s+ko\\s+sa\\s+inyo|sinasabi\\s+ko\\s+sa\\s+inyo|narinig\\s+ninyo\\s+na\\s+sinabi|"
             + "i\\s+say\\s+unto\\s+you|verily,?\\s+(?:verily,?\\s+)?i\\s+say|ye\\s+have\\s+heard\\s+that\\s+it\\s+was\\s+said|but\\s+i\\s+say|"
-            + "i\\s+am\\s+the\\s+(?:way|light|bread|door|good\\s+shepherd|vine|resurrection)|ako\\s+ang\\s+(?:daan|ilaw|tinapay|pintuan|puno\\s+ng\\s+ubas|pagkabuhay))");
+            + "i\\s+am\\s+the\\s+(?:way|light|bread|door|good\\s+shepherd|vine|resurrection)|while\\s+i\\s+was\\s+yet\\s+with\\s+you|nang\\s+ako'y\\s+sumasa\\s+inyo\\s+pa|"
+            + "the\\s+son\\s+of\\s+man\\s+(?:is|must|shall)|ang\\s+anak\\s+ng\\s+tao\\s+ay|ako\\s+ang\\s+(?:daan|ilaw|tinapay|pintuan|puno\\s+ng\\s+ubas|pagkabuhay))");
+    private static final Pattern LEAD_NAME = Pattern.compile("^\\W*(?:(?:Then|And|But|Now|So|At|Nang|Datapuwa't)\\s+)?(?!Jesus|Hesus)(\\p{Lu}\\p{Ll}+)(?=[\\s,])");
+    private static final Pattern TEACHER_CALL = Pattern.compile("^\\W*(?:(?:Good\\s+)?Master|Rabbi|Rabboni|Guro|Mabuting\\s+Guro|Rabi|Maestro|Lord|Panginoon)(?![\\p{L}])");
     private static final Pattern AGAIN = Pattern.compile("(?i)^(?:at|and)\\s+(?:sinabi|nagsabi|said|saith|sumagot|answered)\\b[^,:]{0,40}[,:]\\s*");
 
     /** The words just before "said", within its own sentence: who speaks is named there, not in the sentence before. */
@@ -662,7 +688,7 @@ final class BibleCast {
     }
 
     private static final Pattern PLURAL_SAID = Pattern.compile("(?i)(?<![\\p{L}])the\\s+(?:\\p{Ll}+\\s+)?(\\p{Ll}{3,}s)\\s+(?:said|answered|cried|asked)(?![\\p{L}])|(?:said|answered|cried)\\s+(some)\\s+of\\s+the(?![\\p{L}])");
-    private static final Pattern THEY = Pattern.compile("(?i)(?<![\\p{L}])some\\s+of\\s+them\\s+(?:said|answered)(?![\\p{L}])|(?<![\\p{L}])they\\s+(?:\\p{L}+\\s+){0,3}?(?:said|say|saith|answered|cried|asked|spake)(?![\\p{L}])|(?:said|asked|answered)\\s+they(?![\\p{L}])"
+    private static final Pattern THEY = Pattern.compile("(?i)(?<![\\p{L}])some\\s+of\\s+them\\s+(?:said|answered)(?![\\p{L}])|(?:^|[,;]\\s*|(?<![\\p{L}])and\\s+|(?<![\\p{L}])but\\s+)many\\s+(?!things)[^.!?;:]{0,50}?(?:saying|said)(?![\\p{L}])|(?<![\\p{L}])they\\s+(?:\\p{L}+\\s+){0,3}?(?:said|say|saith|answered|cried|asked|spake)(?![\\p{L}])|(?:said|asked|answered)\\s+they(?![\\p{L}])"
             + "|(?<![\\p{L}])(?:sinabi|nagsabi|sumagot|sinasabi|nagsasabi|sumigaw|nagsisigaw|nagsigawan|nagsalita|nangagsabi|nagsipagsabi|nagsisagot)\\s+(?:(?:nga|naman|sa\\s+kaniya|sa\\s+kanila)\\s+)*(?:nila|sila)(?![\\p{L}])"
             + "|(?<![\\p{L}])(?:kanilang|kanila'y|sila'y)\\s+(?:\\p{L}+\\s+)?(?:sinabi|nagsabi|sumagot|sinasabi|nagsisagot|nagsigawan|nagsisigaw)(?![\\p{L}])"
             + "|(?<![\\p{L}])(?:nagsisagot|nangagsabi|nagsipagsabi|nagsigawan)(?![\\p{L}])");
@@ -703,6 +729,18 @@ final class BibleCast {
     private static final Pattern DIVINE_SAYS = Pattern.compile("(?i)(?:jesus|lord|god|panginoon|dios|hesus)\\s+(?:\\p{L}+\\s+)?(?:said|saith|answered|spake|sinabi|sumagot)(?![\\p{L}])|(?:said|saith|answered|spake|sinabi|sumagot)\\s+(?:\\p{L}+\\s+)?(?:the\\s+lord|jesus|god|ng\\s+panginoon|ni\\s+jesus|ng\\s+dios)(?![\\p{L}])");
     private static final Pattern THEY_ANY = Pattern.compile("(?i)(?<![\\p{L}])(?:they|sila|nila|kanilang)(?![\\p{L}])");
     private static final Pattern LORD_OBJECT = Pattern.compile("(?i)(?<![\\p{L}])(?:in|upon|on|from|before|against|trust\\s+in|laban\\s+sa)\\s+(?:the\\s+)?(?:lord|god|panginoon|dios)(?:\\s+(?:god|his\\s+god|thy\\s+god|our\\s+god|their\\s+god|of\\s+hosts|of\\s+israel))?(?![\\p{L}])");
+
+    /** "they"/"the disciples" is the one speaking, and no "he" comes after it ("as they did eat, he said" is he). */
+    private static boolean otherOnly(String s) {
+        Matcher o = PRONOUN_ONLY_OTHER.matcher(s);
+        int lastO = -1;
+        while (o.find()) lastO = o.start();
+        if (lastO < 0) return false;
+        Matcher h = HE.matcher(s);
+        int lastH = -1;
+        while (h.find()) lastH = h.start();
+        return lastO > lastH;
+    }
 
     static boolean evil(String k) {
         return "villain".equals(k) || "demon".equals(k);
@@ -972,7 +1010,7 @@ final class BibleCast {
                     if (sk != null && !sk.equals(toWhom)) key = sk;
                 }
                 // A parable he tells, or words only he says, are his whoever was spoken to last.
-                if (key == null && hintJesus && HE.matcher(before + " " + nearIntro).find() && !"jesus".equals(toWhom) && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()
+                if (key == null && hintJesus && HE.matcher(before + " " + nearIntro).find() && !"jesus".equals(toWhom) && !otherOnly(nearIntro)
                         && !nearIntro.replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus";
                 // "Then said his servants unto him, … | And he said,": the one spoken to, "him", is the one the story follows.
                 if (key == null && focus != null && focusAge <= 2 && !gospelSeen && !focus.equals(lastKey) && !focus.equals(toWhom) && HE.matcher(nearTail).find() && spokenTo == null
@@ -982,7 +1020,7 @@ final class BibleCast {
                 // "Now the serpent was more subtil… And he said unto the woman,": the first to speak is the one the verse is about.
                 if (key == null && VILLAIN.matcher(before).find() && !JESUS.matcher(before).find() && !DEVIL_DEALT_WITH.matcher(before).find()) key = "villain";
                 // "And he spake many things unto them in parables, saying, Behold, a sower went forth to sow": nobody else tells parables.
-                if (key == null && (hintJesus || jesusTeaching || (gospelSeen && history.contains("jesus") && SAYS_TO_THEM.matcher(rawIntro).find())) && !"jesus".equals(toWhom) && HE.matcher(before + " " + nearIntro).find() && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()
+                if (key == null && (hintJesus || jesusTeaching || (gospelSeen && (history.contains("jesus") || gospelBook) && SAYS_TO_THEM.matcher(rawIntro).find())) && !"jesus".equals(toWhom) && HE.matcher(before + " " + nearIntro).find() && !otherOnly(nearIntro)
                         && !(nearIntro).replaceAll("(?<![\\p{L}'])(?:And|Then|At|Nang|Kaniyang|Ang|Sa|Now|But|Pagkatapos|Datapuwa't|Kanilang|Kaniya)(?![\\p{L}])", " ").matches("(?s).*(?<![\\p{L}'])\\p{Lu}\\p{L}+.*")) key = "jesus"; // (somebody named is not he)
                 // "…a great voice, as of a trumpet, | saying, What thou seest, write in a book": words only he says, though nobody is named.
                 if (key == null && hintStrong && !"jesus".equals(toWhom)) key = "jesus";
@@ -1006,7 +1044,7 @@ final class BibleCast {
                         && !lastKey.equals(to) && history.stream().filter(h -> !GROUPS.contains(h)).distinct().count() == 1) key = lastKey;
                 // "And he opened his mouth, and taught them, saying": the "he" is who the chapter has been about, when nobody else is
                 // named, nobody has spoken yet, and it is not "a certain lawyer … tempted him".
-                if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || (!keys.contains(mentioned) && !"father".equals(mentioned))) && HE.matcher(before).find() && !SOMEONE.matcher(before).find() && !PRONOUN_ONLY_OTHER.matcher(nearIntro).find()) key = mentioned;
+                if (key == null && mentioned != null && !mentioned.equals(toWhom) && (history.isEmpty() || (!keys.contains(mentioned) && !"father".equals(mentioned))) && HE.matcher(before).find() && !SOMEONE.matcher(before).find() && !otherOnly(nearIntro)) key = mentioned;
 
                 // "And Jehu … said unto the worshippers of Baal, … | And he said unto him that was over the vestry,": nobody else has
                 // spoken and nobody was spoken to by name, so it is the same one going on.
@@ -1034,8 +1072,8 @@ final class BibleCast {
                     if (FEMALE_CUE.matcher(cue).find()) femaleKeys.add(key);
                     // Nothing says who this is, and Jesus, God or his disciples are in the verses: a guess would be a wrong voice for words
                     // that may be theirs. The words are said in the storyteller's voice, not in a character's.
-                    if (toWhom == null && !OF_GOD.matcher(rawIntro).find()
-                            && gospelSeen) unsureKeys.add(key); // (somebody who speaks to the Lord, or a man of God, is a person)
+                    if (toWhom == null && !OF_GOD.matcher(rawIntro).find() && !TEACHER_CALL.matcher(speechNow).find() && !ADDRESS_LORD.matcher(speechNow).find()
+                            && gospelSeen) unsureKeys.add(key); // ("Guro, …", "Lord, …": somebody speaking to Jesus, a person of their own) // (somebody who speaks to the Lord, or a man of God, is a person)
                 }
             }
             // "when they heard that Jesus passed by, cried out, saying, Have mercy on us, O Lord": Jesus is spoken of and spoken to,
@@ -1149,6 +1187,7 @@ final class BibleCast {
 
         String focus; // the one the story is following: an unnamed "he" answering is most likely this one
         int focusAge = 99; // verses since the story last told of them
+        boolean gospelBook; // the page is from Matthew, Mark, Luke or John
 
         /** One person under one name: "Simon" is Peter where the page says "Simon Peter", "Israel" is Jacob, "the king" is the king named. */
         String alias(String k) {
@@ -1244,7 +1283,7 @@ final class BibleCast {
                 String w = c.group(1).toLowerCase(Locale.ROOT);
                 if (NOT_NAMES.contains(w) || NOT_CALLED.contains(w) || FATHER.matcher(w).matches()) return null;
                 if (JESUS.matcher(w).matches()) return "jesus";
-                if (c.group(2) != null ? nameLike(w) : (TextPrep.MEN.contains(w) || TextPrep.WOMEN.contains(w) || BibleCharacters.isWoman(w) || keys.contains(w))) return w;
+                if (c.group(2) != null || t.substring(c.end()).matches("(?s)^,\\s*(?:which|who|that|the\\s+son)\\s.*") ? nameLike(w) : (TextPrep.MEN.contains(w) || TextPrep.WOMEN.contains(w) || BibleCharacters.isWoman(w) || keys.contains(w))) return w;
             }
             return null;
         }
