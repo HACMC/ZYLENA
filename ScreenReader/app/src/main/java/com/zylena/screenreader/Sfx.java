@@ -73,6 +73,13 @@ final class Sfx {
         cue("bird", "\\bbirds? (?:chirped|sang|twittered|chirping|singing|tweeted|called)\\b|\\bchirp(?:ed|ing|s)?\\b|\\bhuni ng ibon\\b");
         cue("dog", "\\b(?:dog|puppy|hound)\\b[^.!?]{0,15}\\b(?:barked|barking|growled|howled|yapped)\\b|\\bbarked\\b|\\bumatungal\\b|\\btumahol\\b");
         cue("cat", "\\b(?:cat|kitten)\\b[^.!?]{0,15}\\b(?:meowed|mewed|purred|hissed)\\b|\\bmeow\\w*|\\bngiyaw\\b");
+        // The Bible's own sounds (found in verses too).
+        cue("trumpet", "\\b(?:trumpets?|shofar|ram'?s horns?|horns? of rams)\\b|\\b(?:trumpeta|tambuli|pakakak)\\b");
+        cue("rooster", "\\b(?:cock|rooster)\\b[^.!?]{0,20}\\b(?:crew|crowed|crow|crowing)\\b|\\bcrowed\\b|\\b(?:tumilaok|tilaok|nagtilaok|tumitilaok)\\b|\\bmanok\\b[^.!?]{0,15}\\b(?:tumilaok|tilaok)\\b");
+        cue("earthquake", "\\bearthquakes?\\b|\\bearth (?:did )?quake\\w*|\\b(?:earth|ground|foundations?)\\b[^.!?]{0,15}\\b(?:shook|trembled|quaked|moved)\\b|\\blindol\\b|\\bnayanig ang (?:lupa|lupain)\\b|\\bnanginig ang (?:lupa|lupain)\\b");
+        cue("waves", "\\b(?:great )?(?:tempest|storm)\\b[^.!?]{0,30}\\b(?:sea|ship|boat|waves)\\b|\\b(?:sea|ship|boat)\\b[^.!?]{0,30}\\b(?:tempest|storm|waves|billows)\\b|\\bwaves? (?:beat|broke|rose|arose|raged)\\b|\\bbillows?\\b|\\bbagyo (?:sa|ng) (?:dagat|laot)\\b|\\bmalaking bagyo\\b|\\bmga alon\\b");
+        cue("crowd", "\\b(?:multitude|crowd|throng|people)s?\\b[^.!?]{0,40}\\b(?:cried out|shouted|shouting|cheered|clamou?r\\w*|murmur\\w*|rushed|uproar)\\b|\\b(?:crucify him|let him be crucified|hosanna)\\b|\\buproar\\b|\\bipako (?:siya )?sa krus\\b|\\bhosana\\b|\\bsumigaw ang (?:karamihan|mga tao|bayan)\\b");
+        cue("hiss","\\b(?:snake|serpent|viper|cobra|python|rattlesnake)s?\\b[^.!?]{0,20}\\b(?:hissed|hissing|slithered|slithering|rattled|struck)\\b|\\bhiss(?:ed|es|ing)?\\b|\\bsumitsit\\b|\\bsumisitsit\\b");
         // The sounds of things hitting things, whatever the object: strong verbs on their own, weak ones with something hard or the floor.
         cue("crash", "\\b(?:car|truck|plane|vehicle|bus|motorcycle|bike|van|train)\\b[^.!?]{0,25}\\b(?:crashed|collided|rammed|skidded|smashed)\\b|\\b(?:crashed|rammed|smashed|plowed|slammed) into\\b"
                 + "|\\btires? screech\\w*|\\bscreeched to a halt\\b|\\bbumangga\\b|\\bnabangga\\b|\\bnagkabanggaan\\b|\\bsumalpok\\b");
@@ -299,6 +306,42 @@ final class Sfx {
                 b = buf(1.8f);
                 bell(b, 0.0f, 523f, 1.4f, 0.45f);
                 bell(b, 0.22f, 784f, 1.5f, 0.4f);
+                break;
+            case "trumpet": // a long, rising call, then a higher one held
+                b = buf(3.2f);
+                brass(b, 0.0f, 1.1f, 196f, 262f, 0.7f);
+                brass(b, 1.25f, 1.7f, 262f, 330f, 0.8f);
+                break;
+            case "rooster": // three short rising notes and a long falling one
+                b = buf(1.8f);
+                crow(b, 0.00f, 0.22f, 520f, 780f, 0.8f);
+                crow(b, 0.28f, 0.22f, 560f, 840f, 0.85f);
+                crow(b, 0.58f, 0.30f, 600f, 900f, 0.9f);
+                crow(b, 0.98f, 0.70f, 900f, 480f, 0.9f);
+                break;
+            case "earthquake": // a deep rumble that grows and shakes, with a rattle of stones
+                b = buf(3.6f);
+                noise(b, 0.0f, 3.4f, 0.9f, 110f, 1f);
+                thump(b, 0.2f, 45f, 1.4f, 0.9f);
+                thump(b, 1.3f, 52f, 1.2f, 0.8f);
+                noise(b, 0.9f, 1.8f, 0.30f, 900f, 1f);
+                break;
+            case "waves": // the sea heaving: three swells of surf
+                b = buf(4.2f);
+                noise(b, 0.0f, 1.5f, 0.75f, 900f, 1f);
+                noise(b, 1.3f, 1.6f, 0.85f, 1100f, 1f);
+                noise(b, 2.7f, 1.5f, 0.70f, 800f, 1f);
+                break;
+            case "crowd": // many voices at once: a murmur that swells into a shout
+                b = buf(3.2f);
+                noise(b, 0.0f, 3.0f, 0.55f, 1300f, 1f);
+                bandNoise(b, 0.3f, 2.4f, 300f, 2200f, 0.55f, 0.6f);
+                bandNoise(b, 0.9f, 1.6f, 500f, 3000f, 0.35f, 0.55f);
+                break;
+            case "hiss": // a snake: a long, thin "ssss" with a shorter one after it
+                b = buf(1.5f);
+                bandNoise(b, 0.0f, 0.95f, 4200f, 9500f, 0.55f, 0.35f);
+                bandNoise(b, 0.85f, 0.55f, 4800f, 9800f, 0.35f, 0.3f);
                 break;
             case "knock":
                 b = buf(0.9f);
@@ -722,6 +765,38 @@ final class Sfx {
             float env = peakAt <= 0.01f ? (float) Math.exp(-5.0 * t) * Math.min(1f, i / 40f)
                     : t < peakAt ? (float) Math.sin(0.5 * Math.PI * t / peakAt) : (float) Math.cos(0.5 * Math.PI * (t - peakAt) / (1 - peakAt));
             b[s + i] += amp * env * y[i] * 1.6f;
+        }
+    }
+
+    /** A brass note (a trumpet, a ram's horn) gliding from one pitch to another: many harmonics, a quick attack, a swell, a slow release. */
+    private static void brass(float[] b, float at, float len, float from, float to, float amp) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        double[] ph = new double[9];
+        for (int i = 0; i < n && s + i < b.length; i++) {
+            float t = i / (float) n;
+            float hz = from + (to - from) * (float) Math.min(1.0, t * 3);
+            float env = Math.min(1f, i / (RATE * 0.05f)) * (t < 0.8f ? 1f : (float) Math.pow(1f - (t - 0.8f) / 0.2f, 1.5)) * (0.85f + 0.15f * (float) Math.sin(2 * Math.PI * 5.5 * i / RATE));
+            float v = 0;
+            for (int k = 1; k <= 8; k++) {
+                ph[k] += 2 * Math.PI * hz * k / RATE;
+                v += (float) Math.sin(ph[k]) / (k * (k > 4 ? 1.4f : 1f));
+            }
+            b[s + i] += amp * 0.35f * env * v;
+        }
+    }
+
+    /** One note of a rooster's crow: a harsh, strained call gliding between two pitches. */
+    private static void crow(float[] b, float at, float len, float from, float to, float amp) {
+        int s = (int) (at * RATE), n = (int) (len * RATE);
+        double ph = 0;
+        Random r = new Random(s + 3);
+        for (int i = 0; i < n && s + i < b.length; i++) {
+            float t = i / (float) n;
+            float hz = from + (to - from) * t;
+            ph += 2 * Math.PI * hz / RATE;
+            float env = Math.min(1f, i / (RATE * 0.02f)) * Math.min(1f, (n - i) / (RATE * 0.08f));
+            double v = Math.sin(ph) + 0.6 * Math.sin(2 * ph) + 0.45 * Math.sin(3 * ph) + 0.3 * Math.sin(5 * ph);
+            b[s + i] += amp * 0.4f * env * (float) (v * (0.8 + 0.2 * (r.nextFloat() * 2 - 1)));
         }
     }
 

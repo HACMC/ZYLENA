@@ -1170,6 +1170,7 @@ final class TextPrep {
         lastRefLine = "";
         Bible.page(lines);
         String pendingFx = "";
+        boolean hissed = false; // the tempter's hiss is heard once, when he first speaks on a page
         boolean verse = Bible.verseMode(lines);
         boolean screenFil = mostlyTagalog(lines);
         lastVerseMode = verse;
@@ -1407,6 +1408,13 @@ final class TextPrep {
                     else if (verseCast != null) g.cast = verseCast;
                     g.mood = mood;
                     g.story = cast != null && !Cast.lastLight;
+                    if (fx.isEmpty() && !hissed && sfxOn && feat && g.cast != null) {
+                        for (String cc : g.cast) if (cc != null && cc.contains("^villain")) {
+                            fx = "hiss"; // the snake's hiss as the tempter begins to speak
+                            hissed = true;
+                            break;
+                        }
+                    }
                     g.sfx = fx;
                     fx = "";
                     if (feat && feelOn) g.narrFeel = Mood.ofNarration(sentence);
