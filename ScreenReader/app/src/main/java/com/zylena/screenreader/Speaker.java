@@ -428,6 +428,40 @@ final class Speaker {
         speak(new ArrayList<>(pausedRuns.subList(pausedAt, pausedRuns.size())), pausedTrack);
     }
 
+    /**
+     * After "Fix a word": reading goes on from the word that was fixed (the nearest place it is, at or before the
+     * paragraph it stopped in), so the fix is heard at once and nothing before it is read again.
+     */
+    void resumeFrom(String word) {
+        if (!paused || pausedRuns == null || pausedRuns.isEmpty() || word == null || word.trim().isEmpty()) {
+            resume();
+            return;
+        }
+        java.util.regex.Pattern w = java.util.regex.Pattern.compile("(?<![\\p{L}\\d])" + java.util.regex.Pattern.quote(word.trim()) + "(?![\\p{L}\\d])",
+                java.util.regex.Pattern.CASE_INSENSITIVE | java.util.regex.Pattern.UNICODE_CASE);
+        int found = -1, pos = -1;
+        // The paragraph it stopped in first, then the ones before it (the word was just heard), then the ones after.
+        for (int d = 0; d < pausedRuns.size() && found < 0; d++) {
+            for (int i : new int[]{pausedAt - d, pausedAt + d}) {
+                if (found >= 0 || i < 0 || i >= pausedRuns.size() || (d > 0 && i == pausedAt)) continue;
+                java.util.regex.Matcher m = w.matcher(pausedRuns.get(i).text);
+                if (m.find()) {
+                    found = i;
+                    pos = m.start();
+                }
+            }
+        }
+        if (found < 0) {
+            resume();
+            return;
+        }
+        List<TextPrep.Seg> from = new ArrayList<>(pausedRuns.subList(found, pausedRuns.size()));
+        TextPrep.Seg cut = pos > 0 && from.get(0).text.indexOf('\u000E') < 0 ? cutAt(from.get(0), pos) : null;
+        if (cut != null) from.set(0, cut);
+        Logs.d(ctx, "going on from the fixed word \"" + word.trim() + "\" (run " + found + ")");
+        speak(from, pausedTrack);
+    }
+
     /** Jumps back (-1) or ahead (+1) a paragraph while reading. */
     void skip(int delta) {
         if (paused) {
@@ -474,6 +508,12 @@ final class Speaker {
         java.util.regex.Matcher m = SENTENCE_STOP.matcher(r.text);
         while (m.find() && m.end() <= pos) if (r.text.length() - m.end() >= 15) cut = m.end();
         if (cut == 0) return null;
+        Logs.d(ctx, "going on from the sentence being read (" + Math.round(f * 100) + "% of the paragraph said)");
+        return cutAt(r, cut);
+    }
+
+    /** The run from this place in its text on, with the voices of the quotations still to come. */
+    private TextPrep.Seg cutAt(TextPrep.Seg r, int cut) {
         TextPrep.Seg t = new TextPrep.Seg(r.text.substring(cut).trim(), r.lang, r.line, r.lastLine, r.heading, r.translated).like(r);
         t.sfx = "";
         if (r.cast != null) {
@@ -483,7 +523,6 @@ final class Speaker {
             t.castFrom = r.castFrom + closed;
             t.inQuote = !spans.isEmpty() && spans.get(spans.size() - 1)[2] == 0;
         }
-        Logs.d(ctx, "going on from the sentence being read (" + Math.round(f * 100) + "% of the paragraph said)");
         return t;
     }
 

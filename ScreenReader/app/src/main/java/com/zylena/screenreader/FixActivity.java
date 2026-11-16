@@ -389,6 +389,9 @@ public class FixActivity extends Activity {
         }, "zylena-suggest").start();
     }
 
+    /** The word just fixed: reading goes on from it. */
+    private String fixed;
+
     private void save(boolean never) {
         String w = wrong.getText().toString().trim().replace("\n", " "), r = right.getText().toString().trim().replace("\n", " ");
         if (w.isEmpty()) {
@@ -418,6 +421,7 @@ public class FixActivity extends Activity {
             say = undone ? keep.toString().trim() : keep + w + " = " + r;
         }
         Prefs.setLists(this, say, skip);
+        fixed = never ? null : w;
         Logs.d(this, never ? "fix: never read \"" + w + "\"" : "fix: \"" + w + "\" is said \"" + r + "\"");
         Toast.makeText(this, never ? "\"" + w + "\" won't be read any more." : "From now on \"" + w + "\" is said \"" + r + "\".", Toast.LENGTH_LONG).show();
         finish();
@@ -457,7 +461,8 @@ public class FixActivity extends Activity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Reading goes on from the paragraph it stopped at, so the fix is heard right away.
-        if (isFinishing() && Speaker.get(this).isPaused()) Speaker.get(this).resume();
+        // Reading goes on from the word just fixed, so the fix is heard right away and nothing before it is read again
+        // (from the paragraph it stopped at when nothing was fixed).
+        if (isFinishing() && Speaker.get(this).isPaused()) Speaker.get(this).resumeFrom(fixed);
     }
 }

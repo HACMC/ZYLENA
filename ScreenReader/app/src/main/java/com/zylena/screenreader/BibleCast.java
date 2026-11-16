@@ -68,7 +68,7 @@ final class BibleCast {
     private static final Pattern FIRST_PERSON = Pattern.compile("(?i)(?<![\\p{L}'])(?:ko|i|we|namin|natin|amin|tayo)(?![\\p{L}])");
     private static final Pattern JESUS = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias)(?![\\p{L}])");
     private static final Pattern SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:espiritu|spirit|ghost)(?![\\p{L}])");
-    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|(?-i:Ama)|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
+    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|(?-i:Ama)|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:came\\s+|spake\\s+)?(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
     private static final String DIVINE_WORDS = "jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias|dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|ama|father|"
             + "(?:holy\\s+)?(?:spirit|ghost)|espiritu(?:\\s+santo)?|(?:banal\\s+na\\s+)?espiritu";
     /**
@@ -350,12 +350,14 @@ final class BibleCast {
             Matcher m = INTRO.matcher(v);
             while (!tailDone && m.find()) {
                 // (Deep in a long speech a "said" is the speaker's own telling; but "Then she fell on her face, … and said unto him," begins the story again.)
-                if (discourse && m.start() > 50 && (divineSpeech || !STORY_START.matcher(v).find())) break;
+                if (discourse && m.start() > 50 && (divineSpeech || !(STORY_START.matcher(v).find() || TL_STORY.matcher(v).find()))) break;
                 // The verse before ended with "…and he cried out," and this one begins "Saying, …": the one named there goes on.
                 if (inSpeech && m.start() <= 2 && SAYING.matcher(v.substring(m.start())).find()) continue;
                 if ((divineSpeech || parable) && discourse && m.start() <= 50 && !restart && !namesSomeone(v.substring(0, m.end())) && !ADDRESS_LORD.matcher(v.substring(m.end())).find()) continue;
                 String intro = m.group();
                 if (FIRST_PERSON.matcher(intro).find()) continue; // "sinabi ko sa inyo": the speaker's own words
+                if (BECAUSE_SAID.matcher(v.substring(Math.max(0, m.start() - 16), m.start())).find() || FIT_TO_SAY.matcher(v.substring(Math.max(0, m.start() - 16), m.start() + Math.min(9, m.group().length()))).find()) continue; // "grieved because he said unto him the third time,": told, not said again
+                if (MY_SAYING.matcher(v.substring(Math.max(0, m.start() - 9), m.start())).find() || MY_SAYING_AFTER.matcher(v.substring(m.end(), Math.min(v.length(), m.end() + 4))).find()) continue; // "At aking sinabi", "sinabi ko"
                 String rest = v.substring(m.end()).trim();
                 if (m.group().matches("(?is).*(?<![\\p{L}])(?:cried|crying|cry)(?![\\p{L}]).*") && DID.matcher(rest).find() && !FIRST_PERSON.matcher(rest.length() > 40 ? rest.substring(0, 40) : rest).find()) continue; // (what was done, not said)
                 if (rest.length() < 3 || rest.chars().noneMatch(Character::isLetter)) {
@@ -391,7 +393,7 @@ final class BibleCast {
                     narr = pre + intro;
                 }
                 speech = rest;
-                st.speechNow = rest;
+                st.speechNow = rest.replaceAll("(?s)(?<=[.!?])\\s.*$", ""); // (its first sentence: what follows may be somebody else's)
                 who = st.who((m.start() < 25 ? lead(carried, carried.length(), 100) + " " : "") + lead(v, m.start(), 40) + " " + intro, v.substring(0, m.start()));
                 break;
             }
@@ -422,7 +424,10 @@ final class BibleCast {
             if (!inSpeech || INTRO.matcher(v).find() || restart || JESUS.matcher(v).find()) explainMode = false;
             if (inSpeech && Cast.JESUS_CODE.equals(speaker) && EXPLAINS.matcher(v).find()) explainMode = true;
             final boolean explains = inSpeech && Cast.JESUS_CODE.equals(speaker) && explainMode;
-            final boolean ends = (tellsOf && !explains) || restart || (!parable && !goesOnTeaching && !explains && narrates(v));
+            // After a short saying of somebody (not God's), a verse with no "I" or "you" in it at all is the story again
+            // ("Hindi pa nga nakikilala ni Samuel ang Panginoon…"), and so is "At si Moises ay yumaon…".
+            final boolean quietStory = inSpeech && !divineSpeech && !parable && said <= SHORT && !TALK.matcher(v).find() && !INTRO.matcher(v).find();
+            final boolean ends = (tellsOf && !explains) || restart || quietStory || (!parable && !goesOnTeaching && !explains && (narrates(v) || TL_STORY.matcher(v).find()));
             if (speech == null && inSpeech && (quoteOpen || !ends)) {
                 narr = "";
                 speech = v; // the speech goes on into this verse
@@ -432,6 +437,8 @@ final class BibleCast {
                 inSpeech = false;
                 quoteOpen = false;
                 said = 0;
+                // Who this verse tells of: "At tinawag ng anghel ng Panginoon si Abraham… | At sinabi," is the angel speaking.
+                st.lastActor = st.subjectKey(v);
                 if (v.matches("(?s).*[,;:]\\s*$")) carry = v;
                 out.append(out.length() > 0 ? " " : "").append(v);
                 continue;
@@ -607,9 +614,16 @@ final class BibleCast {
     /** A call with no name in it: "My father", "My son", "Ama ko", "Anak ko". */
     private static final Pattern CALL_WORD = Pattern.compile("(?i)^(?:o\\s+)?(?:my\\s+(?:father|son|mother|daughter|lord)|(?:ama|anak|ina|panginoon)\\s+ko)[\\s.!,:;]*$");
     /** "…thy saints. Jesus said unto her, …": a named one answers in the middle of a verse. */
-    private static final Pattern NAMED_ANSWER = Pattern.compile("[.!?;:]\\s+(?=(?:Then\\s+|And\\s+)?(?:Jesus|\\p{Lu}\\p{Ll}+)\\s+(?:said|saith|answered)\\s+(?:unto|to)\\s|They\\s+(?:all\\s+)?(?:say|said|saith|answered)\\s+(?:unto|to)\\s)");
+    private static final Pattern NAMED_ANSWER = Pattern.compile("[.!?;:]\\s+(?=(?:Then\\s+|And\\s+)?(?:Jesus|\\p{Lu}\\p{Ll}+)\\s+(?:said|saith|answered)\\s+(?:unto|to)\\s|They\\s+(?:all\\s+)?(?:say|said|saith|answered)\\s+(?:unto|to)\\s|(?:Jesus|Peter|Pedro|Hesus|\\p{Lu}\\p{Ll}+)\\s+(?:was|were)\\s+(?:grieved|wroth|angry|afraid|glad|moved|sorry)\\s)");
     /** The words after "told him every whit," go on with the story, not with somebody's words. */
     private static final Pattern STORY_START = Pattern.compile("^(?:Then|And|So)\\s+(?:she|he|they|\\p{Lu}\\p{Ll}+)\\s+(?:\\p{Ll}+(?:ed|ell|ent|ame|ose|ook|ew|ent|aw)|fell|went|came|rose|took|bowed|wept|ran)(?![\\p{L}])");
+    /** "At si Moises ay yumaon…", "Nang magkagayo'y kinuha ni Sephora…": a Tagalog verse that tells what somebody did. */
+    private static final Pattern TL_STORY = Pattern.compile("^(?:At|Nang|Kaya't|Datapuwa't|Sa\\s+gayo'y)\\s+(?:(?:si|ang)\\s+\\p{Lu}\\p{Ll}+\\s+ay\\s+(?:nag|um|bum|lum|tum|yum|pum|nan|nam|nang|naki)\\p{Ll}*|magkagayo'y\\s+(?:kinuha|bumangon|yumaon|lumapit|tumindig)\\s+(?:ni|si|ng)\\s+\\p{Lu})");
+    private static final Pattern BECAUSE_SAID = Pattern.compile("(?i)(?<![\\p{L}])because\\s+(?:he|she|they|it)\\s+$");
+    /** "Is it fit to say to a king,", "it is meet to be said unto God,": what one might say, inside somebody's words. */
+    private static final Pattern FIT_TO_SAY = Pattern.compile("(?i)(?<![\\p{L}])(?:fit|meet|good|lawful|right)\\s+to\\s+(?:be\\s+)?(?:say|said)");
+    private static final Pattern MY_SAYING = Pattern.compile("(?i)(?<![\\p{L}])(?:aking|kong|aming|ating)\\s*$");
+    private static final Pattern MY_SAYING_AFTER = Pattern.compile("(?i)^\\s+(?:ko|namin|natin)(?![\\p{L}])");
     private static final Pattern LOWER_START = Pattern.compile("^[^\\p{L}]*\\p{Ll}");
     private static final java.util.Set<String> NOT_CALLED = new java.util.HashSet<>(java.util.Arrays.asList(
             "lord", "master", "sir", "rabbi", "rabboni", "father", "mother", "son", "god", "panginoon", "guro", "ginoo", "dios", "diyos", "behold", "lo", "woe", "amen", "hosanna", "yea", "nay", "oo", "hindi"));
@@ -638,15 +652,21 @@ final class BibleCast {
         return b.substring(cut);
     }
 
-    private static final Pattern THEY = Pattern.compile("(?i)(?<![\\p{L}])they\\s+(?:\\p{L}+\\s+){0,3}?(?:said|say|saith|answered|cried|asked|spake)(?![\\p{L}])|(?:said|asked|answered)\\s+they(?![\\p{L}])");
-    private static final Pattern SHE = Pattern.compile("(?i)(?<![\\p{L}])she\\s+(?:\\p{L}+\\s+){0,3}?(?:said|saith|answered|cried|asked|spake)(?![\\p{L}])");
+    private static final Pattern THEY = Pattern.compile("(?i)(?<![\\p{L}])some\\s+of\\s+them\\s+(?:said|answered)(?![\\p{L}])|(?<![\\p{L}])they\\s+(?:\\p{L}+\\s+){0,3}?(?:said|say|saith|answered|cried|asked|spake)(?![\\p{L}])|(?:said|asked|answered)\\s+they(?![\\p{L}])"
+            + "|(?<![\\p{L}])(?:sinabi|nagsabi|sumagot|sinasabi|nagsasabi|sumigaw|nagsisigaw|nagsigawan|nagsalita|nangagsabi|nagsipagsabi|nagsisagot)\\s+(?:(?:nga|naman|sa\\s+kaniya|sa\\s+kanila)\\s+)*(?:nila|sila)(?![\\p{L}])"
+            + "|(?<![\\p{L}])(?:kanilang|kanila'y|sila'y)\\s+(?:\\p{L}+\\s+)?(?:sinabi|nagsabi|sumagot|sinasabi|nagsisagot|nagsigawan|nagsisigaw)(?![\\p{L}])"
+            + "|(?<![\\p{L}])(?:nagsisagot|nangagsabi|nagsipagsabi|nagsigawan)(?![\\p{L}])");
+    private static final Pattern SHE = Pattern.compile("(?i)(?<![\\p{L}])she\\s+(?:\\p{L}+\\s+){0,3}?(?:said|saith|answered|cried|asked|spake)(?![\\p{L}])|(?<![\\p{L}])(?<!(?:which|that|whom|because|as|when|what)\\s)she\\s+[^.!?;:]{0,60}?,\\s*and\\s+(?:said|saith|answered|cried)(?![\\p{L}])");
+    /** The verse is only "And said," / "At sinabi," (and to whom): who says it was told in the verse before. */
+    private static final Pattern BARE_SAID = Pattern.compile("(?i)^\\W*(?:and|at)?\\s*(?:said|saith|answered|sinabi|nagsabi|sumagot)(?:\\s+(?:unto|to|sa|kay)\\s+[^,]{1,30})?\\s*[,:]?\\s*$");
+    private static final Pattern SAID_NOUN = Pattern.compile("(?i)(?<![\\p{L}])(?:said|saith|answered|cried|asked)\\s+(?:out\\s+)?(?:the|his|her|their|a|an)\\s+(?:wise\\s+|chief\\s+|old\\s+)?(woman|man|king|queen|servants?|jews|men|elders|soldiers|people|multitude|priests|chief\\s+priests|brethren|women|maid|damsel|governor|centurion|captain|watchman|prophet|angel|apostles|disciples)(?![\\p{L}'\u2019])");
     private static final Pattern PRON_SUBJ = Pattern.compile("(?i)(?<![\\p{L}])(?:he|she|they|i|we|ye|you|it|one|siya|sila|niya|nila|kaniyang|kanilang)\\s+(?:\\p{L}+\\s+){0,3}?(?:said|saith|spake|answered|cried|asked|saying|sinabi|nagsabi|sumagot)(?![\\p{L}])"
             + "|(?:said|saith|answered)\\s+(?:he|she|they)(?![\\p{L}])|(?:sinabi|nagsabi|sumagot|sinasabi|nagsalita|sumigaw)\\s+(?:\\p{L}+\\s+)?(?:niya|nila|siya|sila)(?![\\p{L}])");
     private static final Pattern SENT_LEAD = Pattern.compile("(?i)^(?:(?:and|then|now|but|so|moreover|therefore),?\\s+)?(?:behold,?\\s+|lo,?\\s+)?(?:it\\s+came\\s+to\\s+pass,?\\s*(?:that\\s*)?)?(?:(?:when|as|after)\\s+|in\\s+the\\s+mean\\s*while,?\\s*)?");
     private static final Pattern OWNED_BY = Pattern.compile("(?i)(?<![\\p{L}])(?:anak|lingkod|alipin|asawa|ama|ina|kapatid|tagapangasiwa|bahay|lupain|salita|mga\\s+salita|bayan|hari)\\s*$");
     private static final Pattern AY_SPOKE = Pattern.compile("(?<![\\p{L}])(?:ang|si)\\s+(\\p{Lu}\\p{Ll}+)\\s+ay\\s+(?:nagsalita|nagsabi|sumagot|tumawag|sumigaw)(?![\\p{L}])");
     private static final Pattern SUBJ_DIVINE = Pattern.compile("(?i)^(?:the\\s+)?(?:lord(?:\\s+god)?|god|jesus)(?![\\p{L}])(?!\\s*['\u2019]s)|^(?:the\\s+)?\\p{L}+(?:\\s+\\p{L}+){0,8}?,\\s*(?:the\\s+)?(?:lord(?:\\s+god)?|god|jesus)\\s+(?!said)\\p{Ll}+ed(?![\\p{L}])");
-    private static final Pattern SUBJ_GROUP = Pattern.compile("(?i)^(?:many(?:\\s+(?:more|of))?|they|all\\s+the\\s+(?:people|city|men)|the\\s+(?:people|multitude|men|crowd))(?![\\p{L}])");
+    private static final Pattern SUBJ_GROUP = Pattern.compile("(?i)^(?:many(?:\\s+(?:more|of))?|some(?:\\s+of\\s+them)?|they|all\\s+the\\s+(?:people|city|men)|the\\s+(?:people|multitude|men|crowd))(?![\\p{L}])");
     private static final Pattern SUBJ_NOUN = Pattern.compile("(?i)^(?:the|a|his|her|their|this|that|one\\s+of\\s+the)\\s+(?:\\p{L}+\\s+)?(woman|man|disciples|servant|king|queen|angel|centurion|nobleman|ruler|lawyer|maid|damsel|mother|priest|prophet|messenger|governor|captain|watchman)(\\s+of\\s+(?:the\\s+)?(?:lord|god))?(?![\\p{L}])");
     /** A name and then what the person did ("Simeon blessed them", "Zipporah took"): group 2 when a deed follows. */
     private static final Pattern VERB_NAME = Pattern.compile("^\\p{Ll}+(?:eth|ed)\\s+(\\p{Lu}\\p{Ll}+)(?![\\p{L}])");
@@ -657,10 +677,23 @@ final class BibleCast {
     private static final Pattern HIS_DISCIPLES = Pattern.compile("(?i)(?:unto|to|sa)\\s+(?:his|kaniyang)\\s+(?:mga\\s+)?(?:disciples|alagad)(?![\\p{L}])");
     /** "But when Paul perceived …, he cried out": the "he" is the one the "when" is about. */
     private static final Pattern WHEN_CLAUSE = Pattern.compile("(?i)^\\s*(?:(?:and|but|then|now|so)\\s+)?(?:when|as\\s+soon\\s+as|after)\\s+\\p{Lu}\\p{Ll}+\\s+\\p{Ll}+[^.!?]*,\\s*(?:he|she)\\s+[^,.!?]*$");
+    private static final Pattern TL_ACTOR = Pattern.compile("(?<![\\p{L}])(ni|ng|si)\\s+((?:anghel\\s+ng\\s+)?(?:Panginoong\\s+Dios|Panginoon|Dios|babae|lalake|lalaki|hari|bata|matanda|anghel|\\p{Lu}\\p{Ll}+))(?![\\p{L}])");
+    private static final java.util.Set<String> TL_OWNED = new java.util.HashSet<>(java.util.Arrays.asList(
+            "anak", "mga", "galit", "salita", "tinig", "kamay", "harap", "bahay", "lupain", "bayan", "ama", "ina", "asawa", "kapatid", "lingkod",
+            "alipin", "hari", "tagapangasiwa", "pangalan", "bibig", "mukha", "kaharian", "templo", "kaban", "kautusan", "espiritu", "kaluwalhatian",
+            "tipan", "anghel", "propeta", "bundok", "araw", "buhay", "paningin", "puso", "loob", "kawan", "kamatayan", "libingan", "lungsod", "bayang"));
+    private static final java.util.Set<String> TL_NOUNS = new java.util.HashSet<>(java.util.Arrays.asList("babae", "lalake", "lalaki", "hari", "bata", "matanda"));
+    private static final Pattern MOTION = Pattern.compile("(?i)(?<![\\p{L}])(?:ran|came|went|tumakbo|lumapit|naparoon|pumaroon|dumating)(?![\\p{L}])");
+    private static final Pattern TL_PRON_SAID = Pattern.compile("(?i)(?<![\\p{L}])(?:kaniyang\\s+sinabi|sinabi\\s+niya|at\\s+nagsabi|at\\s+sinabi)(?![\\p{L}])");
+    private static final java.util.Set<String> GROUPS = new java.util.HashSet<>(java.util.Arrays.asList("people", "disciples", "pharisees", "scribes", "multitude", "karamihan", "mga alagad", "mga fariseo", "mga eskriba", "bayan"));
+    private static final Pattern FATHER_NAME = Pattern.compile("(\\p{Lu}\\p{Ll}+)\\s+his\\s+father(?![\\p{L}])|(?<![\\p{L}])his\\s+father\\s+(\\p{Lu}\\p{Ll}+)|(?<![\\p{L}])si\\s+(\\p{Lu}\\p{Ll}+)\\s+na\\s+kaniyang\\s+ama(?![\\p{L}])");
+    /** God or Jesus is the one who speaks: "Jesus said", "said the Lord", "the Lord answered". */
+    private static final Pattern DIVINE_SAYS = Pattern.compile("(?i)(?:jesus|lord|god|panginoon|dios|hesus)\\s+(?:\\p{L}+\\s+)?(?:said|saith|answered|spake|sinabi|sumagot)(?![\\p{L}])|(?:said|saith|answered|spake|sinabi|sumagot)\\s+(?:\\p{L}+\\s+)?(?:the\\s+lord|jesus|god|ng\\s+panginoon|ni\\s+jesus|ng\\s+dios)(?![\\p{L}])");
+    private static final Pattern THEY_ANY = Pattern.compile("(?i)(?<![\\p{L}])(?:they|sila|nila|kanilang)(?![\\p{L}])");
     private static final Pattern TO_PRONOUN = Pattern.compile("(?i)(?<![\\p{L}])(?:unto|to|sa)\\s+(?:him|her|them|kaniya|kanila)(?![\\p{L}])");
-    private static final Pattern MOREOVER = Pattern.compile("(?i)(?<![\\p{L}])(?:moreover|furthermore|bukod\\s+dito)(?![\\p{L}])|(?:said|spake|sinabi)\\s+(?:moreover|again|also|pa)(?![\\p{L}])");
+    private static final Pattern MOREOVER = Pattern.compile("(?i)(?<![\\p{L}])(?:moreover|furthermore|bukod\\s+dito)(?![\\p{L}])|(?:said|spake|sinabi)\\s+(?:moreover|again|also|pa)(?![\\p{L}])|(?<![\\p{L}])(?:he|she)\\s+(?:said|saith|spake)\\s+(?:unto|to)\\s+(?:him|her|them)\\s+(?:again\\s+)?(?:again|the\\s+(?:second|third)\\s+time)(?![\\p{L}])");
     /** "the Lord called Samuel: and he answered", "God met Balaam: and he said": the one met or called is the one who speaks. */
-    private static final Pattern CALLED_THEN = Pattern.compile("(?<![\\p{L}])(?<!(?:to|unto|in|at|from|of|into|upon|by|with|sa|kay)\\s)(?:\\p{Ll}+\\s+)(?:unto\\s+|si\\s+)?(\\p{Lu}\\p{Ll}+)\\s*[:;]\\s*(?:and|at)\\s+(?:he|she|siya)\\s*$");
+    private static final Pattern CALLED_THEN = Pattern.compile("(?<![\\p{L}])(?<!(?:to|unto|in|at|from|of|into|upon|by|with|sa|kay)\\s)(?:[\\p{L}']+\\s+)(?:unto\\s+|si\\s+)?(\\p{Lu}\\p{Ll}+)\\s*[:;]\\s*(?:and|at)\\s+(?:he|she|siya|siya'y|kaniyang)\\s*$");
     private static final Pattern KIN_TO = Pattern.compile("(?i)(?:his|her|their|kaniyang|kanilang)\\s+(?:son|sons|father|mother|brother|brethren|daughter|wife|husband|anak|ama|ina|kapatid|asawa)\\s*$");
     private static final Pattern CALLED = Pattern.compile("(?<![\\p{L}])(?<!(?:place|city|land|mount|mountain|field|river|valley|pool|gate|is|was|be|which|that|na)\\s)(?:called|calleth|tinawag)\\s+(?:unto\\s+|si\\s+)?(\\p{Lu}\\p{Ll}+)");
     private static final Pattern TO_NAME = Pattern.compile("(?<![\\p{L}])(?:unto|to|kay)\\s+\\p{Lu}\\p{Ll}+");
@@ -709,7 +742,7 @@ final class BibleCast {
     private static final Pattern PARABLE_WORD = Pattern.compile("(?i)(?<![\\p{L}])(?:parable|parables|talinghaga)(?![\\p{L}])");
     private static final Pattern SI_NAME = Pattern.compile("^(?:At\\s+|Nguni't\\s+|Datapuwa't\\s+|Kaya't\\s+)?[Ss]i\\s+(\\p{Lu}\\p{Ll}[\\p{L}]+)(?![\\p{L}])(?!\\s+ay\\s+(?:sinabihan|tinanong))");
     private static final Pattern NOUN_SAID = Pattern.compile("(?i)(?<![\\p{L}])(?:the\\s+(woman|man|father|mother|son|servant|king|queen|centurion|young\\s+man|blind\\s+man|lawyer|ruler|angel|people|multitude|disciples|pharisees|scribes|governor|high\\s+priest|chief\\s+priests|captain|chief\\s+captain|elders|soldiers|officers|keeper\\s+of\\s+the\\s+prison|nobleman|damsel|maid|priest|prophet|messenger|watchman|steward)\\s+(?:said|saith|answered|asked|replied|cried)"
-            + "|(?:sinabi|sumagot|nagtanong|wika|sabi)\\s+(?:nga\\s+|naman\\s+|sa\\s+kaniya\\s+|sa\\s+kanila\\s+)*ng\\s+(babae|lalake|lalaki|ama|ina|anak|alipin|hari|reyna|senturion|anghel|bayan|karamihan|mga\\s+alagad|mga\\s+fariseo|mga\\s+eskriba|gobernador|dakilang\\s+saserdote|mga\\s+pangulong\\s+saserdote|mga\\s+kawal|propeta|saserdote))(?![\\p{L}])");
+            + "|(?:sinabi|sumagot|nagtanong|wika|sabi)\\s+(?:nga\\s+|naman\\s+|sa\\s+kaniya\\s+|sa\\s+kanila\\s+)*ng\\s+(babae|lalake|lalaki|ama|ina|anak|alipin|hari|reyna|senturion|anghel|bayan|karamihan|mga\\s+alagad|mga\\s+fariseo|mga\\s+eskriba|gobernador|dakilang\\s+saserdote|mga\\s+pangulong\\s+saserdote|mga\\s+kawal|propeta|saserdote|mga\\s+babae|mga\\s+lalake|mga\\s+tao))(?![\\p{L}])");
 
     /** "said unto the woman,", "said to his father,": the one spoken to, whoever it is, is not the one who speaks. */
     private static final Pattern TO_SOMEONE = Pattern.compile("(?i)(?<![\\p{L}])(?:unto|to)\\s+(?:the\\s+|his\\s+|her\\s+|their\\s+|a\\s+|one\\s+of\\s+the\\s+)?[\\p{L}'\u2019]+(?:\\s+[\\p{L}'\u2019]+)?(?=\\s*[,:])");
@@ -747,6 +780,7 @@ final class BibleCast {
         }
         String spokenTo; // who the last words were said to, when that is told
         String speechNow = ""; // the words whose speaker is being looked for
+        String lastActor; // who the last verse of story (no one speaking in it) told of
         boolean lastToPronoun; // the last words were said "unto him" / "unto her": the one spoken to will answer
         String mentioned; // "jesus" or "father" when the verses have spoken of him lately
         boolean gospelSeen; // the verses read so far are about Jesus and his disciples: "the Lord" is Jesus
@@ -778,7 +812,8 @@ final class BibleCast {
                 nearIntro = ad.replaceAll(" ");
             }
             // The one spoken to is likely the one who answers next, when only "he said" brings the answer in.
-            String to = ownFather ? "a father" : toWhom;
+            // "said to his father,": the father the passage names ("Isaac his father"), else a father of his own.
+            String to = ownFather ? fatherNamed() : toWhom;
             Matcher ts = TO_WHOM.matcher(nearIntro);
             while (ts.find() && to == null) {
                 String w = ts.group(1), lw = w.toLowerCase(Locale.ROOT);
@@ -841,6 +876,7 @@ final class BibleCast {
                     key = (ns.group(1) != null ? ns.group(1) : ns.group(2)).toLowerCase(Locale.ROOT);
                     if (key.equals("father") || key.equals("ama")) key = "a father"; // (not the Father)
                     key = key.replaceAll("\\s+", " ");
+                    if (key.equals("mga babae") || key.equals("mga lalake") || key.equals("mga tao")) key = "people";
                     // In the Gospels the governor is Pilate: one man, one voice.
                     if ((key.equals("governor") || key.equals("gobernador")) && (keys.contains("pilate") || keys.contains("pilato") || gospelSeen)) key = keys.contains("pilato") ? "pilato" : "pilate";
                     if (FEMALE_CUE.matcher(key).find()) femaleKeys.add(key);
@@ -868,12 +904,19 @@ final class BibleCast {
                     spokenTo = null;
                 }
                 String nearTail = nearIntro.length() > 45 ? nearIntro.substring(nearIntro.length() - 45) : nearIntro;
+                // "Then said the king unto her,", "Then said his servants unto him,", "cried a wise woman": named after the word of saying.
+                Matcher inv = SAID_NOUN.matcher(rawIntro.length() > 70 ? rawIntro.substring(rawIntro.length() - 70) : rawIntro);
+                if (key == null && inv.find()) {
+                    String n = inv.group(1).toLowerCase(Locale.ROOT).replaceAll("\\s+", " ");
+                    key = n.matches("jews|servants|men|elders|soldiers|people|multitude|priests|chief priests|brethren|women") ? "people" : n.equals("governor") && gospelSeen ? "pilate" : n;
+                    if (n.matches("woman|queen|maid|damsel")) femaleKeys.add(key);
+                }
                 // "and prayed, saying, O my Father,": in the Gospels only Jesus prays so.
                 if (key == null && gospelSeen && PRAYS_FATHER.matcher(speechNow).find() && !"jesus".equals(toWhom)) key = "jesus";
                 // "And he said to his disciples,": in the Gospels, Jesus.
                 if (key == null && gospelSeen && HIS_DISCIPLES.matcher(rawIntro).find() && !"jesus".equals(toWhom)) key = "jesus";
                 // "Moreover he said,", "And he said moreover,", "And God said moreover": the same one goes on.
-                if (key == null && lastKey != null && MOREOVER.matcher(nearTail).find()) key = lastKey;
+                if (key == null && lastKey != null && (MOREOVER.matcher(nearTail).find() || MOREOVER.matcher(rawIntro.length() > 60 ? rawIntro.substring(rawIntro.length() - 60) : rawIntro).find())) key = lastKey;
                 // "And they said unto him,": the people there, in one voice of their own; not whoever spoke last.
                 if (key == null && THEY.matcher(nearTail).find() && !jesusTeaching) key = "people";
                 // "And she said,": a woman, the one spoken to or the last woman to speak.
@@ -889,9 +932,12 @@ final class BibleCast {
                 }
                 // "Then Zipporah took a sharp stone, …, and said,", "The woman then left her waterpot, … and saith to the men,": the one
                 // the sentence is about says it, though named far back.
-                if (key == null && (!PRON_SUBJ.matcher(nearTail).find() || WHEN_CLAUSE.matcher(lead(before, before.length(), 200)).find())) {
+                boolean tlSaid = TL_PRON_SAID.matcher(nearTail).find();
+                if (key == null && (!PRON_SUBJ.matcher(nearTail).find() || WHEN_CLAUSE.matcher(lead(before, before.length(), 200)).find() || tlSaid)) {
                     String src = before.replaceAll("(?i)^\\W*(?:(?:and|then|but|so|now|at)\\W*)?$", "").isEmpty() ? rawIntro : before;
                     String sk = subjectKey(src);
+                    // (The verse begins "At sinabi,", "And said,": who the verse before told of.)
+                    if (sk == null && src == rawIntro && lastActor != null && BARE_SAID.matcher(lead(rawIntro, rawIntro.length(), 60)).find()) sk = lastActor;
                     if (sk != null && !sk.equals(toWhom)) key = sk;
                 }
                 // A parable he tells, or words only he says, are his whoever was spoken to last.
@@ -907,6 +953,8 @@ final class BibleCast {
                 // "…a great voice, as of a trumpet, | saying, What thou seest, write in a book": words only he says, though nobody is named.
                 if (key == null && hintStrong && !"jesus".equals(toWhom)) key = "jesus";
                 final boolean oneMan = HE.matcher(nearTail).find(); // "he": one person, not a crowd
+                // "And they asked him, … | And he answered and told them,": in the Gospels the one they ask is Jesus.
+                if (key == null && oneMan && gospelSeen && "jesus".equals(mentioned) && lastKey != null && GROUPS.contains(lastKey) && !"jesus".equals(toWhom)) key = "jesus";
                 for (int k = history.size() - 2; k >= 0 && key == null; k--) {
                     if (oneMan && ("people".equals(history.get(k)) || "disciples".equals(history.get(k)))) continue;
                     // (The tempter or an unclean spirit answers again only when the verse tells of it: not "he saith unto the ruler".)
@@ -922,7 +970,17 @@ final class BibleCast {
                 // "And Jehu … said unto the worshippers of Baal, … | And he said unto him that was over the vestry,": nobody else has
                 // spoken and nobody was spoken to by name, so it is the same one going on.
                 if (key == null && lastKey != null && !lastToPronoun && !lastKey.equals(toWhom) && !"people".equals(lastKey) && !"villain".equals(lastKey)
-                        && !lastKey.startsWith("#") && history.stream().distinct().count() == 1 && !gospelSeen) key = lastKey;
+                        && !lastKey.startsWith("#") && history.stream().filter(h -> !GROUPS.contains(h)).distinct().count() == 1 && !gospelSeen) key = lastKey;
+                // ("…nguni't si Ruth ay yumakap sa kaniya. At sinabi niya,": only Naomi has spoken yet, the others all together: Naomi again.)
+                if (key == null && lastKey != null && GROUPS.contains(lastKey) && !gospelSeen && !lastToPronoun) {
+                    String one = null;
+                    boolean many = false;
+                    for (String h : history) if (!GROUPS.contains(h)) { if (one != null && !one.equals(h)) many = true; one = h; }
+                    if (one != null && !many && !one.equals(toWhom) && !"father".equals(one) && !"villain".equals(one) && !one.startsWith("#")) key = one;
+                }
+                // "And he ran unto Eli, and said,": the one who just spoke goes to somebody else and speaks again.
+                if (key == null && to != null && lastKey != null && !lastKey.equals(to) && !"father".equals(lastKey) && !"jesus".equals(lastKey)
+                        && !"people".equals(lastKey) && MOTION.matcher(nearTail).find()) key = lastKey;
                 // "Who art thou, Lord?", "O my Lord, send": said to God or to Jesus, so not by him.
                 if (key != null && ("father".equals(key) || "jesus".equals(key)) && !jesusTeaching && ADDRESS_LORD.matcher(speechNow).find()) {
                     key = null;
@@ -942,6 +1000,15 @@ final class BibleCast {
                             && gospelSeen) unsureKeys.add(key); // (somebody who speaks to the Lord, or a man of God, is a person)
                 }
             }
+            // "when they heard that Jesus passed by, cried out, saying, Have mercy on us, O Lord": Jesus is spoken of and spoken to,
+            // the ones crying out are the blind men. Words said to the Lord are never his own.
+            if (("jesus".equals(key) || "father".equals(key)) && ADDRESS_LORD.matcher(speechNow).find() && !DIVINE_SAYS.matcher(rawIntro).find()) {
+                String lk = history.isEmpty() ? null : history.get(history.size() - 1);
+                key = THEY_ANY.matcher(lead(rawIntro, rawIntro.length(), 90)).find() ? "people"
+                        : spokenTo != null && !"jesus".equals(spokenTo) && !"father".equals(spokenTo) ? spokenTo
+                        : lk != null && !"jesus".equals(lk) && !"father".equals(lk) && !"villain".equals(lk) ? lk : "#" + (++anon);
+            }
+            lastActor = null;
             spokenTo = to != null && !to.equals(key) ? to : null;
             lastToPronoun = TO_PRONOUN.matcher(rawIntro).find();
             history.add(key);
@@ -985,6 +1052,46 @@ final class BibleCast {
             return Pattern.compile("\\p{Ll}\\s+" + Pattern.quote(cap) + "(?![\\p{L}])").matcher(passage).find();
         }
 
+        /**
+         * Who does what a Tagalog sentence tells: "tinawag siya ng Dios" is God, "kinuha ni Sephora" Sephora, "nagsalita si Isaac kay
+         * Abraham" Isaac, "tinawag ni Eli si Samuel" Eli (the one marked "ni" or "ng" acts; "si" when nobody is). "anak ni Nun" is
+         * whose son, and "kay Abraham", "sa Egipto" are who or where to.
+         */
+        String tlActor(String t) {
+            Matcher a = TL_ACTOR.matcher(t);
+            String si = null;
+            while (a.find()) {
+                String mark = a.group(1).toLowerCase(Locale.ROOT), who = a.group(2);
+                String prev = t.substring(0, a.start()).trim();
+                prev = prev.substring(prev.lastIndexOf(' ') + 1).toLowerCase(Locale.ROOT);
+                if (!mark.equals("si") && TL_OWNED.contains(prev)) continue; // "galit ng Panginoon", "anak ni Nun"
+                String lw = who.toLowerCase(Locale.ROOT);
+                String k;
+                if (lw.startsWith("anghel")) k = lw.contains("panginoon") || lw.contains("dios") ? "father" : "angel";
+                else if (FATHER.matcher(lw).find()) k = lordIsJesus(who) ? "jesus" : "father";
+                else if (JESUS.matcher(lw).matches()) k = "jesus";
+                else if (TL_NOUNS.contains(lw)) k = lw;
+                else k = nameLike(lw) ? lw : null;
+                if (k == null) continue;
+                if (mark.equals("si")) {
+                    if (si == null) si = k;
+                    continue;
+                }
+                return si != null && t.indexOf(" si ") < a.start() && t.indexOf(" si ") >= 0 && !Pattern.compile("\\bay\\s+\\p{L}+\\s+si\\s").matcher(t).find() ? si : k;
+            }
+            return si;
+        }
+
+        /** "Isaac his father", "his father Isaac", "si Isaac na kaniyang ama": that name; else "a father". */
+        String fatherNamed() {
+            Matcher f = FATHER_NAME.matcher(passage);
+            while (f.find()) {
+                String w = (f.group(1) != null ? f.group(1) : f.group(2) != null ? f.group(2) : f.group(3)).toLowerCase(Locale.ROOT);
+                if (nameLike(w)) return w;
+            }
+            return "a father";
+        }
+
         boolean womanKey(String k) {
             return k != null && (femaleKeys.contains(k) || TextPrep.WOMEN.contains(k) || BibleCharacters.isWoman(k) || FEMALE_CUE.matcher(k).matches());
         }
@@ -996,6 +1103,8 @@ final class BibleCast {
             int cut = 0;
             while (e.find()) cut = e.end();
             t = SENT_LEAD.matcher(t.substring(cut).trim()).replaceFirst("");
+            String ta = tlActor(t);
+            if (ta != null) return ta;
             // "na ang Panginoon ay nagsalita kay Josue": who "ay nagsalita".
             Matcher ay = AY_SPOKE.matcher(t);
             if (ay.find()) {

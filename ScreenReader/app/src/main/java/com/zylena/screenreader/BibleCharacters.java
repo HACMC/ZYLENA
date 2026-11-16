@@ -23,7 +23,7 @@ final class BibleCharacters {
             + "betsabe abishag jezebel jezabel athaliah atalia esther ester vashti vasti zeresh huldah hulda elisabeth elizabeth elisabet "
             + "mary maria martha marta anna ana joanna juana salome herodias sapphira safira rhoda rode priscilla priscila lydia dorcas "
             + "tabitha tabita bernice berenice drusilla drusila candace eunice lois claudia phebe tryphena persis hephzibah tirzah "
-            + "milcah bilhah zilpah keturah asenath shiphrah puah jochebed elisheba gomer abital maacah naamah serah hodesh").split(" ")));
+            + "milcah bilhah zilpah keturah asenath shiphrah puah jochebed elisheba gomer abital maacah naamah serah hodesh sephora").split(" ")));
 
     /** Tagalog (Ang Biblia) and other spellings to the English name: one person, one voice. */
     private static final Map<String, String> SAME = new HashMap<>();
@@ -41,7 +41,8 @@ final class BibleCharacters {
                 "dalila", "delilah", "rut", "ruth", "noemi", "naomi", "mical", "michal", "betsabe", "bathsheba", "jezabel", "jezebel",
                 "atalia", "athaliah", "ester", "esther", "vasti", "vashti", "elisabet", "elisabeth", "elizabeth", "elisabeth", "maria", "mary",
                 "marta", "martha", "safira", "sapphira", "rode", "rhoda", "priscila", "priscilla", "tabita", "tabitha", "berenice", "bernice",
-                "drusila", "drusilla", "hulda", "huldah", "esau", "esau"};
+                "drusila", "drusilla", "hulda", "huldah", "esau", "esau", "sephora", "zipporah", "saulo", "saul", "adan", "adam", "elias", "elijah",
+                "jacob", "jacob", "isaac", "isaac", "abraham", "abraham", "samuel", "samuel", "eli", "eli", "aaron", "aaron", "david", "david"};
         for (int i = 0; i + 1 < p.length; i += 2) SAME.put(p[i], p[i + 1]);
     }
 
