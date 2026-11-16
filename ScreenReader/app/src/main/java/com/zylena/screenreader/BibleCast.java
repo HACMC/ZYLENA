@@ -208,7 +208,6 @@ final class BibleCast {
             if (EVIL_SPIRIT.matcher(v).find()) st.evilSeen = true;
             if (JESUS.matcher(v).find() || GOSPEL.matcher(v).find()) st.gospelSeen = true;
             st.hintStrong = JESUS_ONLY.matcher(v).find();
-            st.hintAlpha = ALPHA_OMEGA.matcher(v).find() && !THRONE.matcher(v).find();
             st.hintJesus = PARABLE_TOLD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
             final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
@@ -531,8 +530,6 @@ final class BibleCast {
             + "behold,?\\s+i\\s+come\\s+quickly|narito,?\\s+ako'?y\\s+pumaparito\\s+na\\s+madali");
     private static final Pattern SAITH_TAG = Pattern.compile("(?i)^\\W*(?:saith|sayeth|says|sabi|ang\\s+sabi)(?![\\p{L}])");
     private static final Pattern HEAD_FIRST = Pattern.compile("(?i)^\\W*(?:for\\s+|and\\s+|at\\s+|sapagka't\\s+|behold,?\\s+)?(?:i|ako|ako'y|my|aking|ang\\s+aking)(?![\\p{L}])");
-    private static final Pattern ALPHA_OMEGA = Pattern.compile("(?i)alpha\\s+(?:and|at)\\s+(?:ang\\s+)?omega");
-    private static final Pattern THRONE = Pattern.compile("(?i)throne|trono");
     private static final Pattern SEER = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+|then\\s+|nang\\s+)?(?:i\\s+(?:saw|turned|heard|looked|fell|beheld|was|wept|took)|ako'?y\\s+(?:lumingon|tumingin|nakakita|nakarinig|nahulog|napasa|umiyak|kumuha)|nakita\\s+ko|narinig\\s+ko|nang\\s+ako'?y\\s+\\p{L}+)(?![\\p{L}])");
     private static final Pattern SECOND = Pattern.compile("(?i)(?<![\\p{L}'])(?:thou|thee|thy|you|ye|your|ikaw|ka|mo|iyo|iyong|inyo|inyong|kayo)(?![\\p{L}])");
     private static final Pattern EXPLAINS = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:these|those)\\s+(?:are|be)\\s+they|^\\W*(?:and\\s+|at\\s+)?(?:ito|ang\\s+mga\\s+ito|ang\\s+mga\\s+nasa)\\s+(?:ang|ay|yaong)\\s+");
@@ -571,7 +568,6 @@ final class BibleCast {
         boolean gospelSeen; // the verses read so far are about Jesus and his disciples: "the Lord" is Jesus
         boolean evilSeen;
         boolean jesusTeaching; // Jesus is in the middle of a long teaching or a parable: "And he said," goes on with the same one
-        boolean hintAlpha; // "I am Alpha and Omega" (not from the throne): Christ's own title
         boolean hintStrong; // the words are ones only Jesus says ("write in a book and send it to the seven churches")
         boolean hintJesus; // the verse being read tells a parable or says what only he says: an unnamed "he" is Jesus
 
@@ -621,7 +617,7 @@ final class BibleCast {
                 key = "spirit";
             } else if (FATHER.matcher(nearIntro).find()) {
                 // In the Gospels and Acts "the Lord" (not "the LORD", not "Lord God") is Jesus.
-                key = lordIsJesus(nearIntro) || hintAlpha ? "jesus" : "father";
+                key = lordIsJesus(nearIntro) ? "jesus" : "father";
             } else if (subjectOf(VILLAIN, nearIntro)) {
                 key = "villain";
             } else {

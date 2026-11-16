@@ -235,15 +235,15 @@ public class TextTests {
             check("Revelation 1:10-11 is Jesus (English)", re != null && re.codes[0].equals("cd1"), re == null ? "none" : re.codes[0]);
             BibleCast.forget();
         }
-        // Revelation 1:8: "I am Alpha and Omega" is Christ's, and the words before "saith the Lord" are said, not told.
+        // Revelation 1:8: "I am Alpha and Omega" is the Lord God's (as the verse says), and the words before "saith the Lord" are said, not told.
         {
             BibleCast.forget();
             BibleCast.Result ao = BibleCast.annotate("8 I am Alpha and Omega, the beginning and the ending, saith the Lord, which is, and which was, and which is to come, the Almighty.");
-            check("Alpha and Omega: both parts are Jesus's", ao != null && ao.codes.length == 2 && ao.codes[0].equals("cd1") && ao.codes[1].equals("cd1"), ao == null ? "none" : String.join(" ", ao.codes));
+            check("Alpha and Omega: both parts are said by the Lord God", ao != null && ao.codes.length == 2 && ao.codes[0].equals("cd0") && ao.codes[1].equals("cd0"), ao == null ? "none" : String.join(" ", ao.codes));
             BibleCast.Result ft = BibleCast.annotate("11 For I know the thoughts that I think toward you, saith the LORD, thoughts of peace, and not of evil.");
             check("'saith the LORD' in the middle: both parts are God's", ft != null && ft.codes.length == 2 && ft.codes[0].equals("cd0") && ft.codes[1].equals("cd0"), ft == null ? "none" : String.join(" ", ft.codes));
             BibleCast.Result tn = BibleCast.annotate("8 Ako ang Alpha at ang Omega, sabi ng Panginoong Dios, ngayon at nang nakaraan at sa darating, ang Makapangyarihan sa lahat.");
-            check("Alpha at Omega (Tagalog): both parts are Jesus's", tn != null && tn.codes.length == 2 && tn.codes[0].equals("cd1"), tn == null ? "none" : String.join(" ", tn.codes));
+            check("Alpha at Omega (Tagalog): both parts are said by the Lord God", tn != null && tn.codes.length == 2 && tn.codes[0].equals("cd0") && tn.codes[1].equals("cd0"), tn == null ? "none" : String.join(" ", tn.codes));
             BibleCast.forget();
         }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
