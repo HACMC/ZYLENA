@@ -52,6 +52,12 @@ final class BibleCharacters {
         return s != null ? s : k;
     }
 
+    /** A Bible person this list knows by name (Moses, Pedro, Sarah). */
+    static boolean known(String key) {
+        String k = key == null ? "" : key.toLowerCase(Locale.ROOT).trim();
+        return SAME.containsKey(k) || SAME.containsValue(k) || WOMEN.contains(k);
+    }
+
     static boolean isWoman(String key) {
         return WOMEN.contains(canonical(key));
     }

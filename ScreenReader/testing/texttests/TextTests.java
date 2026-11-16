@@ -354,6 +354,28 @@ public class TextTests {
             check("built-in: Gentil", g.contains("hentil"), g);
         }
 
+        // Who speaks in a Bible dialogue: a name called and answered in one verse, "Moreover he said", the governor.
+        {
+            BibleCast.forget();
+            BibleCast.Result g22 = BibleCast.annotateVerses(Arrays.asList(
+                    "And it came to pass after these things, that God did tempt Abraham, and said unto him, Abraham: and he said, Behold, here I am.",
+                    "And he said, Take now thy son, thine only son Isaac, whom thou lovest, and get thee into the land of Moriah."), '\u201C', '\u201D', false);
+            String c22 = g22 == null ? "none" : Arrays.toString(g22.codes);
+            check("Abraham answers God within the verse", g22 != null && g22.codes.length == 3 && g22.codes[0].startsWith("cd0") && !g22.codes[1].startsWith("cd") && g22.codes[2].startsWith("cd0"), c22);
+            BibleCast.forget();
+            BibleCast.Result ex3 = BibleCast.annotateVerses(Arrays.asList(
+                    "And when the Lord saw that he turned aside to see, God called unto him out of the midst of the bush, and said, Moses, Moses. And he said, Here am I.",
+                    "And he said, Draw not nigh hither: put off thy shoes from off thy feet, for the place whereon thou standest is holy ground.",
+                    "Moreover he said, I am the God of thy father, the God of Abraham, the God of Isaac, and the God of Jacob."), '\u201C', '\u201D', false);
+            String cx = ex3 == null ? "none" : Arrays.toString(ex3.codes);
+            check("God and Moses at the bush", ex3 != null && ex3.codes.length == 4 && ex3.codes[0].startsWith("cd0") && !ex3.codes[1].startsWith("cd") && ex3.codes[2].startsWith("cd0") && ex3.codes[3].startsWith("cd0"), cx);
+            BibleCast.forget();
+            BibleCast.Result gv = BibleCast.annotateVerses(Arrays.asList(
+                    "Pilate saith unto them, What shall I do then with Jesus which is called Christ? They all say unto him, Let him be crucified.",
+                    "And the governor said, Why, what evil hath he done? But they cried out the more, saying, Let him be crucified."), '\u201C', '\u201D', false);
+            String cg = gv == null ? "none" : Arrays.toString(gv.codes);
+            check("the governor is Pilate, the crowd is not", gv != null && gv.codes.length == 4 && gv.codes[0].equals(gv.codes[2]) && !gv.codes[1].equals(gv.codes[0]) && !gv.codes[2].startsWith("cd"), cg);
+        }
         check("hapon (afternoon) is not a foreigner", Persona.ofAccent("Dumating si Mia kaninang hapon.").isEmpty(), Persona.ofAccent("Dumating si Mia kaninang hapon."));
         check("isang Hapones is a foreigner", "us".equals(Persona.ofAccent("Si Kenji ay isang Hapones.")), Persona.ofAccent("Si Kenji ay isang Hapones."));
 
