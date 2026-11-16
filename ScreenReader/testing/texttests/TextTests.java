@@ -405,6 +405,91 @@ public class TextTests {
             String cr = rv == null ? "none" : Arrays.toString(rv.codes);
             check("Revelation 2 is Jesus", rv != null && rv.codes.length >= 1 && java.util.Arrays.stream(rv.codes).allMatch(c -> c.startsWith("cd1")), cr);
         }
+        // Checked on the whole Bible: the same command said again is the same speaker's, the tempter's third offer, devils that cry out,
+        // the Lord in Paul's own telling, and an angel in a dream.
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 2;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "And the Lord said furthermore unto him, Put now thine hand into thy bosom. And he put his hand into his bosom: and when he took it out, behold, his hand was leprous as snow.",
+                    "And he said, Put thine hand into thy bosom again. And he put his hand into his bosom again; and plucked it out of his bosom, and, behold, it was turned again as his other flesh."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Exodus 4:6-7: 'Put thine hand into thy bosom again' is God", wb != null && wb.codes.length == 2 && wb.codes[0].startsWith("cd0") && wb.codes[1].startsWith("cd0"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 2;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "At sinabi sa kaniya ng Panginoon, Ano iyang nasa iyong kamay? At kaniyang sinabi, Isang tungkod.",
+                    "At kaniyang sinabi, Ihagis mo sa lupa. At kaniyang inihagis sa lupa, at naging isang ahas; at si Moises ay tumakas sa harap ng ahas."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Exodus 4:2-3 (Tagalog): 'Ihagis mo sa lupa' is God, after Moses's short answer", wb != null && wb.codes.length == 3 && wb.codes[0].startsWith("cd0") && !wb.codes[1].startsWith("cd") && wb.codes[2].startsWith("cd0"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 42;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "And the devil, taking him up into an high mountain, shewed unto him all the kingdoms of the world in a moment of time.",
+                    "And the devil said unto him, All this power will I give thee, and the glory of them: for that is delivered unto me; and to whomsoever I will I give it.",
+                    "If thou therefore wilt worship me, all shall be thine.",
+                    "And Jesus answered and said unto him, Get thee behind me, Satan: for it is written, Thou shalt worship the Lord thy God, and him only shalt thou serve.",
+                    "And he brought him to Jerusalem, and set him on a pinnacle of the temple, and said unto him, If thou be the Son of God, cast thyself down from hence:"), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Luke 4:5-9: the tempter's last 'If thou be the Son of God' is his", wb != null && wb.codes.length >= 3 && wb.codes[wb.codes.length - 1].contains("^villain"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 42;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "Now when the sun was setting, all they that had any sick with divers diseases brought them unto him; and he laid his hands on every one of them, and healed them.",
+                    "And devils also came out of many, crying out, and saying, Thou art Christ the Son of God. And he rebuking them suffered them not to speak: for they knew that he was Christ."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Luke 4:41: the devils that came out say it, not Jesus", wb != null && wb.codes.length == 1 && wb.codes[0].contains("^demon"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 44;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "At sa kaniyang paglalakad, ay nangyari na siya'y malapit sa Damasco: at pagdaka'y nagliwanag sa palibot niya ang isang ilaw mula sa langit:",
+                    "At siya'y nasubasob sa lupa, at nakarinig ng isang tinig na sa kaniya'y nagsasabi, Saulo, Saulo, bakit mo ako pinaguusig?",
+                    "At sinabi niya, Sino ka baga, Panginoon? At sinabi niya, Ako'y si Jesus na iyong pinaguusig:",
+                    "Nguni't magtindig ka, at ikaw ay pumasok sa bayan, at sasalitain sa iyo ang dapat mong gawin."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Acts 9:4-6 (Tagalog): the voice and 'Ako'y si Jesus' are Jesus, Saul's question is not", wb != null && wb.codes.length >= 3 && wb.codes[0].startsWith("cd1") && !wb.codes[1].startsWith("cd") && wb.codes[2].startsWith("cd1"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 44;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "And it came to pass, that, as I made my journey, and was come nigh unto Damascus about noon, suddenly there shone from heaven a great light round about me.",
+                    "And I fell unto the ground, and heard a voice saying unto me, Saul, Saul, why persecutest thou me?",
+                    "And I answered, Who art thou, Lord? And he said unto me, I am Jesus of Nazareth, whom thou persecutest.",
+                    "And they that were with me saw indeed the light, and were afraid; but they heard not the voice of him that spake to me."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Acts 22:7-9: Jesus speaks in Paul's telling, and Paul tells on after it", wb != null && wb.codes.length == 3 && wb.codes[0].startsWith("cd1") && !wb.codes[1].startsWith("cd") && wb.codes[2].startsWith("cd1"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 40;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "Then Herod, when he had privily called the wise men, enquired of them diligently what time the star appeared.",
+                    "And he sent them to Bethlehem, and said, Go and search diligently for the young child; and when ye have found him, bring me word again, that I may come and worship him also.",
+                    "And when they were departed, behold, the angel of the Lord appeareth to Joseph in a dream, saying, Arise, and take the young child and his mother, and flee into Egypt, and be thou there until I bring thee word: for Herod will seek the young child to destroy him."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Matthew 2:7-8,13: Herod and the angel are not Jesus", wb != null && wb.codes.length == 2 && !wb.codes[0].startsWith("cd") && !wb.codes[1].startsWith("cd"), wc);
+        }
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 23;
+            BibleCast.Result wb = BibleCast.annotateVerses(Arrays.asList(
+                    "And this shall be a sign unto thee from the Lord, that the Lord will do this thing that he hath spoken;",
+                    "Behold, I will bring again the shadow of the degrees, which is gone down in the sun dial of Ahaz, ten degrees backward. So the sun returned ten degrees, by which degrees it was gone down.",
+                    "The writing of Hezekiah king of Judah, when he had been sick, and was recovered of his sickness:",
+                    "I said in the cutting off of my days, I shall go to the gates of the grave: I am deprived of the residue of my years.",
+                    "I said, I shall not see the Lord, even the Lord, in the land of the living: I shall behold man no more with the inhabitants of the world."), '\u201C', '\u201D', false);
+            String wc = wb == null ? "none" : Arrays.toString(wb.codes);
+            check("Isaiah 38:8-11: Hezekiah's writing is his own, not God's", wb != null && wb.codes.length >= 2 && !wb.codes[wb.codes.length - 1].startsWith("cd"), wc);
+        }
         // Setting "only God and Satan have voices": everybody else is the storyteller.
         {
             BibleCast.mainOnly = true;
