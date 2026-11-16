@@ -3570,46 +3570,60 @@ public class ReaderService extends AccessibilityService {
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
         f.setBackgroundColor(0x33000000);
         f.setOnClickListener(v -> hideFan());
-        int size = Theme.dp(this, 54), boxW = Theme.dp(this, 84), boxH = size + Theme.dp(this, 22);
-        List<View> boxes = new ArrayList<>();
+        // A short column of labelled rows beside the button (no overlapping circles): small, with text that is easy to read.
+        // The size and the opacity are set in Controls; the words stay solid whatever the opacity.
+        final float scale = Math.max(0.6f, Math.min(1.4f, Prefs.fanScale(this)));
+        final int alpha = Math.round(255 * Math.max(30f, Math.min(100f, Prefs.fanOpacity(this))) / 100f);
+        final int ballSize = Theme.dp(this, Math.round(34 * scale));
+        LinearLayout col = new LinearLayout(this);
+        col.setOrientation(LinearLayout.VERTICAL);
         for (String[] it0 : items) {
             String[] it = it0;
             boolean on = it0[0].equals("translate") && Prefs.translate(this);
             boolean isTr = it0[0].equals("translate");
             if (on) it = new String[]{it0[0], it0[1], translateName().replace("Translate: ", "") + ": ON"};
             else if (isTr) it = new String[]{it0[0], it0[1], "Translate: OFF"};
-            LinearLayout box = new LinearLayout(this);
-            box.setOrientation(LinearLayout.VERTICAL);
-            box.setGravity(Gravity.CENTER_HORIZONTAL);
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            int padH = Theme.dp(this, Math.round(6 * scale)), padV = Theme.dp(this, Math.round(4 * scale));
+            row.setPadding(padH, padV, Theme.dp(this, Math.round(14 * scale)), padV);
+            GradientDrawable pill = new GradientDrawable();
+            pill.setCornerRadius(Theme.dp(this, 40));
+            pill.setColor(0xFF161113);
+            pill.setStroke(Theme.dp(this, 1), on ? 0xFF7BE495 : Theme.LINE_STRONG);
+            pill.setAlpha(alpha);
+            row.setBackground(pill);
             TextView ball = new TextView(this);
             ball.setText(it[1]);
-            ball.setTextSize(22);
+            ball.setTextSize(15 * scale);
             ball.setGravity(Gravity.CENTER);
             ball.setTextColor(0xFF0D0B0C);
             GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
                     on ? new int[]{0xFF7BE495, 0xFF2EAD5B} : isTr ? new int[]{0xFF8A8A8A, 0xFF5E5E5E} : new int[]{0xFFF0D690, 0xFFD6AD55});
             bg.setShape(GradientDrawable.OVAL);
-            if (on) bg.setStroke(Theme.dp(this, 4), 0xFFFFFFFF);
-            if (isTr && !on) ball.setAlpha(0.75f);
+            bg.setAlpha(alpha);
             ball.setBackground(bg);
             ball.setContentDescription(it[2]);
-            box.addView(ball, new LinearLayout.LayoutParams(size, size));
+            row.addView(ball, new LinearLayout.LayoutParams(ballSize, ballSize));
             TextView name = new TextView(this);
             name.setText(it[2]);
-            name.setTextSize(11);
+            name.setTextSize(15 * scale);
             name.setTextColor(0xFFFFFFFF);
-            name.setShadowLayer(4, 0, 1, 0xFF000000);
-            name.setGravity(Gravity.CENTER);
+            name.setTypeface(Theme.sansBold(this));
             name.setMaxLines(1);
-            box.addView(name, new LinearLayout.LayoutParams(boxW, ViewGroup.LayoutParams.WRAP_CONTENT));
+            name.setPadding(Theme.dp(this, Math.round(10 * scale)), 0, 0, 0);
+            row.addView(name, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             final String id = it[0];
-            box.setOnClickListener(v -> {
+            row.setOnClickListener(v -> {
                 hideFan();
                 runShortcut(id);
             });
-            f.addView(box, new android.widget.FrameLayout.LayoutParams(boxW, boxH));
-            boxes.add(box);
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            rp.topMargin = Theme.dp(this, Math.round(5 * scale));
+            col.addView(row, rp);
         }
+        f.addView(col, new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
@@ -3621,7 +3635,7 @@ public class ReaderService extends AccessibilityService {
             return;
         }
         Logs.d(this, "shortcuts opened");
-        // Placed once the window is up, around where the button really is: a half circle towards the screen's middle.
+        // Placed once the window is up: on the side of the button that has room, as high as the button, kept on the screen.
         f.post(() -> {
             if (fan != f || button == null) return;
             int[] o = new int[2], b = new int[2];
@@ -3629,18 +3643,11 @@ public class ReaderService extends AccessibilityService {
             button.getLocationOnScreen(b);
             int cx = b[0] + button.getWidth() / 2 - o[0], cy = b[1] + button.getHeight() / 2 - o[1];
             boolean right = cx > f.getWidth() / 2;
-            int radius = Theme.dp(this, 118);
-            int n = boxes.size();
-            for (int i = 0; i < n; i++) {
-                double a = Math.toRadians(90 + 180.0 * i / Math.max(1, n - 1)); // from above, round the side, to below
-                int x = cx + (int) ((right ? 1 : -1) * radius * Math.cos(a)) - boxW / 2;
-                int y = cy - (int) (radius * Math.sin(a)) - size / 2;
-                x = Math.max(0, Math.min(f.getWidth() - boxW, x));
-                y = Math.max(0, Math.min(f.getHeight() - boxH, y));
-                View box = boxes.get(i);
-                box.setX(x);
-                box.setY(y);
-            }
+            int gap = Theme.dp(this, 8), w = col.getWidth(), h = col.getHeight();
+            int x = right ? cx - button.getWidth() / 2 - gap - w : cx + button.getWidth() / 2 + gap;
+            int y = cy - h / 2;
+            col.setX(Math.max(0, Math.min(f.getWidth() - w, x)));
+            col.setY(Math.max(0, Math.min(f.getHeight() - h, y)));
         });
     }
 

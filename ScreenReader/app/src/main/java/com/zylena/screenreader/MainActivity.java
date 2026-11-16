@@ -675,6 +675,10 @@ public class MainActivity extends Activity {
         Ui.add(g, shakeRow.view);
         fanRow = Ui.nav(this, R.drawable.ic_touch, "Floating button shortcuts", "", this::pickShortcuts);
         Ui.add(g, fanRow.view);
+        Ui.add(g, Ui.slider(this, R.drawable.ic_touch, "Shortcut menu size", 0.6f, 1.4f, 0.1f, Prefs.fanScale(this), "%.1f\u00D7",
+                v -> Prefs.setFanScale(this, v)));
+        Ui.add(g, Ui.slider(this, R.drawable.ic_touch, "Shortcut menu opacity", 30f, 100f, 5f, Prefs.fanOpacity(this), "%.0f%%",
+                v -> Prefs.setFanOpacity(this, v)));
         sleepRow = Ui.nav(this, R.drawable.ic_timer, "Sleep timer", "", this::pickSleepTimer);
         Ui.add(g, sleepRow.view);
         Ui.add(g, flagRow(R.drawable.ic_timer, "Sleep timer finishes the paragraph",

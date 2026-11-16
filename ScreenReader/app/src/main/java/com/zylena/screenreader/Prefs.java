@@ -281,6 +281,23 @@ final class Prefs {
         p.edit().clear().putString("data_month", month).putLong("data_tr", tr).putLong("data_voice", voice).commit();
     }
 
+    /** The shortcut menu that opens from the floating button: its size (a share of the normal, 0.6 to 1.4) and how solid it is (30 to 100 per cent). */
+    static float fanScale(Context c) {
+        return sp(c).getFloat("fan_scale", 0.85f);
+    }
+
+    static void setFanScale(Context c, float v) {
+        sp(c).edit().putFloat("fan_scale", v).apply();
+    }
+
+    static float fanOpacity(Context c) {
+        return sp(c).getFloat("fan_opacity", 90f);
+    }
+
+    static void setFanOpacity(Context c, float v) {
+        sp(c).edit().putFloat("fan_opacity", v).apply();
+    }
+
     /** The floating button's size: 0 small, 1 medium, 2 large, 3 extra large. */
     static int buttonSize(Context c) {
         return sp(c).getInt("btn_size", 0);
