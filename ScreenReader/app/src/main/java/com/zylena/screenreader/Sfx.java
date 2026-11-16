@@ -184,6 +184,14 @@ final class Sfx {
     private static long lastAny;
     private static Handler main;
 
+    private static final java.util.Set<String> AMBIENT = new java.util.HashSet<>(java.util.Arrays.asList(
+            "trumpet", "rooster", "earthquake", "waves", "crowd", "hiss", "thunder", "wind", "rain"));
+
+    /** A long sound that plays under the voice without the reading waiting for it. */
+    static boolean ambient(String name) {
+        return AMBIENT.contains(name);
+    }
+
     /** Plays the effect (on a thread of its own; made the first time it is needed). Not twice in a row too soon. */
     static void play(Context c, String name) {
         play(c, name, false);
