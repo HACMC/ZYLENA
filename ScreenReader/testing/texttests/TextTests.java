@@ -395,6 +395,16 @@ public class TextTests {
             String cs = ls == null ? "none" : Arrays.toString(ls.codes);
             check("Last Supper: Jesus, Judas, Jesus", ls != null && ls.codes.length >= 4 && ls.codes[0].startsWith("cd1") && !ls.codes[ls.codes.length - 2].startsWith("cd") && ls.codes[ls.codes.length - 1].startsWith("cd1"), cs);
         }
+        // Revelation's letters to the churches are Jesus speaking from the first word, in both languages.
+        {
+            BibleCast.forget();
+            BibleCast.bookHint = 66;
+            BibleCast.Result rv = BibleCast.annotateVerses(Arrays.asList(
+                    "Sa anghel ng iglesia sa Efeso ay isulat mo: Ang mga bagay na ito ay sinasabi niyaong may hawak ng pitong bituin sa kaniyang kanang kamay,",
+                    "Nalalaman ko ang iyong mga gawa, at ang iyong pagpapagal at pagtitiis,"), '\u201C', '\u201D', false);
+            String cr = rv == null ? "none" : Arrays.toString(rv.codes);
+            check("Revelation 2 is Jesus", rv != null && rv.codes.length >= 1 && java.util.Arrays.stream(rv.codes).allMatch(c -> c.startsWith("cd1")), cr);
+        }
         // Setting "only God and Satan have voices": everybody else is the storyteller.
         {
             BibleCast.mainOnly = true;

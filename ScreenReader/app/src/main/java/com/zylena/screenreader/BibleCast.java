@@ -247,6 +247,9 @@ final class BibleCast {
         // Does the passage begin inside Jesus's own words? (A marker only he uses within the first few verses, and nothing before it
         // that tells what happened or brings somebody else's words in.)
         boolean startsInJesus = false;
+        // Revelation's letters to the seven churches ("Unto the angel of the church of Ephesus write; These things saith he that
+        // holdeth the seven stars…") are all Jesus speaking to John, from the first word.
+        if (book == 66 && REV_LETTERS.matcher(String.join(" ", verses.subList(Math.min(context, verses.size()), verses.size()))).find()) startsInJesus = true;
         {
             int firstReal = -1;
             for (int k = context; k < verses.size() && k <= context + 3; k++) {
@@ -675,8 +678,11 @@ final class BibleCast {
     /** Words only Jesus says, as the Gospels have him: "I say unto you", "you have heard that it was said". */
     private static final Pattern JESUS_SAYS = Pattern.compile("(?i)(?:katotohanang\\s+sinasabi\\s+ko\\s+sa\\s+inyo|sinasabi\\s+ko\\s+sa\\s+inyo|narinig\\s+ninyo\\s+na\\s+sinabi|"
             + "i\\s+say\\s+unto\\s+you|verily,?\\s+(?:verily,?\\s+)?i\\s+say|ye\\s+have\\s+heard\\s+that\\s+it\\s+was\\s+said|but\\s+i\\s+say|"
-            + "i\\s+am\\s+the\\s+(?:way|light|bread|door|good\\s+shepherd|vine|resurrection)|while\\s+i\\s+was\\s+yet\\s+with\\s+you|nang\\s+ako'y\\s+sumasa\\s+inyo\\s+pa|"
+            + "i\\s+am\\s+the\\s+(?:way|light|bread|door|good\\s+shepherd|vine|resurrection)|i\\s+am\\s+the\\s+first\\s+and\\s+the\\s+last|ako'y\\s+ang\\s+una\\s+at\\s+ang\\s+huli|"
+            + "these\\s+things\\s+saith\\s+(?:he|the\\s+son|the\\s+first|the\\s+amen)|"
+            + "(?:ang\\s+mga\\s+bagay\\s+na\\s+ito\\s+ay\\s+)?sinasabi\\s+(?:ng\\s+may|niyaong|ng\\s+una|ng\\s+anak|ng\\s+amen)|while\\s+i\\s+was\\s+yet\\s+with\\s+you|nang\\s+ako'y\\s+sumasa\\s+inyo\\s+pa|"
             + "the\\s+son\\s+of\\s+man\\s+(?:is|must|shall)|ang\\s+anak\\s+ng\\s+tao\\s+ay|ako\\s+ang\\s+(?:daan|ilaw|tinapay|pintuan|puno\\s+ng\\s+ubas|pagkabuhay))");
+    private static final Pattern REV_LETTERS = Pattern.compile("(?i)angel\\s+of\\s+the\\s+church|anghel\\s+ng\\s+iglesia");
     private static final Pattern LEAD_NAME = Pattern.compile("^\\W*(?:(?:Then|And|But|Now|So|At|Nang|Datapuwa't)\\s+)?(?!Jesus|Hesus)(\\p{Lu}\\p{Ll}+)(?=[\\s,])");
     private static final Pattern TEACHER_CALL = Pattern.compile("^\\W*(?:(?:Good\\s+)?Master|Rabbi|Rabboni|Guro|Mabuting\\s+Guro|Rabi|Maestro|Lord|Panginoon)(?![\\p{L}])");
     private static final Pattern AGAIN = Pattern.compile("(?i)^(?:at|and)\\s+(?:sinabi|nagsabi|said|saith|sumagot|answered)\\b[^,:]{0,40}[,:]\\s*");
