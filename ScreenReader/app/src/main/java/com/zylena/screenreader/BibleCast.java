@@ -331,8 +331,23 @@ final class BibleCast {
                     }
                 }
             }
+            // "Lord, thou knowest all things, said Peter.": the words come first and the one who says them is named at the end.
+            boolean tailDone = false;
+            if (!inSpeech && !INTRO.matcher(v).find()) {
+                Matcher tm = TAIL_TAG.matcher(v);
+                if (tm.find()) {
+                    String spoken = v.substring(0, tm.start()).trim();
+                    if (spoken.length() >= 12 && spoken.matches("(?s).*[,?!]$") && TALK.matcher(spoken).find()) {
+                        headSpeech = spoken.replaceAll("[,\\s]+$", "");
+                        narr = v.substring(tm.start()).trim();
+                        speech = "";
+                        who = st.who(narr, spoken);
+                        tailDone = true;
+                    }
+                }
+            }
             Matcher m = INTRO.matcher(v);
-            while (m.find()) {
+            while (!tailDone && m.find()) {
                 if (discourse && m.start() > 50) break;
                 // The verse before ended with "…and he cried out," and this one begins "Saying, …": the one named there goes on.
                 if (inSpeech && m.start() <= 2 && SAYING.matcher(v.substring(m.start())).find()) continue;
@@ -471,7 +486,7 @@ final class BibleCast {
                     }
                 }
             }
-            if (speech.chars().noneMatch(Character::isLetter)) {
+            if (headSpeech == null && speech.chars().noneMatch(Character::isLetter)) {
                 inSpeech = false;
                 quoteOpen = false;
                 out.append(out.length() > 0 ? " " : "").append(v);
@@ -487,7 +502,8 @@ final class BibleCast {
             }
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
-            String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech), speech, who != null && who.startsWith("cd"), who != null && who.contains("^villain")); // (what Jesus teaches is not made angry by its words)
+            final String feelText = speech.isEmpty() && headSpeech != null ? headSpeech : speech;
+            String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : feelText), feelText, who != null && who.startsWith("cd"), who != null && who.contains("^villain")); // (what Jesus teaches is not made angry by its words)
             String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
             if (headSpeech != null) {
                 out.append(out.length() > 0 ? " " : "").append(open);
@@ -496,10 +512,12 @@ final class BibleCast {
                 codes.add(whoF);
             }
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
-            out.append(out.length() > 0 ? " " : "").append(open);
-            if (tagged) out.append('\u0004').append(whoF).append('\u0004');
-            out.append(speech.trim()).append(close);
-            codes.add(whoF);
+            if (!speech.trim().isEmpty()) {
+                out.append(out.length() > 0 ? " " : "").append(open);
+                if (tagged) out.append('\u0004').append(whoF).append('\u0004');
+                out.append(speech.trim()).append(close);
+                codes.add(whoF);
+            }
             // What follows is read as a verse of its own: it may bring in somebody else's words.
             if (tail != null) {
                 verses.add(vi + 1, tail);
@@ -595,7 +613,9 @@ final class BibleCast {
             + "i\\s+am\\s+(?:he\\s+that\\s+liveth|the\\s+first\\s+and\\s+the\\s+last|alpha\\s+and\\s+omega,\\s+the\\s+first)|ako\\s+ang\\s+(?:una\\s+at\\s+ang\\s+huli|buhay\\s+at)|"
             + "i\\s+have\\s+the\\s+keys\\s+of\\s+(?:hell|death)|nasa\\s+akin\\s+ang\\s+mga\\s+susi|behold,?\\s+i\\s+stand\\s+at\\s+the\\s+door|narito,?\\s+ako'?y\\s+nakatayo\\s+sa\\s+pintuan|"
             + "behold,?\\s+i\\s+come\\s+quickly|narito,?\\s+ako'?y\\s+pumaparito\\s+na\\s+madali");
-    private static final Pattern SAITH_TAG = Pattern.compile("(?i)^\\W*(?:saith|sayeth|says|sabi|ang\\s+sabi)(?![\\p{L}])");
+    /** A tag that comes after the words and names who said them: "said Peter.", "answered Simon Peter.", "said Philip unto him.", "said she." */
+    private static final Pattern TAIL_TAG = Pattern.compile("(?i)(?<=[,?!])\\s*(?:said|answered|replied|asked|saith|quoth)\\s+(?:(?:he|she)|(?-i:\\p{Lu}[\\p{L}']+(?:\\s+\\p{Lu}[\\p{L}']+)?))(?:\\s+(?:unto|to)\\s+[\\p{L}]+)?[\\s.!?]*$");
+    private static final Pattern SAITH_TAG =Pattern.compile("(?i)^\\W*(?:saith|sayeth|says|sabi|ang\\s+sabi)(?![\\p{L}])");
     private static final Pattern HEAD_FIRST = Pattern.compile("(?i)^\\W*(?:for\\s+|and\\s+|at\\s+|sapagka't\\s+|behold,?\\s+)?(?:i|ako|ako'y|my|aking|ang\\s+aking)(?![\\p{L}])");
     private static final Pattern SEER = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+|then\\s+|nang\\s+)?(?:i\\s+(?:saw|turned|heard|looked|fell|beheld|was|wept|took)|ako'?y\\s+(?:lumingon|tumingin|nakakita|nakarinig|nahulog|napasa|umiyak|kumuha)|nakita\\s+ko|narinig\\s+ko|nang\\s+ako'?y\\s+\\p{L}+)(?![\\p{L}])");
     private static final Pattern SECOND = Pattern.compile("(?i)(?<![\\p{L}'])(?:thou|thee|thy|you|ye|your|ikaw|ka|mo|iyo|iyong|inyo|inyong|kayo)(?![\\p{L}])");

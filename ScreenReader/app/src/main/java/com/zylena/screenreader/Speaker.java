@@ -945,6 +945,9 @@ final class Speaker {
         }
         // A scene change: a longer pause first, the way a narrator would take a breath before it.
         if (s.scene && i > 0) tts.playSilentUtterance(900, TextToSpeech.QUEUE_ADD, gen + ":-1");
+        // The Father, the Son or the Holy Spirit begins to speak after the story: a moment of stillness first.
+        else if (i > 0 && !Prefs.testMode(ctx) && quickTalk(s) && s.cast.length > 0 && s.cast[0] != null && Cast.isDivine(Cast.voice(s.cast[0]))
+                && !quickTalk(runs.get(i - 1))) tts.playSilentUtterance(380, TextToSpeech.QUEUE_ADD, gen + ":-1");
         // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
         // in English inside a Tagalog run is its own utterance too, in the English voice.
         // A question is a piece of its own as well, said a little higher and slower, with a moment after it.

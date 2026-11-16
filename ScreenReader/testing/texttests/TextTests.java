@@ -116,6 +116,8 @@ public class TextTests {
                 {"At sinabi ni Pedro kay Jesus, Rabi, mabuti sa atin ang tayo'y dumito.", "!cd"},
                 {"At sinabi ni Moises sa Panginoon, Oh Panginoon, ako'y hindi marikit mangusap.", "!cd"},
                 {"Then Satan answered the LORD, and said, From going to and fro in the earth.", "cm0^villain"},
+                {"Lord, thou knowest all things; thou knowest that I love thee, said Peter.", "cm5"},
+                {"Sir, if thou have borne him hence, tell me where thou hast laid him, said she.", "cf0"},
                 {"Nang magkagayo'y sumagot si Satanas sa Panginoon, at nagsabi, Sa pagpaparoo't parito sa lupa.", "cm0^villain"},
                 {"And the evil spirit answered and said, Jesus I know, and Paul I know; but who are ye?", "cm0^villain"},
                 {"At sumagot ang masamang espiritu at sa kanila'y sinabi, Nakikilala ko si Jesus, at nakikilala ko si Pablo.", "cm0^villain"},
