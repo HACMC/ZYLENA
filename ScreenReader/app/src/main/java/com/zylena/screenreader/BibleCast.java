@@ -315,7 +315,7 @@ final class BibleCast {
                         }
                         String w = near != null ? st.who(near, told) : prev;
                         prev = w;
-                        String feel = bibleFeel(Mood.feeling((near == null ? "" : near).replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), w.startsWith("cd") ? "" : piece), piece, w.startsWith("cd"));
+                        String feel = bibleFeel(Mood.feeling((near == null ? "" : near).replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), w.startsWith("cd") ? "" : piece), piece, w.startsWith("cd"), w.contains("^villain"));
                         String wf = feel.isEmpty() ? w : w + "~" + feel;
                         out.append(out.length() > 0 ? " " : "").append(open);
                         if (tagged) out.append('\u0004').append(wf).append('\u0004');
@@ -487,7 +487,7 @@ final class BibleCast {
             }
             // How it is said, from the words that bring it in: "cried with a loud voice" is shouted, "wept" is sad, "whispered" soft.
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
-            String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech), speech, who != null && who.startsWith("cd")); // (what Jesus teaches is not made angry by its words)
+            String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech), speech, who != null && who.startsWith("cd"), who != null && who.contains("^villain")); // (what Jesus teaches is not made angry by its words)
             String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
             if (headSpeech != null) {
                 out.append(out.length() > 0 ? " " : "").append(open);
@@ -545,6 +545,12 @@ final class BibleCast {
     private static final Pattern BIBLE_GLAD = Pattern.compile("(?i)^\\W*(?:hosanna|hallelujah|alleluia|rejoice\\b|osana|aleluya|magalak|magalak\\b)");
 
     private static String bibleFeel(String feel, String speech, boolean divine) {
+        return bibleFeel(feel, speech, divine, false);
+    }
+
+    /** The tempter speaks smoothly and slyly ("m") unless the verse says he cried out or was angry. */
+    private static String bibleFeel(String feel, String speech, boolean divine, boolean villain) {
+        if (villain && feel.isEmpty()) return "m";
         if (!feel.isEmpty() || divine) return feel;
         if (BIBLE_FIRM.matcher(speech).find()) return "s";
         if (BIBLE_GLAD.matcher(speech).find()) return "j";

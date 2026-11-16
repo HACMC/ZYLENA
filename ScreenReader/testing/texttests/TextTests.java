@@ -160,8 +160,8 @@ public class TextTests {
         String[][] turns = {
                 // {verses, the voice codes of what is said, in order}
                 {"9 And the LORD God called unto Adam, and said unto him, Where art thou? 10 And he said, I heard thy voice. 11 And he said, Who told thee that thou wast naked?", "cd0 cm" + BibleCharacters.slot("adam", new java.util.HashSet<>()) + " cd0"},
-                {"1 Now the serpent was more subtil than any beast. And he said unto the woman, Yea, hath God said? 2 And the woman said unto the serpent, We may eat of the fruit.", "cm0^villain cf0"},
-                {"7 Jesus said unto him, It is written again, Thou shalt not tempt the Lord thy God. 8 Again, the devil taketh him up into an exceeding high mountain; 9 And saith unto him, All these things will I give thee. 10 Then saith Jesus unto him, Get thee hence, Satan.", "cd1 cm0^villain cd1"},
+                {"1 Now the serpent was more subtil than any beast. And he said unto the woman, Yea, hath God said? 2 And the woman said unto the serpent, We may eat of the fruit.", "cm0^villain~m cf0"},
+                {"7 Jesus said unto him, It is written again, Thou shalt not tempt the Lord thy God. 8 Again, the devil taketh him up into an exceeding high mountain; 9 And saith unto him, All these things will I give thee. 10 Then saith Jesus unto him, Get thee hence, Satan.", "cd1 cm0^villain~m cd1"},
                 {"3 And he spake many things unto them in parables, saying, Behold, a sower went forth to sow; 4 And when he sowed, some seeds fell by the way side.", "cd1 cd1"},
                 {"3 At pinagsalitaan niya sila ng maraming mga bagay sa mga talinghaga, na sinasabi, Narito, ang manghahasik ay yumaon upang maghasik.", "cd1"},
                 {"1 Then came to him the scribes, and said unto him, Master, we would see a sign.", "cm0"},

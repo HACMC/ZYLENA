@@ -233,6 +233,8 @@ final class Mood {
                 return new float[]{1.06f, 0.93f, 0.9f};
             case "h": // a sigh: breathy, slow, low
                 return new float[]{0.92f, 0.86f, 0.8f};
+            case "m": // sly and smooth (the tempter): low, slow, soft-spoken
+                return new float[]{0.93f, 0.88f, 0.92f};
             case "r": // rambling: fast, rushed, a little higher
                 return new float[]{1.08f, 1.20f, 1.05f};
             case "a":

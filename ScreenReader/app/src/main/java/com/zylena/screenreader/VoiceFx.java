@@ -36,6 +36,8 @@ final class VoiceFx {
         float warm = 0f, air = 0f;
         /** The room around the voice: how much of it is heard (0 none, 0.25 a great hall) and how long it rings, in seconds. */
         float space = 0f, room = 1f;
+        /** Hiss: the "s" sounds made sharper and louder, like a snake's (0 none, 1 strong). */
+        float hiss = 0f;
 
         Style(String name, float pf, float tf, float vib, float husk, float drive, float vol, boolean dull) {
             this.name = name;
@@ -95,7 +97,15 @@ final class VoiceFx {
         add("boss", 0.80f, 0.86f, 0f, 0.16f, 0.30f, 1f, true); // a mafia boss: low, slow, gravelly
         add("gruff", 0.86f, 0.93f, 0f, 0.22f, 0.25f, 1f, true);
         add("bass", 0.84f, 0.92f, 0f, 0.05f, 0.05f, 1f, true);
-        add("villain", 0.88f, 0.90f, 0f, 0.06f, 0.12f, 1f, true);
+        // The tempter, Satan, a demon, the serpent: very low and slow, with a growl, a dark room around it and a snake's hiss on the "s".
+        add("villain", 0.78f, 0.86f, 0.004f, 0.10f, 0.40f, 1f, true);
+        Style v = STYLES.get("villain");
+        v.level = 0.19f;
+        v.presence = 0.30f;
+        v.warm = 0.45f;
+        v.space = 0.22f;
+        v.room = 1.8f;
+        v.hiss = 0.9f;
         add("maid", 1.08f, 0.98f, 0f, 0.03f, 0f, 0.92f, false); // polite, light
         add("butler", 0.94f, 0.94f, 0f, 0.02f, 0f, 0.95f, false);
         add("maarte", 1.10f, 0.95f, 0f, 0f, 0f, 1f, false); // affected, "sosyal": a little higher and slower, with care
@@ -118,7 +128,8 @@ final class VoiceFx {
         feel("w", 1.0f, 0.90f, 0f, 0.38f, 0f, 0.65f, 0.07f); // whispered
         feel("t", 0.97f, 0.88f, 0f, 0.12f, 0f, 0.85f, 0.12f); // tender
         feel("p", 1.06f, 0.90f, 0.02f, 0.08f, 0f, 0.9f, 0.14f); // pleading
-        feel("r", 1.07f, 1.22f, 0f, 0f, 0f, 1.0f, 0.18f); // rambling: fast and rushed
+        feel("m", 0.95f, 0.88f, 0.004f, 0.08f, 0.05f, 0.92f, 0.17f); // sly and smooth, drawn out (the tempter)
+        feel("r",1.07f, 1.22f, 0f, 0f, 0f, 1.0f, 0.18f); // rambling: fast and rushed
         feel("h", 0.92f, 0.80f, 0f, 0.25f, 0f, 0.8f, 0.10f); // a sigh
     }
 
@@ -312,6 +323,8 @@ final class VoiceFx {
         float[] z = new float[m];
         System.arraycopy(y, 0, z, 0, m);
 
+        // (The "s" sounds are taken before the heavy voice loses its high end.)
+        float[] hissBand = st.hiss > 0 && rate > 14000 ? band(z, 6800f, 3600f, rate) : null;
         // A heavy voice has less of the high end.
         if (st.dull) {
             float a = (float) (1 - Math.exp(-2 * Math.PI * 5200.0 / rate)), s = 0;
@@ -336,6 +349,8 @@ final class VoiceFx {
             float[] pb = band(z, 2200f, 1800f, rate);
             for (int i = 0; i < m; i++) z[i] += pres * pb[i];
         }
+        // A snake's hiss: the "s" and "sh" sounds (the only loud sounds up there) made sharper and stronger.
+        if (hissBand != null) for (int i = 0; i < m; i++) z[i] += st.hiss * 3f * hissBand[i];
         // Warmth: more of the low end. Air: more of the top.
         if (st.warm > 0) {
             float a = (float) (1 - Math.exp(-2 * Math.PI * 260.0 / rate)), s = 0;
