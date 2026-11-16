@@ -106,6 +106,14 @@ final class VoiceFx {
         v.space = 0.22f;
         v.room = 1.8f;
         v.hiss = 0.9f;
+        // Unclean spirits, devils, Legion: lower still and rougher than the tempter, torn and crowded, crying out rather than smooth.
+        add("demon", 0.74f, 0.94f, 0.006f, 0.30f, 0.60f, 1f, true);
+        Style dm = STYLES.get("demon");
+        dm.level = 0.18f;
+        dm.presence = 0.28f;
+        dm.warm = 0.30f;
+        dm.space = 0.28f;
+        dm.room = 2.0f;
         add("maid", 1.08f, 0.98f, 0f, 0.03f, 0f, 0.92f, false); // polite, light
         add("butler", 0.94f, 0.94f, 0f, 0.02f, 0f, 0.95f, false);
         add("maarte", 1.10f, 0.95f, 0f, 0f, 0f, 1f, false); // affected, "sosyal": a little higher and slower, with care

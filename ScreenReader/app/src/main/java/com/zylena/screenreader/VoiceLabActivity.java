@@ -501,7 +501,7 @@ public class VoiceLabActivity extends Activity {
             {"deep", "God the Father (English)"}, {"deep_fil", "God the Father (Tagalog)"}, {"jesus", "Jesus (English)"},
             {"jesus_fil", "Jesus (Tagalog)"}, {"spirit", "Holy Spirit (English)"}, {"spirit_fil", "Holy Spirit (Tagalog)"},
             {"child", "a child"}, {"squeaky", "a squeaky voice"}, {"cute", "a cute voice"}, {"teen", "a teenager"}, {"elder", "an old person"},
-            {"husky", "a husky voice"}, {"boss", "a mob boss"}, {"gruff", "a gruff voice"}, {"bass", "a deep bass"}, {"villain", "a villain / the tempter"},
+            {"husky", "a husky voice"}, {"boss", "a mob boss"}, {"gruff", "a gruff voice"}, {"bass", "a deep bass"}, {"villain", "a villain / the tempter"}, {"demon", "a demon / unclean spirit"},
             {"maid", "a maid"}, {"butler", "a butler"}, {"gentle", "a gentle voice"},
             {"feel_s", "a line SHOUTED"}, {"feel_a", "an angry line"}, {"feel_d", "a sad line"}, {"feel_f", "an afraid line"}, {"feel_l", "said while laughing"},
             {"feel_j", "a glad line"}, {"feel_w", "a whispered line"}, {"feel_t", "a tender line"}, {"feel_p", "a pleading line"}, {"feel_h", "a sigh"}, {"feel_r", "a rambling, rushed line"}};

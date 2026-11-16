@@ -942,6 +942,11 @@ final class Speaker {
     }
 
     /** A run that starts with somebody speaking (a quotation), in a story. */
+    /** Words after which a reader falls silent for a moment: a death, a last breath, an oath, Jesus weeping. */
+    private static final java.util.regex.Pattern SOLEMN = java.util.regex.Pattern.compile("(?i)(?<![\\p{L}])(?:and\\s+(?:he|she)\\s+died|and\\s+died|gave\\s+up\\s+the\\s+ghost|yielded\\s+up\\s+the\\s+ghost|breathed\\s+his\\s+last|"
+            + "jesus\\s+wept|it\\s+is\\s+finished|sware\\s+unto|made\\s+a\\s+vow|vowed\\s+a\\s+vow|was\\s+dead|is\\s+dead|at\\s+namatay|ay\\s+namatay|nalagot\\s+ang\\s+(?:kaniyang\\s+)?hininga|"
+            + "tumangis\\s+si\\s+jesus|naganap\\s+na|sumumpa|nanata|she\\s+died|he\\s+died|namatay\\s+siya|patay\\s+na)(?![\\p{L}])[^.!?]*[.!?\u201D\"']*\\s*$");
+
     private static boolean quickTalk(TextPrep.Seg r) {
         if (r.cast == null) return false;
         String t = r.text.trim();
@@ -982,6 +987,8 @@ final class Speaker {
             }
             if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
         }
+        // After a death, a vow, "Jesus wept", "It is finished": a moment of silence before the story goes on.
+        if (i > 0 && !Prefs.testMode(ctx) && SOLEMN.matcher(runs.get(i - 1).text).find()) tts.playSilentUtterance(850, TextToSpeech.QUEUE_ADD, gen + ":-1");
         // A scene change: a longer pause first, the way a narrator would take a breath before it.
         if (s.scene && i > 0) tts.playSilentUtterance(900, TextToSpeech.QUEUE_ADD, gen + ":-1");
         // The Father, the Son or the Holy Spirit begins to speak after the story: a moment of stillness first.
