@@ -208,10 +208,11 @@ final class BibleCast {
             if (EVIL_SPIRIT.matcher(v).find()) st.evilSeen = true;
             if (JESUS.matcher(v).find() || GOSPEL.matcher(v).find()) st.gospelSeen = true;
             st.hintStrong = JESUS_ONLY.matcher(v).find();
+            st.hintAlpha = ALPHA_OMEGA.matcher(v).find() && !THRONE.matcher(v).find();
             st.hintJesus = PARABLE_TOLD.matcher(v).find() || JESUS_SAYS.matcher(v).find() || TELLS_PARABLE.matcher(v).find();
             final boolean firstVerse = vi == context || (context == 0 && !seenVerse);
             seenVerse = true;
-            String narr = v, speech = null;
+            String narr = v, speech = null, headSpeech = null;
             String who = null;
             String pendingWho = null;
             // Inside Jesus's (or God's) words, "you have heard that it was said to those of old, …" quotes somebody else: it
@@ -305,7 +306,14 @@ final class BibleCast {
                     intro = intro + " " + sy.group().replaceAll("[\\s,:]+$", "") + ",";
                     rest = rest.substring(sy.end()).trim();
                 }
-                narr = v.substring(0, m.start()) + intro;
+                String pre = v.substring(0, m.start());
+                // "I am Alpha and Omega, | saith the Lord, | which is, and which was…": the words before the tag are the Lord's as well.
+                if (SAITH_TAG.matcher(intro).find() && pre.trim().endsWith(",") && pre.trim().length() >= 12 && HEAD_FIRST.matcher(pre).find()) {
+                    headSpeech = pre.trim().replaceAll("[,\\s]+$", "");
+                    narr = intro;
+                } else {
+                    narr = pre + intro;
+                }
                 speech = rest;
                 who = st.who((m.start() < 25 ? lead(carried, carried.length(), 100) + " " : "") + lead(v, m.start(), 40) + " " + intro, v.substring(0, m.start()));
                 break;
@@ -415,7 +423,7 @@ final class BibleCast {
                 continue;
             }
             if (!ctxV) any = true;
-            inSpeech = !closed;
+            inSpeech = !closed && headSpeech == null; // ("I am Alpha and Omega, saith the Lord, … the Almighty." is all of it)
             speaker = who;
             said = (narr.isEmpty() ? said : 0) + speech.length();
             if (PARABLE.matcher(HE_SAID_LEAD.matcher(speech).replaceFirst("")).find() || (!narr.isEmpty() && PARABLE_WORD.matcher(narr).find())) {
@@ -426,6 +434,12 @@ final class BibleCast {
             // (In the Bible "cried" means a loud cry, so it is read as shouted, not as sobbing.)
             String feel = bibleFeel(Mood.feeling(narr.replaceAll("(?i)\\b(?:cried|crying|cry)\\b(?!\\s+out)", "shouted"), who != null && who.startsWith("cd") ? "" : speech), speech, who != null && who.startsWith("cd")); // (what Jesus teaches is not made angry by its words)
             String whoF = feel.isEmpty() || who == null ? who : who + "~" + feel;
+            if (headSpeech != null) {
+                out.append(out.length() > 0 ? " " : "").append(open);
+                if (tagged) out.append('\u0004').append(whoF).append('\u0004');
+                out.append(headSpeech).append(close);
+                codes.add(whoF);
+            }
             if (!narr.isEmpty()) out.append(out.length() > 0 ? " " : "").append(narr);
             out.append(out.length() > 0 ? " " : "").append(open);
             if (tagged) out.append('\u0004').append(whoF).append('\u0004');
@@ -515,6 +529,12 @@ final class BibleCast {
             + "i\\s+am\\s+(?:he\\s+that\\s+liveth|the\\s+first\\s+and\\s+the\\s+last|alpha\\s+and\\s+omega,\\s+the\\s+first)|ako\\s+ang\\s+(?:una\\s+at\\s+ang\\s+huli|buhay\\s+at)|"
             + "i\\s+have\\s+the\\s+keys\\s+of\\s+(?:hell|death)|nasa\\s+akin\\s+ang\\s+mga\\s+susi|behold,?\\s+i\\s+stand\\s+at\\s+the\\s+door|narito,?\\s+ako'?y\\s+nakatayo\\s+sa\\s+pintuan|"
             + "behold,?\\s+i\\s+come\\s+quickly|narito,?\\s+ako'?y\\s+pumaparito\\s+na\\s+madali");
+    private static final Pattern SAITH_TAG = Pattern.compile("(?i)^\\W*(?:saith|sayeth|says|sabi|ang\\s+sabi)(?![\\p{L}])");
+    private static final Pattern HEAD_FIRST = Pattern.compile("(?i)^\\W*(?:for\\s+|and\\s+|at\\s+|sapagka't\\s+|behold,?\\s+)?(?:i|ako|ako'y|my|aking|ang\\s+aking)(?![\\p{L}])");
+    private static final Pattern ALPHA_OMEGA = Pattern.compile("(?i)alpha\\s+(?:and|at)\\s+(?:ang\\s+)?omega");
+    private static final Pattern THRONE = Pattern.compile("(?i)throne|trono");
+    private static final Pattern SEER = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+|then\\s+|nang\\s+)?(?:i\\s+(?:saw|turned|heard|looked|fell|beheld|was|wept|took)|ako'?y\\s+(?:lumingon|tumingin|nakakita|nakarinig|nahulog|napasa|umiyak|kumuha)|nakita\\s+ko|narinig\\s+ko|nang\\s+ako'?y\\s+\\p{L}+)(?![\\p{L}])");
+    private static final Pattern SECOND = Pattern.compile("(?i)(?<![\\p{L}'])(?:thou|thee|thy|you|ye|your|ikaw|ka|mo|iyo|iyong|inyo|inyong|kayo)(?![\\p{L}])");
     private static final Pattern EXPLAINS = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:these|those)\\s+(?:are|be)\\s+they|^\\W*(?:and\\s+|at\\s+)?(?:ito|ang\\s+mga\\s+ito|ang\\s+mga\\s+nasa)\\s+(?:ang|ay|yaong)\\s+");
     private static final Pattern HE_SAID_LEAD = Pattern.compile("(?i)^\\W*(?:and\\s+|at\\s+)?(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)\\s*(?:unto\\s+them|sa\\s+kanila)?\\s*[,:]?\\s*");
     private static final Pattern HE_SAID = Pattern.compile("(?i)^\\W*(?:and|at|then)?\\s*(?:he|siya)\\s+(?:said|saith|spake|sinabi|nagsabi)(?![\\p{L}])");
@@ -535,6 +555,8 @@ final class BibleCast {
     private static boolean narrates(String v) {
         if (!NARRATION.matcher(v).matches() || LET.matcher(v).matches()) return false; // "And let them be for lights…" is still being said
         String head = v.length() > 140 ? v.substring(0, 140) : v;
+        // The seer's own telling ("And I turned to see the voice", "At ako'y lumingon"): first person, but story, not talk to somebody.
+        if (SEER.matcher(head).find() && !SECOND.matcher(head).find()) return true;
         return !TALK.matcher(head).find();
     }
 
@@ -549,6 +571,7 @@ final class BibleCast {
         boolean gospelSeen; // the verses read so far are about Jesus and his disciples: "the Lord" is Jesus
         boolean evilSeen;
         boolean jesusTeaching; // Jesus is in the middle of a long teaching or a parable: "And he said," goes on with the same one
+        boolean hintAlpha; // "I am Alpha and Omega" (not from the throne): Christ's own title
         boolean hintStrong; // the words are ones only Jesus says ("write in a book and send it to the seven churches")
         boolean hintJesus; // the verse being read tells a parable or says what only he says: an unnamed "he" is Jesus
 
@@ -598,7 +621,7 @@ final class BibleCast {
                 key = "spirit";
             } else if (FATHER.matcher(nearIntro).find()) {
                 // In the Gospels and Acts "the Lord" (not "the LORD", not "Lord God") is Jesus.
-                key = lordIsJesus(nearIntro) ? "jesus" : "father";
+                key = lordIsJesus(nearIntro) || hintAlpha ? "jesus" : "father";
             } else if (subjectOf(VILLAIN, nearIntro)) {
                 key = "villain";
             } else {
