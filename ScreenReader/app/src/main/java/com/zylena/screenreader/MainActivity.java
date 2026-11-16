@@ -503,6 +503,8 @@ public class MainActivity extends Activity {
                 "pages_english", true));
         Ui.add(how, flagRow(R.drawable.ic_translate, "Bible names the Tagalog way", "The Tagalog voice says \"Jesus\" as \"Hesus\" and \"Jerusalem\" as \"Herusalem\".",
                 "respell_names", true));
+        Ui.add(how, flagRow(R.drawable.ic_translate, "Old Tagalog said the modern way", "\"Siya'y\", \"sapagka't\" and \"Dios\" are said \"siya ay\", \"sapagkat\" and \"Diyos\": the apostrophes make the voice stop and sound halting. Off: as printed.",
+                "modern_spelling", true));
         Ui.add(how, flagRow(R.drawable.ic_translate, "Say -syon as -shon", "The Tagalog voice says \"leksyon\" as \"lek-shon\". Off: as the voice reads it, \"lek-si-yon\".",
                 "respell_syon", true));
         col.addView(how);

@@ -219,7 +219,39 @@ final class TextPrep {
     /** Settings: a year is said "eighteen forty-four", and page numbers in a Tagalog text are said in English. */
     static volatile boolean sayYears = true, pagesEnglish = true;
 
+    /** Settings: the old contractions of Ang Biblia and old Tagalog ("siya'y", "sapagka't", "Dios") said the way people say them today. */
+    static volatile boolean modernSpelling = true;
+
+    // The apostrophe in "siya'y" and "bawa't" is a stop for the phone's voice ("si-ya-y"): a halting, foreign way of saying it. Said out
+    // as the words they are (siya ay, bawat), it flows.
+    private static final String[][] FUSED = {
+            {"sapagka't", "sapagkat"}, {"datapuwa't", "datapuwat"}, {"bawa't", "bawat"}, {"nguni't", "ngunit"}, {"kaya't", "kayat"}, {"sakali't", "sakalit"},
+            {"saka't", "sakat"}, {"samantalang", "samantalang"}};
+    private static final Pattern CONTRACT_Y = Pattern.compile("(?<=[aeiouAEIOU])['\u2019][yY](?![\\p{L}])");
+    private static final Pattern CONTRACT_T = Pattern.compile("(?<=[aeiouAEIOU])['\u2019][tT](?![\\p{L}])");
+    private static final Pattern DIOS = Pattern.compile("(?<![\\p{L}-])(D)(ios)(?![\\p{L}-])", Pattern.CASE_INSENSITIVE);
+
+    static String modernTagalog(String s) {
+        if (s.indexOf('\'') < 0 && s.indexOf('\u2019') < 0 && !DIOS.matcher(s).find()) return s;
+        for (String[] f : FUSED) {
+            if (f[0].equals(f[1])) continue;
+            java.util.regex.Matcher fm = Pattern.compile("(?<![\\p{L}-])" + f[0].replace("'", "['\u2019]") + "(?![\\p{L}-])", Pattern.CASE_INSENSITIVE).matcher(s);
+            StringBuffer fb = new StringBuffer();
+            while (fm.find()) fm.appendReplacement(fb, Character.isUpperCase(fm.group().charAt(0)) ? Character.toUpperCase(f[1].charAt(0)) + f[1].substring(1) : f[1]);
+            fm.appendTail(fb);
+            s = fb.toString();
+        }
+        s = CONTRACT_Y.matcher(s).replaceAll(" ay");
+        s = CONTRACT_T.matcher(s).replaceAll(" at");
+        java.util.regex.Matcher d = DIOS.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (d.find()) d.appendReplacement(sb, Character.isUpperCase(d.group(1).charAt(0)) ? "Diyos" : "diyos");
+        d.appendTail(sb);
+        return sb.toString();
+    }
+
     static String sayTagalog(String s) {
+        if (modernSpelling) s = modernTagalog(s);
         if (respellNames) for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
         if (!respellSyon) return s;
         // A word the user has said how to say is left exactly so.

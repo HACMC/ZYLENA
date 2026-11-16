@@ -309,6 +309,13 @@ public class TextTests {
             check("a sure speaker keeps the voice", sure != null && sure.codes.length == 1 && sure.codes[0].equals("cd1"), sure == null ? "none" : String.join(" ", sure.codes));
             BibleCast.forget();
         }
+        // Old Tagalog is said the modern way: the apostrophes of "siya'y" and "sapagka't" make the voice stop.
+        {
+            check("siya'y is said siya ay", TextPrep.modernTagalog("Siya'y lumingon at ako'y nakita niya.").equals("Siya ay lumingon at ako ay nakita niya."), TextPrep.modernTagalog("Siya'y lumingon at ako'y nakita niya."));
+            check("sapagka't and Datapuwa't are whole words", TextPrep.modernTagalog("Sapagka't hindi. Datapuwa't oo.").equals("Sapagkat hindi. Datapuwat oo."), TextPrep.modernTagalog("Sapagka't hindi. Datapuwa't oo."));
+            check("Dios is said Diyos", TextPrep.modernTagalog("ang Dios at ang Panginoong Dios").equals("ang Diyos at ang Panginoong Diyos"), TextPrep.modernTagalog("ang Dios at ang Panginoong Dios"));
+            check("English contractions are left alone", TextPrep.modernTagalog("It's John's book, don't go.").equals("It's John's book, don't go."), TextPrep.modernTagalog("It's John's book, don't go."));
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");
