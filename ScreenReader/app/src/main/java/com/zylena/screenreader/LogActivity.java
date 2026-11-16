@@ -95,6 +95,7 @@ public class LogActivity extends Activity {
                 + " bibleRefs=" + Prefs.refMode(this)
                 + " wholePage=" + Prefs.wholePage(this) + " serviceOn=" + (ReaderService.instance != null)
                 + (Prefs.flag(this, "debug", false) ? " debug=true" : "")
+                + "\n" + VoiceFx.appliedForLog(this)
                 + "\n\n";
     }
 

@@ -189,6 +189,27 @@ final class VoiceFx {
         return name != null && CUSTOM.containsKey(name);
     }
 
+    /** One kind of voice as the voice lab's "Paste and play" takes it: a line that can be pasted back to get the same sound. */
+    static String pasteLine(String name, Style st, String lang, String voice) {
+        return String.format(java.util.Locale.US,
+                "preset: %s, language: %s, voice: %s, pitch %.2f, tempo %.2f, tremble %.3f, breath %.2f, grit %.2f, clarity %.2f, warmth %.2f, air %.2f, room %.2f, room size %.1f, level %.2f, volume %.2f, muffle %s",
+                name, lang, voice == null || voice.isEmpty() ? "usual" : voice.replaceFirst("^[a-z]{2,3}-[a-z]{2}-x-", ""), st.pf, st.tf, st.vib, st.husk, st.drive, st.presence, st.warm, st.air,
+                st.space, st.room, st.level, st.vol, st.dull ? "on" : "off");
+    }
+
+    /** What the user applied in the voice lab, one line each, for the log's top: so the numbers can be read back from it. */
+    static String appliedForLog(android.content.Context c) {
+        loadCustom(c);
+        if (CUSTOM.isEmpty()) return "voice lab applied: none (built-in settings)";
+        StringBuilder sb = new StringBuilder("voice lab applied:");
+        java.util.List<String> names = new java.util.ArrayList<>(CUSTOM.keySet());
+        java.util.Collections.sort(names);
+        for (String n : names) {
+            sb.append("\n  ").append(pasteLine(n, CUSTOM.get(n), n.endsWith("_fil") ? "Tagalog" : "English", CUSTOM_VOICE.get(n)));
+        }
+        return sb.toString();
+    }
+
     /** The phone voice the user chose for this kind of voice (its name without -local/-network), or null. */
     static String customVoice(String name) {
         return name == null ? null : CUSTOM_VOICE.get(name);

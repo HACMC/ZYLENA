@@ -129,6 +129,7 @@ public class VoiceLabActivity extends Activity {
             st.level = level;
             st.presence = presence;
             VoiceFx.setCustom(this, preset, st, voiceName.isEmpty() ? "" : Speaker.base(voiceName));
+            Logs.d(this, "voice lab: APPLIED to reading: " + pasteLine());
             refresh();
             Toast.makeText(this, "ZYLENA now reads \"" + preset + "\" with these settings", Toast.LENGTH_LONG).show();
         });
@@ -184,6 +185,7 @@ public class VoiceLabActivity extends Activity {
                 .putExtra(Intent.EXTRA_SUBJECT, "ZYLENA voice lab numbers").putExtra(Intent.EXTRA_TEXT, summaryText()), "Share")));
         reset.setOnClickListener(v -> {
             VoiceFx.clearCustom(this, preset); // what was applied to reading goes too
+            Logs.d(this, "voice lab: back to built-in for " + preset);
             load(preset, true);
             buildSliders();
             refresh();
@@ -330,6 +332,14 @@ public class VoiceLabActivity extends Activity {
         });
         g.addView(dullBtn);
         sliders.addView(g);
+    }
+
+    /** The numbers now on the screen as one pasteable line, for the log. */
+    private String pasteLine() {
+        VoiceFx.Style st = style();
+        st.level = level;
+        st.presence = presence;
+        return VoiceFx.pasteLine(preset, st, lang.equals(TextPrep.FIL) ? "Tagalog" : "English", voiceName.isEmpty() ? "" : Speaker.base(voiceName));
     }
 
     private String voiceLabel() {
@@ -542,6 +552,7 @@ public class VoiceLabActivity extends Activity {
         if (text.isEmpty()) return;
         keep();
         stopAll();
+        Logs.d(this, "voice lab: played " + (processed ? "with the effects" : "plain") + ": " + pasteLine());
         if (!voiceName.isEmpty()) {
             for (Voice v : Speaker.get(this).voicesFor(lang)) {
                 if (v.getName().equals(voiceName)) {
