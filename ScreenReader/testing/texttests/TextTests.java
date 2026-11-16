@@ -261,6 +261,45 @@ public class TextTests {
             check("Pedro is Peter, Sara is Sarah", BibleCharacters.canonical("Pedro").equals("peter") && BibleCharacters.isWoman("Sara") && !BibleCharacters.isWoman("Pedro"), "");
             BibleCast.forget();
         }
+        // The director: a line of the screen is found in the built-in Bible and worked out with its whole chapter, so a verse that says nothing
+        // of who speaks ("And these are they by the way side…", read alone it is the narrator's) is Jesus's explanation.
+        {
+            final java.util.Map<String, String> bible = new java.util.HashMap<>();
+            String[] mk = {
+                    "Hearken; Behold, there went out a sower to sow:",
+                    "And it came to pass, as he sowed, some fell by the way side, and the fowls of the air came and devoured it up.",
+                    "And when he was alone, they that were about him with the twelve asked of him the parable.",
+                    "And Jesus said unto them, Know ye not this parable? and how then will ye know all parables?",
+                    "The sower soweth the word.",
+                    "And these are they by the way side, where the word is sown; but when they have heard, Satan cometh immediately, and taketh away the word that was sown in their hearts.",
+                    "And these are they likewise which are sown on stony ground; who, when they have heard the word, immediately receive it with gladness;",
+                    "And have no root in themselves, and so endure but for a time: afterward, when affliction or persecution ariseth for the word\u2019s sake, immediately they are offended."};
+            for (int i = 0; i < mk.length; i++) bible.put("41:4:" + (i + 1), mk[i]);
+            for (int c = 1; c <= 3; c++) bible.put("41:" + c + ":1", "The beginning of chapter " + c + " of this little Bible.");
+            Bible.Verses was = Bible.source;
+            Bible.source = new Bible.Verses() {
+                @Override
+                public String get(boolean tagalog, int book, int chapter, int verse) {
+                    return tagalog ? null : bible.get(book + ":" + chapter + ":" + verse);
+                }
+            };
+            BibleDirector.reset();
+            BibleCast.Result found = null;
+            String line = "6  And these are they by the way side, where the word is sown; but when they have heard, Satan cometh immediately, and taketh away the word that was sown in their hearts.";
+            for (int t = 0; t < 100 && found == null; t++) {
+                found = BibleDirector.lineResult(line);
+                if (found == null) try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+            check("the director finds a verse of the Bible and works it out with its chapter", found != null && found.codes.length == 1 && found.codes[0].equals("cd1"),
+                    found == null ? "not found" : String.join(" ", found.codes));
+            check("a line that is not in the Bible is left to the line alone", BibleDirector.lineResult("Peter said to John, we are going home now, and then we will rest for a while.") == null, "");
+            BibleDirector.reset();
+            Bible.source = was;
+        }
         // A Bible page has the sound effects and laughs a story has, and its words are never changed for them.
         {
             List<TextPrep.Seg> th = story("Exodus 19", "16 And it came to pass on the third day in the morning, that there were thunders and lightnings, and a thick cloud upon the mount;");

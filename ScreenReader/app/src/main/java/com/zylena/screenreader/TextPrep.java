@@ -1251,11 +1251,16 @@ final class TextPrep {
             String[] bibleQuotes = null;
             if (verse && castOn && !heading) {
                 // Bible text has people in it who talk: the words each says get their own voice, the narrator keeps the Bible voice.
-                BibleCast.Result bc = BibleCast.annotate(cleaned);
+                // A verse of the built-in Bible is worked out with its whole chapter (in the background, the next chapter lined up beforehand);
+                // any other text, or a version that differs, is worked out alone.
+                BibleCast.Result bc = BibleDirector.lineResult(cleaned);
+                boolean planned = bc != null;
+                if (bc == null) bc = BibleCast.annotate(cleaned);
+                if (bc != null && bc.codes.length == 0) bc = null;
                 if (bc != null) {
                     cleaned = bc.text;
                     bibleQuotes = bc.codes;
-                    if (lastBibleCast.length() < 300) lastBibleCast += (lastBibleCast.isEmpty() ? "" : " | ") + bc.summary;
+                    if (lastBibleCast.length() < 300) lastBibleCast += (lastBibleCast.isEmpty() ? "" : " | ") + (planned ? "plan " + BibleDirector.lastPlace : bc.summary);
                 }
             }
             if (verse) {
