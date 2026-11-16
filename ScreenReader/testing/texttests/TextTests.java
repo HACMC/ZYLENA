@@ -36,6 +36,7 @@ public class TextTests {
     }
 
     public static void main(String[] args) {
+        BibleCast.mainOnly = false; // (the checks of who speaks give everybody a voice; the setting's own check is at the end)
         String[] talk = {"\"Good morning,\" Anna said.", "\"Morning,\" Ben answered.", "\"Coffee?\" Anna asked.", "\"Yes please,\" Ben replied."};
 
         // Who says it, from verbs the list does not know ("she rambled.").
@@ -393,6 +394,19 @@ public class TextTests {
                     "Then Judas, which betrayed him, answered and said, Master, is it I? He said unto him, Thou hast said."), '\u201C', '\u201D', false);
             String cs = ls == null ? "none" : Arrays.toString(ls.codes);
             check("Last Supper: Jesus, Judas, Jesus", ls != null && ls.codes.length >= 4 && ls.codes[0].startsWith("cd1") && !ls.codes[ls.codes.length - 2].startsWith("cd") && ls.codes[ls.codes.length - 1].startsWith("cd1"), cs);
+        }
+        // Setting "only God and Satan have voices": everybody else is the storyteller.
+        {
+            BibleCast.mainOnly = true;
+            BibleCast.forget();
+            BibleCast.Result mo = BibleCast.annotateVerses(Arrays.asList(
+                    "Now the serpent was more subtil than any beast of the field which the Lord God had made. And he said unto the woman, Yea, hath God said, Ye shall not eat of every tree of the garden?",
+                    "And the woman said unto the serpent, We may eat of the fruit of the trees of the garden:",
+                    "And the Lord God called unto Adam, and said unto him, Where art thou?"), '\u201C', '\u201D', false);
+            String cm = mo == null ? "none" : Arrays.toString(mo.codes);
+            check("only God and Satan: the serpent, the storyteller for Eve, God", mo != null && mo.codes.length == 3 && mo.codes[0].contains("^villain")
+                    && mo.codes[1].replaceAll("~.*", "").isEmpty() && mo.codes[2].startsWith("cd0"), cm);
+            BibleCast.mainOnly = false;
         }
         check("hapon (afternoon) is not a foreigner", Persona.ofAccent("Dumating si Mia kaninang hapon.").isEmpty(), Persona.ofAccent("Dumating si Mia kaninang hapon."));
         check("isang Hapones is a foreigner", "us".equals(Persona.ofAccent("Si Kenji ay isang Hapones.")), Persona.ofAccent("Si Kenji ay isang Hapones."));

@@ -440,6 +440,9 @@ final class Prefs {
         TextPrep.userSkip = TextPrep.parseSkip(skipList(c));
         Bible.englishNames = englishBooks(c);
         TextPrep.bibleVoice = bibleVoice(c);
+        boolean mainOnly = flag(c, "bible_main_only", true);
+        if (mainOnly != BibleCast.mainOnly) BibleDirector.forgetPlans();
+        BibleCast.mainOnly = mainOnly;
         TextPrep.povOn = povVoices(c);
         TextPrep.userPov = TextPrep.parseSay(povNames(c));
         TextPrep.castOn = flag(c, "cast_voices", true);

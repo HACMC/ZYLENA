@@ -101,6 +101,13 @@ final class BibleDirector {
 
     // ------------------------------------------------------------------ the plan of a chapter
 
+    /** Forgets the chapters already worked out (a setting about who has a voice was changed). */
+    static void forgetPlans() {
+        synchronized (PLANS) {
+            PLANS.clear();
+        }
+    }
+
     private static final Map<String, BibleCast.Result[]> PLANS = new LinkedHashMap<String, BibleCast.Result[]>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, BibleCast.Result[]> e) {

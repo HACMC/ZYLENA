@@ -580,6 +580,9 @@ public class MainActivity extends Activity {
                 "A quoted verse is read in the second voice, then the usual voice goes on.",
                 on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
         Ui.add(st, bibleVoiceRow.view);
+        Ui.add(st, flagRow(R.drawable.ic_book, "Bible: only God and Satan have voices",
+                "On: the Father, Jesus, the Holy Spirit, Satan and demons speak in their own voices (your voice lab presets); everybody else is read by the storyteller. Off: every person gets a voice.",
+                "bible_main_only", true));
         Ui.add(st, numSlider(R.drawable.ic_clock, "Pause when the voice changes", 0f, 1f, 0.05f, "pause_voice", 0f, "%.2f s"));
         col.addView(st);
 

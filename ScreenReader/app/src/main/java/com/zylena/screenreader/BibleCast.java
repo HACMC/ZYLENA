@@ -614,6 +614,9 @@ final class BibleCast {
     /** The number of the book (Genesis 1 … Revelation 66) the next call reads, set by the caller just before; 0 when not known. */
     static volatile int bookHint;
 
+    /** Setting "Bible: only God, Jesus, the Spirit and Satan speak in their own voice". */
+    static volatile boolean mainOnly = true;
+
     private static String memory; // "jesus" or "father": who the verses read lately were about
     private static long memoryAt;
 
@@ -1129,7 +1132,11 @@ final class BibleCast {
                 codes.add(code);
                 at = keys.size() - 1;
             }
-            return unsureKeys.contains(key) ? "" : codes.get(at);
+            String code = unsureKeys.contains(key) ? "" : codes.get(at);
+            // Setting: only the Father, the Son, the Holy Spirit, Satan and the demons have voices of their own; everybody else
+            // is read by the storyteller.
+            if (mainOnly && !code.startsWith("cd") && !code.contains("^villain") && !code.contains("^demon")) return "";
+            return code;
         }
 
         final java.util.Set<String> femaleKeys = new java.util.HashSet<>();
