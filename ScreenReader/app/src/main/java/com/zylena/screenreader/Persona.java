@@ -119,6 +119,10 @@ final class Persona {
             + "(?:\\s+(?:man|woman|guy|girl|gentleman|lady|boy|lord|duke|butler|agent|doctor|teacher|actor|actress|singer|model|student|businessman|prince|princess))?\\b"
             + "|\\b(?:from|of)\\s+(london|england|britain|the uk|ireland|dublin|scotland|sydney|australia|india|mumbai|delhi)\\b");
 
+    /** Somebody from abroad ("an American man", "a Korean girl", "isang Koreano", "dayuhan"): in a Tagalog story such a person speaks English. */
+    private static final Pattern FOREIGN = p("\\b(?:an?|the)\\s+(?:american|korean|japanese|chinese|french|german|spanish|italian|russian|canadian)\\s+(?:man|woman|guy|girl|gentleman|lady|boy|actor|actress|singer|model|student|businessman|prince|princess|agent|doctor|teacher)\\b"
+            + "|\\b(?:an?|the)\\s+foreigner\\b|\\b(?:amerikano|amerikana|kano|dayuhan|banyaga|koreano|koreana|hapon|hapones|intsik|tsino|espanyol|italyano|pranses|aleman)\\b");
+
     /** The country of the accent a sentence gives somebody ("a British accent", "an Irish girl"): gb, ie, au, in; or "" when none is said. */
     static String ofAccent(String s) {
         String w = null;
@@ -128,8 +132,9 @@ final class Persona {
             m = ACCENT_PERSON.matcher(s);
             if (m.find()) for (int g = 1; g <= m.groupCount() && w == null; g++) w = m.group(g);
         }
-        if (w == null) return "";
+        if (w == null) return FOREIGN.matcher(s).find() ? "us" : ""; // a foreigner: English, in an everyday voice
         w = w.toLowerCase(Locale.ROOT);
+        if (w.matches("american")) return "us";
         if (w.matches("british|english|englishman|englishwoman|london|londoner|england|britain|briton|the uk|scottish|scotsman|scotland|welsh")) return "gb";
         if (w.matches("irish|irishman|irishwoman|ireland|dublin")) return "ie";
         if (w.matches("australian|aussie|sydney|australia")) return "au";

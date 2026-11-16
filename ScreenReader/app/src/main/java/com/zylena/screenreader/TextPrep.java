@@ -1430,7 +1430,14 @@ final class TextPrep {
                     pendingFx = "";
                 }
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
-                    Seg g = new Seg(part.replace('\u0005', ' '), para ? FIL : langOf(part, screenFil), li, li, heading);
+                    String segLang = para ? FIL : langOf(part, screenFil);
+                    // A person from abroad (an American, a Briton, a foreigner) speaks English even in a Tagalog story, in the accent the story gives.
+                    if (para && cast != null && cl != null && cl.length > 0 && part.matches("(?s).*[\"“”«»].*") && clearlyEnglish(part)) {
+                        boolean abroad = true;
+                        for (String c : cl) if (c == null || c.isEmpty() || Cast.accentOf(c).isEmpty()) abroad = false;
+                        if (abroad) segLang = EN;
+                    }
+                    Seg g = new Seg(part.replace('\u0005', ' '), segLang, li, li, heading);
                     g.who = verse && bibleVoice ? "m" : who; // a page of Bible text is read in the Bible voice
                     // A line of the story in CAPITALS ("I ENTERED THE WRONG CAR!") is shouted, quoted or not.
                     if (shoutLine) g.who = g.who + "~s";
