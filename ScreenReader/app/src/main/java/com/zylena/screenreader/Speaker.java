@@ -1232,7 +1232,7 @@ final class Speaker {
         float loud, rate, pitch;
         int run, part, gen;
         boolean last, pre, recorded, failed, reached;
-        String text, id;
+        String text, id, voice = "";
         VoiceFx.Style fx;
     }
 
@@ -1294,6 +1294,7 @@ final class Speaker {
             v = tts.getVoice();
         } catch (Exception ignored) {
         }
+        if (v != null) d.voice = v.getName();
         if (synthReady && ttsSynth != null && v != null) {
             // Recorded now by the second engine; the first engine's queue only says when this line's turn has come.
             d.pre = true;
@@ -1419,7 +1420,7 @@ final class Speaker {
             partStarted(d.run, d.part, gen);
             deepTrack = tr;
             tr.play();
-            Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms" + (d.pre ? " (recorded ahead)" : ""));
+            Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms, " + sr + " Hz, voice " + d.voice + (d.pre ? " (recorded ahead)" : ""));
             final boolean last = d.last;
             deepFinishTask = () -> {
                 try {
