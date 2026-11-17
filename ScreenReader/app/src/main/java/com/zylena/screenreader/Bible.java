@@ -254,9 +254,11 @@ final class Bible {
         while (m.find()) {
             String v = m.group("v");
             int book = bookNumber(m.group("n"), m.group("b"));
+            // Of a passage some of whose verses were read already, only the others are read.
+            if (v != null && book != 0) v = unreadSpec(book, Integer.parseInt(m.group("c")), v);
             boolean tl = fil || TAGALOG_NAMES.contains(m.group("b"));
             String words = v == null || book == 0 ? null : passage(src, tl, book, Integer.parseInt(m.group("c")), v);
-            if (words != null && TextPrep.castOn && !alreadyReadPeek(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) {
+            if (words != null && TextPrep.castOn && !alreadyReadPeek(verseKeys(book, Integer.parseInt(m.group("c")), v))) {
                 // People who talk in the passage get voices of their own; the rest is told by the usual voice.
                 // The verses before it in the chapter are read as well (not said) to learn who speaks.
                 List<String> before = verseContext(src, tl, book, Integer.parseInt(m.group("c")), v);
@@ -266,7 +268,7 @@ final class Bible {
                 BibleCast.Result bc = BibleCast.annotateVerses(both, '\u00AB', '\u00BB', true, before.size());
                 if (bc != null) words = bc.text;
             }
-            if (words != null && alreadyRead(book + ":" + m.group("c") + ":" + v.replaceAll("\\s+", ""))) words = null;
+            if (words != null && alreadyRead(verseKeys(book, Integer.parseInt(m.group("c")), v))) words = null;
             String out = m.group();
             if (words != null) {
                 words = words.replaceAll("[\\s,;:]+$", "");
@@ -286,10 +288,66 @@ final class Bible {
     private static java.util.Set<Integer> pageNow = new java.util.HashSet<>();
     private static final java.util.Set<String> readNow = new java.util.HashSet<>();
 
-    private static synchronized boolean alreadyReadPeek(String id) {
-        java.util.Set<Integer> at = readVerses.get(id);
-        if (at == null) return false;
-        for (Integer h : pageNow) if (at.contains(h) && !readNow.contains(id)) return false;
+    /**
+     * The verses a citation names, one key each ("Gen 1:1-3" is 1:1, 1:2 and 1:3), so that "Genesis 1:1" read once is not read
+     * again inside "Genesis 1:1-3" on the next page.
+     */
+    private static List<String> verseKeys(int book, int chapter, String spec) {
+        List<String> keys = new ArrayList<>();
+        for (String part : spec.split("\\s?,\\s?")) {
+            part = part.trim();
+            Matcher r = RANGE_PART.matcher(part);
+            if (r.matches() && r.group(3) == null) {
+                int from = Integer.parseInt(r.group(1)), to = Integer.parseInt(r.group(2));
+                for (int v = from; v <= to && v < from + 200; v++) keys.add(book + ":" + chapter + ":" + v);
+            } else if (part.matches("\\d+")) {
+                keys.add(book + ":" + chapter + ":" + Integer.parseInt(part));
+            } else {
+                keys.add(book + ":" + chapter + ":" + part.replaceAll("\\s+", ""));
+            }
+        }
+        return keys;
+    }
+
+    /** True when the page now being prepared is the page a verse was read on (a re-preparing or a rescan), not a scrolled-on one that shares a few lines. */
+    private static boolean samePage(java.util.Set<Integer> at) {
+        int common = 0;
+        for (Integer h : pageNow) if (at.contains(h)) common++;
+        int big = Math.max(at.size(), pageNow.size());
+        return big > 0 && common * 10 >= big * 8;
+    }
+
+    /** The citation without the verses read already, when only some were ("1-3" with 1 read is "2-3"); else as it is. */
+    private static synchronized String unreadSpec(int book, int chapter, String spec) {
+        List<String> keys = verseKeys(book, chapter, spec);
+        String pre = book + ":" + chapter + ":";
+        List<Integer> open = new ArrayList<>();
+        int shut = 0;
+        for (String id : keys) {
+            java.util.Set<Integer> at = readVerses.get(id);
+            boolean readable = at == null || (samePage(at) && !readNow.contains(id));
+            if (!id.startsWith(pre) || !id.substring(pre.length()).matches("\\d+")) return spec;
+            if (readable) open.add(Integer.parseInt(id.substring(pre.length())));
+            else shut++;
+        }
+        if (shut == 0 || open.isEmpty()) return spec;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < open.size(); ) {
+            int j = i;
+            while (j + 1 < open.size() && open.get(j + 1) == open.get(j) + 1) j++;
+            if (sb.length() > 0) sb.append(", ");
+            sb.append(open.get(i)).append(j > i ? "-" + open.get(j) : "");
+            i = j + 1;
+        }
+        return sb.toString();
+    }
+
+    /** True when every verse of the citation was read already (and not on this very page). */
+    private static synchronized boolean alreadyReadPeek(List<String> keys) {
+        for (String id : keys) {
+            java.util.Set<Integer> at = readVerses.get(id);
+            if (at == null || (samePage(at) && !readNow.contains(id))) return false;
+        }
         return true;
     }
 
@@ -315,7 +373,7 @@ final class Bible {
     /** The page about to be prepared. The same page prepared again (a rescan) keeps its verses. */
     static synchronized void page(java.util.List<String> lines) {
         pageNow = new java.util.HashSet<>();
-        for (String l : lines) pageNow.add(l.trim().hashCode());
+        for (String l : lines) if (!l.trim().isEmpty()) pageNow.add(l.trim().hashCode());
         readNow.clear();
     }
 
@@ -323,20 +381,21 @@ final class Bible {
      * A verse is read once until the reading ends: a second time, on the page or on a later page, only the
      * reference is said. True when this verse was read already somewhere else.
      */
-    private static synchronized boolean alreadyRead(String id) {
-        java.util.Set<Integer> at = readVerses.get(id);
-        if (at == null) {
-            readVerses.put(id, pageNow);
-            readNow.add(id);
-            return false;
+    private static synchronized boolean alreadyRead(List<String> keys) {
+        boolean fresh = false;
+        for (String id : keys) {
+            java.util.Set<Integer> at = readVerses.get(id);
+            if (at == null || (samePage(at) && !readNow.contains(id))) fresh = true;
         }
-        boolean samePage = false;
-        for (Integer h : pageNow) if (at.contains(h)) {
-            samePage = true;
-            break;
+        if (!fresh) return true;
+        for (String id : keys) {
+            java.util.Set<Integer> at = readVerses.get(id);
+            if (at == null || samePage(at)) {
+                readVerses.put(id, pageNow);
+                readNow.add(id);
+            }
         }
-        if (samePage && readNow.add(id)) return false; // this page's own, read again
-        return true;
+        return false;
     }
 
     /**

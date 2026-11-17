@@ -310,6 +310,36 @@ public class TextTests {
             BibleDirector.reset();
             Bible.source = was;
         }
+        // A verse is read once until the reading ends or the page is scanned again: a later page that only shares a line does not read it again.
+        {
+            Bible.Verses was = Bible.source;
+            Bible.source = new Bible.Verses() {
+                @Override
+                public String get(boolean tagalog, int book, int chapter, int verse) {
+                    return tagalog ? null : (book == 1 && chapter == 1 ? "Verse " + verse + " of the little Genesis." : null);
+                }
+            };
+            Bible.newReading();
+            java.util.List<String> pageA = java.util.Arrays.asList("Sabbath Afternoon", "Lesson text", "Memory text: Genesis 1:1", "Read more.");
+            Bible.page(pageA);
+            String first = Bible.withVerses("Memory text: Genesis 1:1", false);
+            Bible.page(pageA); // the same page scanned again
+            String again = Bible.withVerses("Memory text: Genesis 1:1", false);
+            Bible.page(java.util.Arrays.asList("Sabbath Afternoon", "Another part of the lesson", "Compare Genesis 1:1 with the next verse.", "Think about it.", "Pray."));
+            String later = Bible.withVerses("Compare Genesis 1:1 with the next verse.", false);
+            Bible.page(java.util.Arrays.asList("Sabbath Afternoon", "More of the lesson", "See Gen. 1:1-2 for more.", "Think.", "Pray."));
+            String inRange = Bible.withVerses("See Genesis 1:1-2 for more.", false);
+            Bible.newReading();
+            Bible.page(java.util.Arrays.asList("Sabbath Afternoon", "Another part of the lesson", "Compare Genesis 1:1 with the next verse.", "Think about it.", "Pray."));
+            String fresh = Bible.withVerses("Compare Genesis 1:1 with the next verse.", false);
+            check("a verse is read the first time", first.contains("Verse 1 of"), first);
+            check("a rescan of the same page reads it again", again.contains("Verse 1 of"), again);
+            check("a later page that shares one line does not read the verse again", !later.contains("Verse 1 of"), later);
+            check("a range that holds a verse read already is not read twice", inRange.contains("Verse 2 of") && !inRange.contains("Verse 1 of"), inRange);
+            check("a new reading reads every verse again", fresh.contains("Verse 1 of"), fresh);
+            Bible.newReading();
+            Bible.source = was;
+        }
         // When it can only be guessed who speaks, with Jesus's people about, the words are said by the storyteller, not by a wrong voice.
         {
             BibleCast.forget();
