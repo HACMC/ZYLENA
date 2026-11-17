@@ -507,6 +507,8 @@ public class MainActivity extends Activity {
                 "modern_spelling", true));
         Ui.add(how, flagRow(R.drawable.ic_translate, "Say -syon as -shon", "The Tagalog voice says \"leksyon\" as \"lek-shon\". Off: as the voice reads it, \"lek-si-yon\".",
                 "respell_syon", true));
+        Ui.add(how, flagRow(R.drawable.ic_tune, "Learn from my fixes", "What you fix teaches the reader: a word you split like \"bula-an\" has the same done to other uncommon words with a double a. Off: only the words you fixed.",
+                "learn_fixes", true));
         col.addView(how);
         return col;
     }

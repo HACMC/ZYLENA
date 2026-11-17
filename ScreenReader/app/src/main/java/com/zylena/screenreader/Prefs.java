@@ -459,6 +459,7 @@ final class Prefs {
         TextPrep.moodMode = sp(c).getString("mood", "auto");
         TextPrep.respellNames = flag(c, "respell_names", true);
         TextPrep.respellSyon = flag(c, "respell_syon", true);
+        TextPrep.learnFixes = flag(c, "learn_fixes", true);
         TextPrep.modernSpelling = flag(c, "modern_spelling", true);
         TextPrep.sayYears = flag(c, "say_years", true);
         TextPrep.pagesEnglish = flag(c, "pages_english", true);

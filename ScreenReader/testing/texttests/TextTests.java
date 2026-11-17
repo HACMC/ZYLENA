@@ -360,6 +360,14 @@ public class TextTests {
             check("built-in: English voice keeps us", e.contains(" us ") && e.contains("earlier") && e.contains("bus"), e);
             String g = TextPrep.say("Ang mga Gentil ay nakinig.", TextPrep.FIL);
             check("built-in: Gentil", g.contains("hentil"), g);
+            String n1 = TextPrep.say("Sa gayo\u2019y kinuha ang Panginoo\u2019y ang bayan, at ang baya\u2019y nagpuri.", TextPrep.FIL);
+            check("contraction: the n comes back (gayo'y, Panginoo'y, bayan'y)", n1.contains("ga-yon ay") && n1.contains("Panginoon ay") && n1.contains("bayan ay") && !n1.contains("gayo ay"), n1);
+            String n2 = TextPrep.say("Siya\u2019y umalis, at ako\u2019y sumunod; ito\u2019y totoo.", TextPrep.FIL);
+            check("contraction: siya'y / ako'y / ito'y keep their ending", n2.contains("Siya ay") && n2.contains("ako ay") && n2.contains("ito ay"), n2);
+            String n3 = TextPrep.say("Ang mga bulaan at ang kaaway ay lumapit, at pinagpaalamaan niya sila; magaaral sila ng bulaang aral.", TextPrep.FIL);
+            check("fixes of the owner and the learned 'aa': bulaan, rare 'aa' words split, common ones left", n3.contains("bula-an") && n3.contains("kaaway") && n3.contains("pinagp"), n3);
+            String n4 = TextPrep.say("Siya ay nagkaanak at namumuhay nang matiwasay; ang pagkaalam ay bago.", TextPrep.FIL);
+            check("learned 'aa': a rare word is split", n4.contains("pagka-alam") && n4.contains("nagkaanak"), n4);
         }
 
         // Who speaks in a Bible dialogue: a name called and answered in one verse, "Moreover he said", the governor.

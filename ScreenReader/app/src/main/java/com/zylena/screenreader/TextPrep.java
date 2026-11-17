@@ -228,6 +228,30 @@ final class TextPrep {
             {"sapagka't", "sapagkat"}, {"datapuwa't", "datapuwat"}, {"bawa't", "bawat"}, {"nguni't", "ngunit"}, {"kaya't", "kayat"}, {"sakali't", "sakalit"},
             {"saka't", "sakat"}, {"samantalang", "samantalang"}};
     private static final Pattern CONTRACT_Y = Pattern.compile("(?<=[aeiouAEIOU])['\u2019][yY](?![\\p{L}])");
+    /**
+     * Ang Biblia writes "panahon ay" as "panaho'y", "gayon ay" as "gayo'y", "Panginoon ay" as "Panginoo'y": the n is lost with the
+     * apostrophe. Said as "panaho ay" it is wrong; the n goes back. (The stems are the words of the Tagalog Bible that come only
+     * with an n.)
+     */
+    private static final Set<String> N_STEMS = new HashSet<>(Arrays.asList((
+            "aki ami anoma bakaha baya daa daho diya doo farao ganya gayo halamana ila iya kabuluka kabuoa kagalaka kagibaa "
+            + "kahulihuliha kahuluga kaligtasa kaluwalhatia kamataya kapalalua kapayapaa karamiha kasangkapa kasiraa "
+            + "kataastaasa katawa katibaya katotohana katuwira kautusa kinabukasa kinagabiha kinaumagaha lama ma magkagayo "
+            + "nagkagayo nama ngayo niyao panaho pangala panginoo paraa patunga roo sanglibuta sinoma tawagi unaha yao ").trim().split(" ")));
+    private static final Pattern STEM_Y = Pattern.compile("(?<![\\p{L}'\u2019-])(\\p{L}*[aeiouAEIOU])['\u2019][yY](?![\\p{L}])");
+
+    static String restoreN(String s) {
+        if (s.indexOf('\'') < 0 && s.indexOf('\u2019') < 0) return s;
+        java.util.regex.Matcher m = STEM_Y.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String w = m.group(1);
+            m.appendReplacement(sb, java.util.regex.Matcher.quoteReplacement(N_STEMS.contains(w.toLowerCase(Locale.ROOT)) ? w + "n ay" : m.group()));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
     private static final Pattern CONTRACT_T = Pattern.compile("(?<=[aeiouAEIOU])['\u2019][tT](?![\\p{L}])");
     private static final Pattern DIOS = Pattern.compile("(?<![\\p{L}-])(D)(ios)(?![\\p{L}-])", Pattern.CASE_INSENSITIVE);
 
@@ -241,6 +265,7 @@ final class TextPrep {
             fm.appendTail(fb);
             s = fb.toString();
         }
+        s = restoreN(s);
         s = CONTRACT_Y.matcher(s).replaceAll(" ay");
         s = CONTRACT_T.matcher(s).replaceAll(" at");
         java.util.regex.Matcher d = DIOS.matcher(s);
@@ -258,7 +283,12 @@ final class TextPrep {
     static final String[][] VOICE_SAY = {
             {"Gentil", "hentil"}, {"Sigurado ka okay", "Okay ka lang"}, {"earlier", "earliier"}, {"us", "as"},
             {"realizing", "realiziing"}, {"sumuway", "sumuwai"}, {"pung", "pong"}, {"tutubos", "tu-tu-bus"},
-            {"gayon", "ga-yon"}, {"haling", "ha-ling"}, {"magkagayo'y", "magkagayoy"}, {"nangabuksan", "na-nga-buk-san"}};
+            {"gayon", "ga-yon"}, {"haling", "ha-ling"}, {"magkagayo'y", "magkagayoy"}, {"nangabuksan", "na-nga-buk-san"},
+            // The owner's own fixes, heard on the phone's Tagalog voice (Nov 2026).
+            {"panaho'y", "pa-na-hoy"}, {"lutuang-bakal", "lu-tu-ang-bakal"}, {"pagibig", "pag-ibig"}, {"tabak", "ta-bak"},
+            {"sinubok", "si-nu-book"}, {"bulaan", "bula-an"}, {"diosdiosan", "dios-dyosan"}, {"sinoman", "si-no-man"},
+            {"sinagoga", "si-na-go-ga"}, {"luklukang", "luk-lu-kang"}, {"wari", "wa-ri"}, {"Bukalan", "Buka-lan"},
+            {"magpalaanakin", "mag-pa-la-ana-kin"}, {"kinapal", "kina-pal"}, {"supilin", "su-pil-lin"}, {"propesiya", "prope-siiya"}};
     private static final Pattern[] VOICE_SAY_P = new Pattern[VOICE_SAY.length];
 
     static {
@@ -275,9 +305,49 @@ final class TextPrep {
         return s;
     }
 
+    /**
+     * Learning from "Fix a word": when the owner has split two a's apart in their own fixes ("bulaan" = "bula-an"), the voice runs
+     * them together, so the same is done to the other uncommon words with "aa" (the common ones it already says right).
+     * Only "aa": the other pairs ("ua", "ea", "oo") are common in the English words of a Taglish text.
+     */
+    static volatile boolean learnFixes = true;
+    private static final Set<String> AA_COMMON = new HashSet<>(Arrays.asList((
+            "aalalahanin aalisin aariin aariing alaala alapaap balaam bataan bayaan canaan daraan dumaan galaad higaan "
+            + "hilagaan ikaanim ikaapat inaakala inaasahan inalaala itataas itinaas kaalaman kaaliwan kaarawan kaawaan kaaway "
+            + "kabataan kabulaanan kadakilaan kadustaan kagibaan kaitaasan kakutyaan kalayaan kapamahalaan kapayapaan "
+            + "karalitaan karayaan kasaganaan kasakunaan kasamaan kasamaang kasiraan kataasan kataastaasan katandaan maaaring "
+            + "maalaman maasias mabalitaan makaraan mangaawit mataas matataas naalaala naalaman nabalitaan nagdaan nagkaanak "
+            + "nakakaalam nakaraan nakukutaan paanan paanong pababayaan pabayaan pagaani pagkaalipin pagkaraan paraan paraang "
+            + "paraanin pinabayaan pinakaalaala pinakaari pinaraan talaan ").trim().split(" ")));
+    private static final Pattern AA_WORD = Pattern.compile("(?<![\\p{L}'\u2019-])\\p{Ll}{4,}(?![\\p{L}'\u2019-])");
+
+    /** The built-in fixes ("bulaan", "magpalaanakin") already show it, so it is on unless turned off. */
+    private static boolean learnedAa() {
+        return learnFixes;
+    }
+
+    private static String learnedSplits(String s) {
+        if (s.indexOf("aa") < 0 && s.indexOf("Aa") < 0 || !learnedAa()) return s;
+        java.util.Set<String> mine = new java.util.HashSet<>();
+        for (String[] p : userSay) mine.add(p[0].toLowerCase(Locale.ROOT));
+        java.util.regex.Matcher m = AA_WORD.matcher(s);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            String w = m.group();
+            if (w.length() < 6 || w.indexOf("aa") < 0 || AA_COMMON.contains(w) || mine.contains(w)) continue;
+            m.appendReplacement(sb, w.replace("aa", "a-a"));
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
     static String sayTagalog(String s) {
         s = voiceSay(s);
-        if (modernSpelling) s = modernTagalog(s);
+        if (modernSpelling) {
+            s = modernTagalog(s);
+            s = voiceSay(s); // a word the contraction gave back ("gayo'y" is "gayon ay") is said as it is said anywhere else
+        }
+        s = learnedSplits(s);
         if (respellNames) for (int i = 0; i < TAGALOG_SAY.length; i++) s = TAGALOG_SAY_P[i].matcher(s).replaceAll(TAGALOG_SAY[i][1]);
         if (!respellSyon) return s;
         // A word the user has said how to say is left exactly so.
