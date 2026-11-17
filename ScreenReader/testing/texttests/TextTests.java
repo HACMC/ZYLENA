@@ -226,6 +226,13 @@ public class TextTests {
             check("each messenger is somebody new", ms != null && ms.codes.length == 2 && !ms.codes[0].equals(ms.codes[1]) || ms != null && ms.codes.length == 2, ms == null ? "none" : String.join(" ", ms.codes));
             check("the narrator weeps with 'wept'", "d".equals(Mood.ofNarration("Jesus wept.")), Mood.ofNarration("Jesus wept."));
             check("the narrator is afraid with 'sore afraid'", "f".equals(Mood.ofNarration("And they were sore afraid.")), Mood.ofNarration("And they were sore afraid."));
+            check("a name is not a feeling (Joyce)", Mood.ofNarration("Joyce walked in.").isEmpty(), Mood.ofNarration("Joyce walked in."));
+            check("'not happy' is not glad", Mood.ofNarration("He was not happy.").isEmpty(), Mood.ofNarration("He was not happy."));
+            check("'unhappy' is sad", "d".equals(Mood.ofNarration("He was unhappy.")), Mood.ofNarration("He was unhappy."));
+            check("'he tears the page' is not crying", Mood.ofNarration("He tears the page.").isEmpty(), Mood.ofNarration("He tears the page."));
+            check("'walked quickly' does not make a quote rushed", Mood.feeling("He walked quickly to the door. \"Hello,\" he said.", "Hello").isEmpty(), Mood.feeling("He walked quickly to the door. \"Hello,\" he said.", "Hello"));
+            check("'said quickly' makes a quote rushed", "r".equals(Mood.feeling("\"Come here,\" she said quickly.", "Come here")), Mood.feeling("\"Come here,\" she said quickly.", "Come here"));
+            check("Tagalog 'malakas ang ulan' is not a shout", Mood.feeling("\"Oo,\" sabi niya nang malakas ang ulan.", "Oo").isEmpty(), Mood.feeling("\"Oo,\" sabi niya nang malakas ang ulan.", "Oo"));
             check("the narrator is not moved by what is said", Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D").isEmpty(), Mood.ofNarration("And he said, \u201CFear not, for I am with thee.\u201D"));
             BibleCast.forget();
         }

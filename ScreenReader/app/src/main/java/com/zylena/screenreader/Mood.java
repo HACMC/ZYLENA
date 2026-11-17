@@ -94,9 +94,9 @@ final class Mood {
 
     private static final String[][] FEEL = {
             {"w", "whisper|whispered|whispers|murmur|murmured|murmurs|mutter|muttered|mumbled|breathed|softly|quietly|under (?:his|her|my) breath"
-                    + "|bulong|ibinulong|pabulong|bumulong|anas|mahinang|mahina"},
+                    + "|bulong|ibinulong|pabulong|bumulong|anas|mahinang|mahina(?!\\s+(?:ang|na)\\s+(?:loob|katawan|ulo|resistensya|pangangatawan))"},
             {"s", "shout|shouted|shouts|yell|yelled|yells|yelling|shouting|screaming|scream|screamed|screams|roared|bellowed|shrieked|screeched|hollered|barked|loudly|exclaimed|exclaims|cried out|burst out"
-                    + "|sigaw|sumigaw|isinigaw|pasigaw|hiyaw|humiyaw|bulyaw|binulyawan|tili|tumili|malakas"},
+                    + "|sigaw|sumigaw|isinigaw|pasigaw|hiyaw|humiyaw|bulyaw|binulyawan|tili|tumili|malakas(?!\\s+(?:na\\s+|ang\\s+)?(?:ulan|hangin|bagyo|katawan|loob|ihip|buhos|pagsabog|lindol|kulog|alon|apoy))"},
             {"h", "sigh|sighed|sighs|sighing|exhaled|huminga nang malalim|buntong-hininga|napabuntong-hininga"},
             {"d", "sob|sobbed|sobs|cried|cries|wept|wailed|sniffled|sadly|tearfully"
                     + "|hikbi|humihikbi|umiiyak|umiyak|iyak|daing|malungkot|garalgal"},
@@ -106,7 +106,7 @@ final class Mood {
                     + "|biro|nagbiro|pabiro|ngiti|nakangiti|nakangiting|masaya|masayang|tukso|kinikilig|tuwang-tuwa"},
             {"a", "argued|argues|protested|retorted|scowled|seethed|gritted|snapped|snaps|growled|growls|hissed|hisses|snarled|spat|angrily|coldly|sharply|demanded|glared|fumed"
                     + "|galit|pagalit|nagalit|singhal|suminghal|sita|mariing|mariin|inis|naiinis|asik|umasik|banta|nagbanta|binantaan|pabanta"},
-            {"r", "rambled|rambles|rambling|babbled|babbles|babbling|rattled on|prattled|chattered|jabbered|blabbed|gabbed|blurted|blurting|gushed|in a rush|in a hurry|hurriedly|rapidly|frantically|breathlessly|quickly"
+            {"r", "rambled|rambles|rambling|babbled|babbles|babbling|rattled on|prattled|chattered|jabbered|blabbed|gabbed|blurted|blurting|gushed|in a rush|in a hurry|hurriedly|frantically|breathlessly|(?:said|asked|replied|answered|added|spoke|says|speaks)[,]?\\s+(?:quickly|rapidly)|(?:quickly|rapidly)\\s+(?:said|asked|replied|answered|added|spoke|says|speaks)"
                     + "|nagdadaldal|dumaldal|daldal|nagmamadali|nagmamadaling|dali-dali|dalidali|humahangos|hingal|nagkakandarapa|tuloy-tuloy|sunod-sunod"},
             {"f", "stammered|stuttered|gasped|trembled|trembling|nervously|panicked|shakily|whimpered"
                     + "|nauutal|nanginginig|takot|natatakot|kinakabahan|napasinghap|taranta|natataranta"}};
@@ -183,17 +183,18 @@ final class Mood {
     private static final String[][] NARR = {
             {"f", "froze|trembl|terrified|panic|heart (?:pounded|raced|skipped|hammered)|goosebumps|shiver|dread|horrified|nanginig|kinabahan|natakot|nanlamig"
                     + "|(?:sore|greatly|exceedingly|sorely) afraid|feared exceedingly|were afraid|was afraid|dismayed|fell on (?:their|his|her) face|nangatakot|natakot na lubha|nanglupaypay"},
-            {"d", "tears|crying|cried|sobbed|heartbroken|sorrow|grief|ached|lonely|nalungkot|umiyak|luha|nasaktan"
+            {"d", "tears(?!\\s+(?:the|a|an|it|up|apart|open|off|through|into|at|down\\s+the)(?![\\p{L}]))|crying|cried|sobbed|heartbroken|sorrow|grief|ached|lonely|unhappy|saddened|nalungkot|umiyak|luha|nasaktan"
                     + "|wept|weeping|mourn\\w*|lament\\w*|wail\\w*|bewail\\w*|grieved|anguish|rent (?:his|her|their) (?:clothes|garments)|sackcloth|nanangis|tumangis|nanaghoy|nagdalamhati|nagluksa|nalumbay"},
             {"a", "furious|angry|glared|rage|slammed|fuming|seething|clenched (?:his|her|my) fists|galit|nagalit|nanggigil"
                     + "|wroth|wrath|indignation|was displeased|anger (?:was )?kindled|nagalab ang galit|napoot|poot"},
-            {"j", "smiled|beamed|delighted|joy|happy|excited|grinned|giggled|ngumiti|nangiti|masaya|natuwa|kilig"
+            {"j", "smiled|beamed|delighted|joy(?:s|ful|fully|ous|ously)?(?![\\p{L}])|happy|excited|grinned|giggled|ngumiti|nangiti|masaya|natuwa|kilig"
                     + "|rejoice\\w*|gladness|glad\\b|praised God|glorified God|shouted for joy|nagalak|nangagalak|nagsipagalak|nagagalak|nagpuri sa Dios"},
             {"h", "sighed|exhaled|exhausted|nagbuntong|groaned|sighing|nagbuntung|dumaing"}};
     private static final Pattern[] NARR_P = new Pattern[NARR.length];
 
     static {
-        for (int i = 0; i < NARR.length; i++) NARR_P[i] = Pattern.compile("(?i)(?<![\\p{L}-])(?:" + NARR[i][1] + ")");
+        for (int i = 0; i < NARR.length; i++) // Not after a "not", "never", "no", "n't", "hindi" or "walang": "was not happy", "felt no fear" are not that feeling.
+            NARR_P[i] = Pattern.compile("(?i)(?<![\\p{L}-])(?<!\\bnot )(?<!\\bnever )(?<!\\bno )(?<!n't )(?<!\\bhindi )(?<!\\bwalang )(?:" + NARR[i][1] + ")");
     }
 
     private static final Pattern QUOTED = Pattern.compile("[\u201C\"\u00AB][^\u201D\"\u00BB]*[\u201D\"\u00BB]");
