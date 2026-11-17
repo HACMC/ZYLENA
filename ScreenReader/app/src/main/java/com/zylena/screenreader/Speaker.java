@@ -1043,8 +1043,7 @@ final class Speaker {
             int gap = Sfx.person(base) ? 8 : 5; // the same sound again and again is tiresome
             if (lastRun == null || Math.abs(i - lastRun) >= gap) {
                 sfxHold = Sfx.holdMs(ctx, s.sfx);
-                // The long, atmospheric sounds (a trumpet, the sea, a crowd) play under the voice: the reading is not held for them.
-                if (sfxHold > 0 && Sfx.ambient(base)) sfxHold = 40;
+                // Every sound, the long ones too (a trumpet, the sea, a crowd): the reading pauses, the sound plays alone, then the reading goes on.
                 if (sfxHold > 0) {
                     sfxLastRun.put(base, i);
                     sfxNow.put(sfxId, s.sfx);

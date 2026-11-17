@@ -216,7 +216,7 @@ final class Sfx {
                     if (pcm != null) made.put(name, pcm);
                 }
             }
-            return pcm == null ? 0 : Math.min(4000L, pcm.length * 1000L / RATE + 150);
+            return pcm == null ? 0 : Math.min(5000L, pcm.length * 1000L / RATE + 150);
         } catch (Throwable e) {
             return 0;
         }
