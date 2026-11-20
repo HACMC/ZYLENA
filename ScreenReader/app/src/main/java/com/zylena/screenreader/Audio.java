@@ -30,55 +30,78 @@ final class Audio {
         short[] samples; // mono 16-bit
     }
 
-    /** Returns where the file went, e.g. "Download/ZYLENA/ZYLENA-20261024-2130.wav". */
+    /**
+     * Returns where the file went, e.g. "Download/ZYLENA/ZYLENA-20261024-2130.wav". One paragraph at a time is held in
+     * memory: the sound goes to a file as it is joined (a long chapter, all of it in memory twice over, ran the phone
+     * out of memory and closed ZYLENA).
+     */
     static String join(Context c, File dir, int count) throws Exception {
         int rate = 0;
-        ByteArrayOutputStream all = new ByteArrayOutputStream();
+        long bytes = 0;
         short[] gap = null;
-        for (int i = 0; i < count; i++) {
-            File f = new File(dir, String.format(Locale.US, "%04d.wav", i));
-            if (!f.exists() || f.length() < 44) continue;
-            Pcm p = read(f);
-            if (p == null) continue;
-            if (rate == 0) {
-                rate = p.rate;
-                gap = new short[rate * 35 / 100]; // a short breath between paragraphs
+        File joined = new File(dir, "joined.pcm");
+        try {
+            try (OutputStream all = new java.io.BufferedOutputStream(new FileOutputStream(joined), 1 << 16)) {
+                for (int i = 0; i < count; i++) {
+                    File f = new File(dir, String.format(Locale.US, "%04d.wav", i));
+                    if (!f.exists() || f.length() < 44) continue;
+                    Pcm p = read(f);
+                    f.delete();
+                    if (p == null) continue;
+                    if (rate == 0) {
+                        rate = p.rate;
+                        gap = new short[rate * 35 / 100]; // a short breath between paragraphs
+                    }
+                    short[] s = p.rate == rate ? p.samples : resample(p.samples, p.rate, rate);
+                    if (bytes > 0) bytes += write(all, gap);
+                    bytes += write(all, s);
+                }
             }
-            short[] s = p.rate == rate ? p.samples : resample(p.samples, p.rate, rate);
-            if (all.size() > 0) write(all, gap);
-            write(all, s);
-            f.delete();
-        }
-        if (rate == 0) throw new Exception("the voice made no sound");
-        byte[] pcm = all.toByteArray();
-        byte[] wav = header(pcm.length, rate);
+            if (rate == 0) throw new Exception("the voice made no sound");
+            // A WAV file holds at most 4 GB; hours of speech are far below that.
+            if (bytes > Integer.MAX_VALUE - 64) throw new Exception("the reading is too long for one audio file");
+            byte[] wav = header((int) bytes, rate);
 
-        String name = "ZYLENA-" + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".wav";
-        if (Build.VERSION.SDK_INT >= 29) {
-            ContentValues v = new ContentValues();
-            v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
-            v.put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav");
-            v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ZYLENA");
-            Uri uri = c.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new Exception("Downloads isn't available");
-            try (OutputStream o = c.getContentResolver().openOutputStream(uri)) {
-                o.write(wav);
-                o.write(pcm);
+            String name = "ZYLENA-" + new SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(new Date()) + ".wav";
+            if (Build.VERSION.SDK_INT >= 29) {
+                ContentValues v = new ContentValues();
+                v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                v.put(MediaStore.MediaColumns.MIME_TYPE, "audio/wav");
+                v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ZYLENA");
+                Uri uri = c.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                if (uri == null) throw new Exception("Downloads isn't available");
+                try (OutputStream o = c.getContentResolver().openOutputStream(uri)) {
+                    if (o == null) throw new Exception("Downloads isn't available");
+                    o.write(wav);
+                    copy(joined, o);
+                }
+                return "Download/ZYLENA/" + name;
             }
-            return "Download/ZYLENA/" + name;
+            File out = new File(c.getExternalFilesDir(Environment.DIRECTORY_MUSIC), name);
+            try (OutputStream o = new FileOutputStream(out)) {
+                o.write(wav);
+                copy(joined, o);
+            }
+            return out.getAbsolutePath();
+        } finally {
+            joined.delete();
         }
-        File out = new File(c.getExternalFilesDir(Environment.DIRECTORY_MUSIC), name);
-        try (OutputStream o = new FileOutputStream(out)) {
-            o.write(wav);
-            o.write(pcm);
-        }
-        return out.getAbsolutePath();
     }
 
-    private static void write(ByteArrayOutputStream out, short[] s) {
+    private static void copy(File from, OutputStream to) throws Exception {
+        byte[] buf = new byte[1 << 16];
+        try (InputStream in = new FileInputStream(from)) {
+            int n;
+            while ((n = in.read(buf)) > 0) to.write(buf, 0, n);
+        }
+    }
+
+    /** Writes the samples as 16-bit little-endian; returns how many bytes that was. */
+    private static int write(OutputStream out, short[] s) throws Exception {
         ByteBuffer b = ByteBuffer.allocate(s.length * 2).order(ByteOrder.LITTLE_ENDIAN);
         for (short x : s) b.putShort(x);
         out.write(b.array(), 0, b.capacity());
+        return b.capacity();
     }
 
     /** Reads a 16-bit PCM WAV into mono samples; null if it's some other format. */

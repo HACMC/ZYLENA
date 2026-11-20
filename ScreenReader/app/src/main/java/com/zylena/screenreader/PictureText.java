@@ -52,8 +52,9 @@ final class PictureText {
                     soft = hw.copy(Bitmap.Config.ARGB_8888, false); // text recognition can't read GPU memory
                     hw.recycle();
                 }
-                TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                        .process(InputImage.fromBitmap(soft, 0))
+                // Closed once it has answered: each one holds the recognition engine in memory until then.
+                final com.google.mlkit.vision.text.TextRecognizer rec = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+                rec.process(InputImage.fromBitmap(soft, 0))
                         .addOnSuccessListener(text -> {
                             List<Text.TextBlock> blocks = new ArrayList<>(text.getTextBlocks());
                             // Top to bottom, then left to right, the way a person reads a page.
@@ -72,10 +73,12 @@ final class PictureText {
                                 rects.add(b.getBoundingBox() != null ? b.getBoundingBox() : new Rect());
                             }
                             soft.recycle();
+                            closeQuietly(rec);
                             out.done(lines, rects, null);
                         })
                         .addOnFailureListener(e -> {
                             soft.recycle();
+                            closeQuietly(rec);
                             out.done(new ArrayList<>(), new ArrayList<>(), "Text recognition failed: " + e.getMessage());
                         });
             }
@@ -85,6 +88,13 @@ final class PictureText {
                 out.done(new ArrayList<>(), new ArrayList<>(), "Couldn't take a screenshot (code " + code + ").");
             }
         });
+    }
+
+    private static void closeQuietly(com.google.mlkit.vision.text.TextRecognizer rec) {
+        try {
+            rec.close();
+        } catch (Exception ignored) {
+        }
     }
 
     // Picture details, not picture content: file names, times, dates, sizes, camera settings.

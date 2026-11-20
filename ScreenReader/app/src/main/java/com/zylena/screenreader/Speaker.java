@@ -206,6 +206,15 @@ final class Speaker {
         return page.isEmpty() ? null : page.get(pageAt());
     }
 
+    /** The words of the piece being read (or paused at), as on the page, for the app's player card; null when nothing is. */
+    String nowText() {
+        List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;
+        if ((!speaking && !paused) || runs == null || runs.isEmpty()) return null;
+        int i = Math.max(0, Math.min(paused ? pausedAt : curRun, runs.size() - 1));
+        String t = runs.get(i).text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "").trim();
+        return t.isEmpty() ? null : t;
+    }
+
     /** Every piece of the page being read (or last read), as the voice gets it. Empty when nothing was read yet. */
     java.util.ArrayList<String> pageSpoken() {
         java.util.ArrayList<String> out = new java.util.ArrayList<>();
@@ -384,6 +393,7 @@ final class Speaker {
     }
 
     void stop() {
+        boolean wasPaused = paused;
         generation++;
         endWait();
         paused = false;
@@ -394,6 +404,9 @@ final class Speaker {
         if (gemini != null) gemini.stop();
         handLate.clear();
         setSpeaking(false);
+        // Stopped while paused: "speaking" was false already, so say it here, or the notification stayed "ZYLENA paused".
+        Listener l = listener;
+        if (wasPaused && l != null) main.post(() -> l.onSpeakingChanged(false));
     }
 
     boolean isPaused() {
@@ -582,7 +595,16 @@ final class Speaker {
         whenReady = then;
         if (tts != null) return; // still starting; whenReady runs when it is up
         String pkg = Prefs.ttsPackage(ctx);
-        tts = new TextToSpeech(ctx, status -> main.post(() -> {
+        final TextToSpeech[] made = new TextToSpeech[1];
+        made[0] = tts = new TextToSpeech(ctx, status -> main.post(() -> {
+            // Another voice app was chosen while this one was starting: this one is let go, the new one answers for itself.
+            if (tts != made[0]) {
+                try {
+                    made[0].shutdown();
+                } catch (Exception ignored) {
+                }
+                return;
+            }
             ttsReady = status == TextToSpeech.SUCCESS;
             if (ttsReady) {
                 Logs.d(ctx, "text-to-speech engine ready: " + tts.getDefaultEngine());
@@ -656,6 +678,10 @@ final class Speaker {
                 pendingVoiceCallbacks.clear();
             } else {
                 Logs.d(ctx, "text-to-speech engine failed to start, status=" + status);
+                try {
+                    made[0].shutdown(); // let go of the voice app, or its connection stays open
+                } catch (Exception ignored) {
+                }
                 tts = null;
                 whenReady = null;
                 setSpeaking(false);
@@ -1247,9 +1273,15 @@ final class Speaker {
     private void initSynth() {
         if (ttsSynth != null) return;
         String pkg = Prefs.ttsPackage(ctx);
-        ttsSynth = new TextToSpeech(ctx, status -> main.post(() -> {
-            if (status != TextToSpeech.SUCCESS || ttsSynth == null) {
-                ttsSynth = null;
+        final TextToSpeech[] made = new TextToSpeech[1];
+        made[0] = ttsSynth = new TextToSpeech(ctx, status -> main.post(() -> {
+            if (status != TextToSpeech.SUCCESS || ttsSynth != made[0]) {
+                // Failed, or another voice app was chosen meanwhile: this one is let go.
+                if (ttsSynth == made[0]) ttsSynth = null;
+                try {
+                    made[0].shutdown();
+                } catch (Exception ignored) {
+                }
                 return;
             }
             ttsSynth.setOnUtteranceProgressListener(new UtteranceProgressListener() {
@@ -1992,7 +2024,7 @@ final class Speaker {
                 String where = Audio.join(ctx, saveDir, saveCount);
                 Logs.d(ctx, "audio saved: " + where);
                 toast("Audio saved: " + where);
-            } catch (Exception e) {
+            } catch (Throwable e) { // out of memory too: that must not close ZYLENA
                 Logs.d(ctx, "saving audio failed: " + e);
                 toast("Couldn't save the audio: " + e.getMessage());
             }
@@ -2013,8 +2045,19 @@ final class Speaker {
         if (tts != null) tts.shutdown();
         tts = null;
         ttsReady = false;
+        // The second engine, which records God's, Jesus's and the characters' lines ahead, must be the new voice app too:
+        // left on the old one, it was handed the new app's voices and said those lines in some other voice.
+        if (ttsSynth != null) {
+            try {
+                ttsSynth.shutdown();
+            } catch (Exception ignored) {
+            }
+        }
+        ttsSynth = null;
+        synthReady = false;
         voiceCache = null;
         lastSet = null;
+        voicesChanged(); // the characters' voices were the old app's
         Logs.d(ctx, "phone voice app: " + (pkg.isEmpty() ? "default" : pkg));
         whenSystemReady(r);
     }
