@@ -3564,7 +3564,10 @@ public class ReaderService extends AccessibilityService {
     private void showFan() {
         if (fan != null || button == null) return;
         List<String[]> items = new ArrayList<>(Shortcuts.chosen(this));
-        items.add(new String[]{"wrong", "\u2691", "Sounded wrong"});
+        // (Not twice when "Sounded wrong" is one of the four chosen.)
+        boolean wrongChosen = false;
+        for (String[] it : items) wrongChosen |= it[0].equals("wrong");
+        if (!wrongChosen) items.add(new String[]{"wrong", "\u2691", "Sounded wrong"});
         items.add(new String[]{"panel", "\u2630", "All controls"});
         items.add(new String[]{"search", "\uD83D\uDD0D", "Search settings"});
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
@@ -3725,6 +3728,18 @@ public class ReaderService extends AccessibilityService {
                 android.widget.Toast.LENGTH_LONG).show();
     }
 
+    /** The page is being scanned (or put in place) before the voice starts: the app's player card says so. */
+    boolean isScanning() {
+        return scanning || placing;
+    }
+
+    /** Stop from the app's player card: a scan under way stops too, as with the floating button. */
+    void stopReading() {
+        Logs.d(this, "player card: stop");
+        cancelScan();
+        Speaker.get(this).stop();
+    }
+
     private void toggle() {
         Speaker sp = Speaker.get(this);
         Logs.d(this, sp.isSpeaking() || scanning || placing ? "button: stop" : "button: read");
@@ -3762,8 +3777,10 @@ public class ReaderService extends AccessibilityService {
         bg.setShape(GradientDrawable.OVAL);
         bg.setStroke(tr ? Theme.dp(this, 3) : (int) getResources().getDisplayMetrics().density, tr ? 0xFFFFFFFF : 0x99FFFFFF);
         button.setBackground(bg);
-        button.setImageResource(Speaker.get(this).isSpeaking() || scanning ? R.drawable.ic_stop : R.drawable.ic_speaker);
-        button.setContentDescription(Speaker.get(this).isSpeaking() ? "Stop reading" : "Read screen");
+        // Paused: a play sign, since a tap goes on reading from where it stopped.
+        boolean busy = Speaker.get(this).isSpeaking() || scanning, paused = !busy && Speaker.get(this).isPaused();
+        button.setImageResource(busy ? R.drawable.ic_stop : paused ? R.drawable.ic_play : R.drawable.ic_speaker);
+        button.setContentDescription(busy ? "Stop reading" : paused ? "Go on reading" : "Read screen");
     }
 
     private void removeButton() {

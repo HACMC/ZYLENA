@@ -39,6 +39,18 @@ public class MainActivity extends Activity {
     // Home
     private TextView statusChip, heroTitle, heroText;
     private Button heroButton;
+    // The player card: controls while reading, the speed (kept in step with the Voice tab's), and what it shows now.
+    private LinearLayout heroControls, heroSpeed, voiceSpeed;
+    private ImageView heroPlay;
+    private String heroState = "";
+    private final android.os.Handler ui = new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable heroTick = new Runnable() {
+        @Override
+        public void run() {
+            refreshHero();
+            ui.postDelayed(this, 700);
+        }
+    };
     private LinearLayout sleepTile, readTile;
     // Rows that show live state
     private Ui.Row nextHowRow, nextAppRow;
@@ -111,6 +123,19 @@ public class MainActivity extends Activity {
     protected void onResume() {
         super.onResume();
         focusSearchIfAsked();
+        // Opened on a given tab (the phone test on GitHub photographs each one); in the test, also with the sample playing.
+        android.content.Intent in = getIntent();
+        int askedTab = in == null ? -1 : in.getIntExtra("tab", -1);
+        if (askedTab >= 0 && askedTab < pages.size()) {
+            in.removeExtra("tab");
+            if (searchBox.getText().length() > 0) searchBox.setText("");
+            showTab(askedTab);
+            pages.get(askedTab).scrollTo(0, 0);
+        }
+        if (in != null && in.getBooleanExtra("play_sample", false)) {
+            in.removeExtra("play_sample");
+            if (Prefs.testMode(this)) Speaker.get(this).speakText(SAMPLE);
+        }
         // Switched on in Accessibility but not running: Android stopped it after a problem and won't start it again
         // by itself (Settings shows "Not working"). Give Android a moment first: after a restart it binds it again.
         getWindow().getDecorView().postDelayed(() -> {
@@ -139,6 +164,15 @@ public class MainActivity extends Activity {
         Prefs.setFloatingButton(this, true);
         applyService();
         refresh();
+        // The player card follows the reading while the app is open.
+        ui.removeCallbacks(heroTick);
+        ui.post(heroTick);
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        ui.removeCallbacks(heroTick);
     }
 
     @Override
@@ -200,7 +234,12 @@ public class MainActivity extends Activity {
             label.setGravity(Gravity.CENTER);
             label.setPadding(0, Theme.dp(this, 4), 0, 0);
             t.addView(label);
-            t.setOnClickListener(v -> showTab(which));
+            t.setContentDescription(names[i] + " tab");
+            t.setOnClickListener(v -> {
+                // A tab tapped while searching: the search is done with.
+                if (searchBox != null && searchBox.getText().length() > 0) searchBox.setText("");
+                showTab(which);
+            });
             tabs.add(t);
             bar.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         }
@@ -274,15 +313,44 @@ public class MainActivity extends Activity {
         hero.addView(heroTitle);
         heroText = Theme.body(this, "", Theme.MUTED, 13.5f);
         heroText.setPadding(0, Theme.dp(this, 4), 0, 0);
+        heroText.setMaxLines(5);
+        heroText.setEllipsize(android.text.TextUtils.TruncateAt.END);
         hero.addView(heroText);
         heroButton = Theme.button(this, "", true);
         heroButton.setOnClickListener(v -> {
+            ReaderService rs = ReaderService.instance;
             if (!serviceOn()) showAccessGuide();
+            else if (rs != null && rs.isScanning()) rs.stopReading();
             else if (Speaker.get(this).isSpeaking()) Speaker.get(this).stop();
             else Speaker.get(this).speakText(SAMPLE);
-            heroButton.postDelayed(this::refresh, 300);
+            heroButton.postDelayed(this::refreshHero, 300);
         });
         hero.addView(heroButton, Theme.spaced(this, 16));
+        // While reading or paused: the controls, big and round, like a music player's.
+        heroControls = new LinearLayout(this);
+        heroControls.setOrientation(LinearLayout.HORIZONTAL);
+        heroControls.setGravity(Gravity.CENTER);
+        heroControls.addView(roundButton(R.drawable.ic_prev, "Back a paragraph", false, () -> Speaker.get(this).skip(-1)));
+        heroPlay = roundButton(R.drawable.ic_pause, "Pause", true, () -> {
+            Speaker sp = Speaker.get(this);
+            if (sp.isSpeaking()) sp.pause();
+            else if (sp.isPaused()) sp.resume();
+        });
+        heroControls.addView(heroPlay);
+        heroControls.addView(roundButton(R.drawable.ic_next, "Skip a paragraph", false, () -> Speaker.get(this).skip(1)));
+        heroControls.addView(roundButton(R.drawable.ic_stop, "Stop", false, () -> {
+            ReaderService rs = ReaderService.instance;
+            if (rs != null) rs.stopReading();
+            else Speaker.get(this).stop();
+        }));
+        hero.addView(heroControls, Theme.spaced(this, 16));
+        // The reading speed, right here: a new speed is heard at once, from the sentence being read.
+        heroSpeed = Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f×", this::setSpeed);
+        heroSpeed.setTag(null); // the Voice tab's own Speed is the one the settings search finds
+        heroSpeed.getChildAt(0).setBackground(null);
+        heroSpeed.getChildAt(0).setPadding(0, heroSpeed.getChildAt(0).getPaddingTop(), 0, 0);
+        heroSpeed.getChildAt(1).setPadding(Theme.dp(this, 54), Theme.dp(this, 4), Theme.dp(this, 8), Theme.dp(this, 4));
+        hero.addView(heroSpeed, Theme.spaced(this, 6));
         col.addView(hero, Theme.spaced(this, 8));
 
         // Shortcuts.
@@ -410,23 +478,27 @@ public class MainActivity extends Activity {
         LinearLayout col = column();
         col.addView(pageTitle("Reading"));
 
-        col.addView(Ui.section(this, "How it reads"));
-        LinearLayout g = Ui.group(this);
+        col.addView(Ui.section(this, "Floating button"));
+        LinearLayout fb = Ui.group(this);
         floatRow = Ui.toggle(this, R.drawable.ic_touch, "Floating button", "Tap to read, again to stop. Hold for more. Always back when you open ZYLENA.", on -> {
             Prefs.setFloatingButton(this, on);
             applyService();
         });
-        Ui.add(g, floatRow.view);
+        Ui.add(fb, floatRow.view);
         tuckRow = Ui.toggle(this, R.drawable.ic_touch, "Tuck into the edge",
                 "After 3 seconds untouched the button hides halfway at the edge. Tap it to bring it out.", on -> {
                     Prefs.setTuck(this, on);
                     applyService();
                 });
-        Ui.add(g, tuckRow.view);
-        Ui.add(g, flagRow(R.drawable.ic_touch, "Hide in full screen",
+        Ui.add(fb, tuckRow.view);
+        Ui.add(fb, flagRow(R.drawable.ic_touch, "Hide in full screen",
                 "The button goes away while a video or a game fills the screen, and comes back after. The app you last read in keeps it, "
                         + "even if it is full screen too (some story apps are). With it hidden, use the Quick Settings tile or the notification controls.",
                 "hide_fullscreen", false));
+        col.addView(fb);
+
+        col.addView(Ui.section(this, "How it reads"));
+        LinearLayout g = Ui.group(this);
         autoRow = Ui.toggle(this, R.drawable.ic_play, "Read each new screen", "Starts by itself when you open an app",
                 on -> Prefs.setAutoRead(this, on));
         Ui.add(g, autoRow.view);
@@ -436,26 +508,30 @@ public class MainActivity extends Activity {
         pageRow = Ui.toggle(this, R.drawable.ic_scroll, "Read the whole page", "Also the text further down; the page scrolls along",
                 on -> Prefs.setWholePage(this, on));
         Ui.add(g, pageRow.view);
-        nextRow = Ui.toggle(this, R.drawable.ic_next, "Go on to the next page", "At the very bottom, swipes to the next page (e.g. tomorrow's lesson)",
-                on -> Prefs.setNextPage(this, on));
-        Ui.add(g, nextRow.view);
         markRow = Ui.toggle(this, R.drawable.ic_frame, "Highlight while reading", "Gold outline around the paragraph",
                 on -> Prefs.setHighlight(this, on));
-        nextHowRow = Ui.nav(this, R.drawable.ic_next, "How the next page is reached", "", () -> pickNextMode(null));
-        Ui.add(g, nextHowRow.view);
-        nextAppRow = Ui.nav(this, R.drawable.ic_next, "Next page in the app last read", "", () -> pickNextMode(Prefs.lastApp(this)));
-        Ui.add(g, nextAppRow.view);
-        Ui.add(g, Ui.nav(this, R.drawable.ic_next, "Words on a Next button", "What the button that goes on may say: Next, Next part, Susunod\u2026",
-                this::editNextWords).view);
         Ui.add(g, markRow.view);
         Ui.add(g, flagRow(R.drawable.ic_play, "Start reading right after the scan",
                 "On a long page the voice starts at once, while the page is still going back to the top. Off: it waits until the page is at the top.",
                 "read_at_once", false));
-        Ui.add(g, flagRow(R.drawable.ic_next, "Turn the page early",
+        col.addView(g);
+
+        col.addView(Ui.section(this, "Next page"));
+        LinearLayout np = Ui.group(this);
+        nextRow = Ui.toggle(this, R.drawable.ic_next, "Go on to the next page", "At the very bottom, swipes to the next page (e.g. tomorrow's lesson)",
+                on -> Prefs.setNextPage(this, on));
+        Ui.add(np, nextRow.view);
+        nextHowRow = Ui.nav(this, R.drawable.ic_next, "How the next page is reached", "", () -> pickNextMode(null));
+        Ui.add(np, nextHowRow.view);
+        nextAppRow = Ui.nav(this, R.drawable.ic_next, "Next page in the app last read", "", () -> pickNextMode(Prefs.lastApp(this)));
+        Ui.add(np, nextAppRow.view);
+        Ui.add(np, Ui.nav(this, R.drawable.ic_next, "Words on a Next button", "What the button that goes on may say: Next, Next part, Susunod\u2026",
+                this::editNextWords).view);
+        Ui.add(np, flagRow(R.drawable.ic_next, "Turn the page early",
                 "Shortly before the last paragraph ends, the next page is opened and scanned, so reading goes on without a wait.",
                 "early_turn", true));
-        Ui.add(g, numSlider(R.drawable.ic_clock, "How early the page is turned", 3f, 20f, 1f, "early_seconds", 9f, "%.0f s"));
-        col.addView(g);
+        Ui.add(np, numSlider(R.drawable.ic_clock, "How early the page is turned", 3f, 20f, 1f, "early_seconds", 9f, "%.0f s"));
+        col.addView(np);
 
         col.addView(Ui.section(this, "Open & read"));
         LinearLayout open = Ui.group(this);
@@ -534,8 +610,43 @@ public class MainActivity extends Activity {
         warn.setPadding(Theme.dp(this, 6), Theme.dp(this, 8), Theme.dp(this, 6), 0);
         col.addView(warn);
 
-        col.addView(Ui.section(this, "Story and Bible voices"));
+        col.addView(Ui.section(this, "Speed and pitch"));
+        LinearLayout s = Ui.group(this);
+        voiceSpeed = Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f×", this::setSpeed);
+        Ui.add(s, voiceSpeed);
+        Ui.add(s, Ui.slider(this, R.drawable.ic_translate, "Tagalog speed", 0.8f, 1.2f, 0.05f, Prefs.rateFil(this), "%.2f×",
+                v -> {
+                    Prefs.setRateFil(this, v);
+                    applyNow();
+                }));
+        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
+                v -> {
+                    Prefs.setPitch(this, v);
+                    applyNow();
+                }));
+        col.addView(s);
+
+        col.addView(Ui.section(this, "Stories"));
         LinearLayout st = Ui.group(this);
+        Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
+                "In a story, what each character says is read in a voice of their own: a man's voice for a man, a woman's for a woman, "
+                        + "the best voices first. The storyteller keeps the usual voice.", "cast_voices", true));
+        Ui.add(st, flagRow(R.drawable.ic_person, "Voices that suit the character",
+                "A child's voice, an old person's, a husky one, a mob boss's, a maid's: found from how the story describes them (\"a seven-year-old girl\", "
+                        + "\"in a husky voice\", \"the maid\"). God, Jesus and the Holy Spirit are deep and slow. Made by changing the sound, so it works with any "
+                        + "voice. Off: only the voice's own pitch is asked for, which some online voices ignore.", "voice_fx", true));
+        castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
+        Ui.add(st, castFilRow.view);
+        castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
+        Ui.add(st, castEnRow.view);
+        Ui.add(st, Ui.nav(this, R.drawable.ic_person, "Fix a character's voice",
+                "Every character the reader has met: pick man or woman, and a kind of voice (child, elder, husky, boss, maid\u2026)", this::pickCharacter).view);
+        castRow = Ui.nav(this, R.drawable.ic_person, "Story characters", "", this::editPovNames);
+        Ui.add(st, castRow.view);
+        povRow = Ui.toggle(this, R.drawable.ic_person, "Point of view (POV) voice",
+                "A line like \"Liam's POV\" switches the storyteller to the second voice for a man and \"POV: Mia\" to the usual voice for a woman.",
+                on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
+        Ui.add(st, povRow.view);
         Ui.add(st, flagRow(R.drawable.ic_person, "Laugh aloud",
                 "When a story says someone laughs (\"she answered with a laugh\", \"Mia giggled\"), the character laughs (Hahaha, Hehehe) in their own voice "
                         + "instead of the words being read. Each character has a laugh of their own.", "say_laughs", true));
@@ -545,58 +656,29 @@ public class MainActivity extends Activity {
                         + "otherwise it comes first and the sentence is read as written.", "say_sounds", true));
         Ui.add(st, flagRow(R.drawable.ic_clock, "Mark scene changes",
                 "\"* * *\", \"Later that day\", \"The next morning\": a longer pause and, in a story, a soft chime", "scene_breaks", true));
-        Ui.add(st, flagRow(R.drawable.ic_person, "A voice for each character",
-                "In a story, what each character says is read in a voice of their own: a man's voice for a man, a woman's for a woman, "
-                        + "the best voices first. The storyteller keeps the usual voice.", "cast_voices", true));
         Ui.add(st, flagRow(R.drawable.ic_eq, "Sound effects in stories",
                 "A knock, a door, a ringing phone, thunder and the like are played as the story tells of them. A sound written out "
                         + "(\"Ring, ring!\") is played instead of said. Made on the phone, nothing to download.", "sfx", true));
         Ui.add(st, numSlider(R.drawable.ic_eq, "Sound effects volume", 0f, 1f, 0.05f, "sfx_volume", 0.7f, "%.2f"));
-        Ui.add(st, flagRow(R.drawable.ic_person, "Voices that suit the character",
-                "A child's voice, an old person's, a husky one, a mob boss's, a maid's: found from how the story describes them (\"a seven-year-old girl\", "
-                        + "\"in a husky voice\", \"the maid\"). God, Jesus and the Holy Spirit are deep and slow. Made by changing the sound, so it works with any "
-                        + "voice. Off: only the voice's own pitch is asked for, which some online voices ignore.", "voice_fx", true));
-        Ui.add(st, flagRow(R.drawable.ic_person, "More natural rhythm",
-                "Each sentence is said a few percent faster or slower and a little higher or lower, and the pauses between paragraphs and sentences are not all "
-                        + "the same, so it sounds less like a machine reading. A story's narration is told a touch slower. Off: every sentence is said the same way.", "natural", true));
-        castFilRow = Ui.nav(this, R.drawable.ic_person, "Tagalog voices for characters", "", () -> pickCastVoices(TextPrep.FIL));
-        Ui.add(st, castFilRow.view);
-        castEnRow = Ui.nav(this, R.drawable.ic_person, "English voices for characters", "", () -> pickCastVoices(TextPrep.EN));
-        Ui.add(st, castEnRow.view);
         Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a drama sample",
                 "A short story with a mob boss, a child, a maid, an old woman, Jesus, sound effects and a scene change, to check how voices and sounds come out on this phone", this::hearSample).view);
-        Ui.add(st, Ui.nav(this, R.drawable.ic_play, "Hear a Bible drama sample",
-                "Scenes from the Bible with the serpent, the devil, Jesus, a storm at sea, trumpets, a crowd, a rooster, an earthquake and war, to hear the voices and sounds", this::hearBibleSample).view);
-        Ui.add(st, Ui.nav(this, R.drawable.ic_tune, "Voice lab",
-                "Try a kind of voice (God's, a child's, a boss's) with exact settings, apart from the real ones, then send me the numbers", () ->
-                        startActivity(new android.content.Intent(this, VoiceLabActivity.class))).view);
-        Ui.add(st, Ui.nav(this, R.drawable.ic_person, "Fix a character's voice",
-                "Every character the reader has met: pick man or woman, and a kind of voice (child, elder, husky, boss, maid\u2026)", this::pickCharacter).view);
-        castRow = Ui.nav(this, R.drawable.ic_person, "Story characters", "", this::editPovNames);
-        Ui.add(st, castRow.view);
-        povRow = Ui.toggle(this, R.drawable.ic_person, "Point of view (POV) voice",
-                "A line like \"Liam's POV\" switches the storyteller to the second voice for a man and \"POV: Mia\" to the usual voice for a woman.",
-                on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
-        Ui.add(st, povRow.view);
+        col.addView(st);
+
+        col.addView(Ui.section(this, "Bible voices"));
+        LinearLayout bv = Ui.group(this);
+        Ui.add(bv, flagRow(R.drawable.ic_book, "Bible: only God and Satan have voices",
+                "On: the Father, Jesus, the Holy Spirit, Satan and demons speak in their own voices (your voice lab presets); everybody else is read by the storyteller. Off: every person gets a voice.",
+                "bible_main_only", true));
         bibleVoiceRow = Ui.toggle(this, R.drawable.ic_book, "Second voice for Bible verses",
                 "A quoted verse is read in the second voice, then the usual voice goes on.",
                 on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
-        Ui.add(st, bibleVoiceRow.view);
-        Ui.add(st, flagRow(R.drawable.ic_book, "Bible: only God and Satan have voices",
-                "On: the Father, Jesus, the Holy Spirit, Satan and demons speak in their own voices (your voice lab presets); everybody else is read by the storyteller. Off: every person gets a voice.",
-                "bible_main_only", true));
-        Ui.add(st, numSlider(R.drawable.ic_clock, "Pause when the voice changes", 0f, 1f, 0.05f, "pause_voice", 0f, "%.2f s"));
-        col.addView(st);
-
-        col.addView(Ui.section(this, "Speed and pitch"));
-        LinearLayout s = Ui.group(this);
-        Ui.add(s, Ui.slider(this, R.drawable.ic_speed, "Speed", 0.6f, 1.8f, 0.1f, Prefs.rate(this), "%.1f×",
-                v -> Prefs.setRate(this, v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_translate, "Tagalog speed", 0.8f, 1.2f, 0.05f, Prefs.rateFil(this), "%.2f×",
-                v -> Prefs.setRateFil(this, v)));
-        Ui.add(s, Ui.slider(this, R.drawable.ic_eq, "Pitch", 0.8f, 1.3f, 0.05f, Prefs.pitch(this), "%.2f",
-                v -> Prefs.setPitch(this, v)));
-        col.addView(s);
+        Ui.add(bv, bibleVoiceRow.view);
+        Ui.add(bv, Ui.nav(this, R.drawable.ic_tune, "Voice lab",
+                "Try a kind of voice (God's, a child's, a boss's) with exact settings, apart from the real ones, then send me the numbers", () ->
+                        startActivity(new android.content.Intent(this, VoiceLabActivity.class))).view);
+        Ui.add(bv, Ui.nav(this, R.drawable.ic_play, "Hear a Bible drama sample",
+                "Scenes from the Bible with the serpent, the devil, Jesus, a storm at sea, trumpets, a crowd, a rooster, an earthquake and war, to hear the voices and sounds", this::hearBibleSample).view);
+        col.addView(bv);
 
         col.addView(Ui.section(this, "Tone and pauses"));
         LinearLayout t = Ui.group(this);
@@ -617,6 +699,10 @@ public class MainActivity extends Activity {
                 v -> Prefs.setFloat(this, "pause_heading", v)));
         Ui.add(t, Ui.slider(this, R.drawable.ic_clock, "Pause after a question", 0f, 2f, 0.05f, Prefs.pauseQuestion(this), "%.2f s",
                 v -> Prefs.setFloat(this, "pause_question", v)));
+        Ui.add(t, flagRow(R.drawable.ic_person, "More natural rhythm",
+                "Each sentence is said a few percent faster or slower and a little higher or lower, and the pauses between paragraphs and sentences are not all "
+                        + "the same, so it sounds less like a machine reading. A story's narration is told a touch slower. Off: every sentence is said the same way.", "natural", true));
+        Ui.add(t, numSlider(R.drawable.ic_clock, "Pause when the voice changes", 0f, 1f, 0.05f, "pause_voice", 0f, "%.2f s"));
         col.addView(t);
 
         col.addView(Ui.section(this, "Internet and translation"));
@@ -1179,18 +1265,110 @@ public class MainActivity extends Activity {
 
     // ------------------------------------------------------------ state
 
+    /**
+     * The player card on Home: whether ZYLENA is on, reading, paused or scanning, the words being read, and the
+     * controls that fit. Called often while the app is open (see heroTick), so it only changes what changed.
+     */
+    private void refreshHero() {
+        if (statusChip == null) return;
+        boolean on = serviceOn();
+        Speaker sp = Speaker.get(this);
+        boolean speaking = sp.isSpeaking(), paused = !speaking && sp.isPaused();
+        ReaderService rs = ReaderService.instance;
+        boolean scanning = !speaking && !paused && rs != null && rs.isScanning();
+        String state = !on ? "off" : speaking ? "reading" : paused ? "paused" : scanning ? "scanning" : "ready";
+        if (!state.equals(heroState)) {
+            heroState = state;
+            statusChip.setText("\u25CF  " + state.toUpperCase(Locale.ROOT));
+            GradientDrawable chip = new GradientDrawable();
+            chip.setCornerRadius(Theme.dp(this, 99));
+            chip.setColor(state.equals("off") ? Theme.DANGER : state.equals("ready") ? Theme.DONE : state.equals("paused") ? Theme.MUTED : Theme.GOLD);
+            statusChip.setBackground(chip);
+            heroTitle.setText(state.equals("off") ? "Turn on ZYLENA" : state.equals("reading") ? "Reading" : state.equals("paused") ? "Paused"
+                    : state.equals("scanning") ? "Scanning the page" : "Ready to read");
+            boolean controls = speaking || paused;
+            heroControls.setVisibility(controls ? View.VISIBLE : View.GONE);
+            heroButton.setVisibility(controls ? View.GONE : View.VISIBLE);
+            heroButton.setText(!on ? "Turn on in Accessibility" : scanning ? "\u25A0  Stop" : "\u25B6  Test the voice");
+            heroSpeed.setVisibility(on ? View.VISIBLE : View.GONE);
+        }
+        String now = speaking || paused ? sp.nowText() : null;
+        String text = now != null ? now
+                : !on ? "Android needs your OK before ZYLENA can see the screen. It reads nothing until you tap the button."
+                : scanning ? "ZYLENA goes through the page once first, so it can show each paragraph as it is read. Reading starts in a moment."
+                : "Open any app and tap the gold button. English, Tagalog or Taglish.";
+        if (!text.contentEquals(heroText.getText())) heroText.setText(text);
+        heroText.setTextColor(now != null ? Theme.INK : Theme.MUTED);
+        heroText.setTextSize(now != null ? 15f : 13.5f);
+        // (Only when it changes: setting the picture loads it afresh every time.)
+        int icon = speaking ? R.drawable.ic_pause : R.drawable.ic_play;
+        if (!Integer.valueOf(icon).equals(heroPlay.getTag())) {
+            heroPlay.setTag(icon);
+            heroPlay.setImageResource(icon);
+            heroPlay.setContentDescription(speaking ? "Pause" : "Go on reading");
+        }
+        int left = sp.sleepMinutesLeft();
+        String sleep = left > 0 ? "Stops in " + left + " min" : "Off";
+        TextView sleepSub = sleepTile.findViewWithTag("sub");
+        if (!sleep.contentEquals(sleepSub.getText())) sleepSub.setText(sleep);
+    }
+
+    /** A round control for the player card; the main one (play / pause) is gold and larger. */
+    private ImageView roundButton(int icon, String label, boolean main, Runnable onTap) {
+        ImageView b = new ImageView(this);
+        b.setImageResource(icon);
+        b.setContentDescription(label);
+        b.setColorFilter(main ? Theme.BG : Theme.GOLD_LIGHT);
+        int size = Theme.dp(this, main ? 64 : 52), pad = Theme.dp(this, main ? 18 : 15);
+        b.setPadding(pad, pad, pad, pad);
+        GradientDrawable bg = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                main ? new int[]{Theme.GOLD_LIGHT, Theme.GOLD} : new int[]{Theme.SURFACE_2, Theme.SURFACE});
+        bg.setShape(GradientDrawable.OVAL);
+        if (!main) bg.setStroke(Theme.dp(this, 1), Theme.LINE_STRONG);
+        GradientDrawable mask = new GradientDrawable();
+        mask.setShape(GradientDrawable.OVAL);
+        mask.setColor(Color.WHITE);
+        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(Color.argb(70, 240, 214, 144)), bg, mask));
+        b.setOnClickListener(v -> {
+            onTap.run();
+            ui.postDelayed(this::refreshHero, 250);
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(size, size);
+        int m = Theme.dp(this, 7);
+        lp.setMargins(m, 0, m, 0);
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    /** A new reading speed, heard at once: what is being read goes on from its sentence at that speed. */
+    private void setSpeed(float v) {
+        Prefs.setRate(this, v);
+        Logs.d(this, "speed " + Prefs.rate(this));
+        applyNow();
+        syncSpeed();
+    }
+
+    /** Both Speed sliders (Home and Voice) show the speed in use, also one set in the floating button's panel. */
+    private void syncSpeed() {
+        int p = Math.round((Prefs.rate(this) - 0.6f) / 0.1f);
+        for (LinearLayout s : new LinearLayout[]{heroSpeed, voiceSpeed}) {
+            if (s == null) continue;
+            android.widget.SeekBar sb = (android.widget.SeekBar) s.getChildAt(1);
+            if (sb.getProgress() != p) sb.setProgress(p);
+        }
+    }
+
+    /** Speech already handed to the voice keeps its old speed and pitch: go on from the sentence being read, with the new ones. */
+    private void applyNow() {
+        Speaker sp = Speaker.get(this);
+        if (sp.isSpeaking()) sp.skip(0);
+    }
+
     private void refresh() {
         boolean on = serviceOn();
-        boolean speaking = Speaker.get(this).isSpeaking();
-        statusChip.setText(on ? "\u25CF  READY" : "\u25CF  OFF");
-        GradientDrawable chip = new GradientDrawable();
-        chip.setCornerRadius(Theme.dp(this, 99));
-        chip.setColor(on ? Theme.DONE : Theme.DANGER);
-        statusChip.setBackground(chip);
-        heroTitle.setText(on ? "Ready to read" : "Turn on ZYLENA");
-        heroText.setText(on ? "Open any app and tap the gold button. English, Tagalog or Taglish."
-                : "Android needs your OK before ZYLENA can see the screen. It reads nothing until you tap the button.");
-        heroButton.setText(!on ? "Turn on in Accessibility" : speaking ? "\u25A0  Stop" : "\u25B6  Test the voice");
+        heroState = ""; // shown afresh
+        refreshHero();
+        syncSpeed();
 
         String readApp = appName(Prefs.readApp(this));
         ((TextView) readTile.findViewWithTag("sub")).setText(readApp + " \u00B7 hold to change");
@@ -1511,6 +1689,7 @@ public class MainActivity extends Activity {
                     if (say) Prefs.setLists(this, text, Prefs.skipList(this));
                     else Prefs.setLists(this, Prefs.sayList(this), text);
                     Logs.d(this, (say ? "pronunciations: " + TextPrep.userSay.size() : "skip words: " + TextPrep.userSkip.size()) + " saved");
+                    refresh(); // the count under "My pronunciations" / "Words to skip"
                 })
                 .setNegativeButton("Cancel", null)
                 .show();

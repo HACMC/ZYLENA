@@ -71,13 +71,15 @@ public class FixActivity extends Activity {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
         col.setPadding(pad, pad, pad, pad);
-        col.setBackgroundColor(0xFF1B1718);
+        // The app's own look: a dark card with a gold hairline, over the page being read.
+        android.graphics.drawable.GradientDrawable win = new android.graphics.drawable.GradientDrawable();
+        win.setCornerRadius(Theme.dp(this, 20));
+        win.setColor(Theme.SURFACE);
+        win.setStroke(Theme.dp(this, 1), Theme.LINE_STRONG);
+        getWindow().setBackgroundDrawable(win);
 
-        TextView title = new TextView(this);
-        title.setText("Fix a word");
-        title.setTextColor(0xFFF0D690);
-        title.setTextSize(20);
-        col.addView(title);
+        col.addView(Theme.eyebrow(this, "Pronunciation"));
+        col.addView(Theme.title(this, "Fix a word", 28));
         col.addView(label("This is the whole page as it is read, opened where the voice was. Tap the word that sounded wrong. "
                 + "For a phrase, tap its first word, then its last."));
 
@@ -86,12 +88,13 @@ public class FixActivity extends Activity {
         search.setGravity(Gravity.CENTER_VERTICAL);
         find = field("Search the page");
         search.addView(find, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        Button next = new Button(this);
-        next.setText("Next");
-        next.setAllCaps(false);
+        Button next = Theme.button(this, "Next", false);
+        next.setMinHeight(Theme.dp(this, 44));
         next.setOnClickListener(v -> nextHit());
-        search.addView(next, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        col.addView(search);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        nlp.setMarginStart(Theme.dp(this, 8));
+        search.addView(next, nlp);
+        col.addView(search, Theme.spaced(this, 8));
         find.addTextChangedListener(new android.text.TextWatcher() {
             @Override
             public void beforeTextChanged(CharSequence s, int a, int b, int c) {
@@ -108,15 +111,24 @@ public class FixActivity extends Activity {
         });
 
         said = new TextView(this);
-        said.setTextColor(Color.WHITE);
+        said.setTextColor(Theme.INK);
         said.setTextSize(17);
-        said.setLineSpacing(0, 1.25f);
+        said.setTypeface(Theme.sans(this));
+        said.setLineSpacing(0, 1.3f);
         said.setMovementMethod(LinkMovementMethod.getInstance());
         said.setHighlightColor(Color.TRANSPARENT);
         box = new ScrollView(this);
         box.addView(said);
-        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 220));
-        bl.topMargin = Theme.dp(this, 8);
+        android.graphics.drawable.GradientDrawable sheet = new android.graphics.drawable.GradientDrawable();
+        sheet.setCornerRadius(Theme.dp(this, 14));
+        sheet.setColor(Theme.SUNK);
+        sheet.setStroke(Theme.dp(this, 1), Theme.LINE);
+        box.setBackground(sheet);
+        int bp = Theme.dp(this, 12);
+        box.setPadding(bp, bp, bp, bp);
+        box.setClipToPadding(false);
+        LinearLayout.LayoutParams bl = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, Theme.dp(this, 230));
+        bl.topMargin = Theme.dp(this, 10);
         col.addView(box, bl);
 
         col.addView(label("Wrong word or phrase"));
@@ -126,58 +138,52 @@ public class FixActivity extends Activity {
         right = field("How it should be said");
         col.addView(right);
         hints = new TextView(this);
-        hints.setTextColor(0xFFF0D690);
+        hints.setTextColor(Theme.GOLD_LIGHT);
         hints.setTextSize(15);
+        hints.setTypeface(Theme.sans(this));
+        hints.setPadding(0, Theme.dp(this, 8), 0, 0);
         hints.setLineSpacing(0, 1.3f);
         hints.setMovementMethod(LinkMovementMethod.getInstance());
         hints.setHighlightColor(Color.TRANSPARENT);
         hints.setVisibility(View.GONE);
         col.addView(hints);
         ideas = new TextView(this);
-        ideas.setTextColor(0xFFF0D690);
+        ideas.setTextColor(Theme.GOLD_LIGHT);
         ideas.setTextSize(15);
+        ideas.setTypeface(Theme.sans(this));
+        ideas.setPadding(0, Theme.dp(this, 8), 0, 0);
         ideas.setLineSpacing(0, 1.3f);
         ideas.setMovementMethod(LinkMovementMethod.getInstance());
         ideas.setHighlightColor(Color.TRANSPARENT);
         ideas.setVisibility(View.GONE);
         col.addView(ideas);
-        LinearLayout hear = new LinearLayout(this);
-        hear.setOrientation(LinearLayout.HORIZONTAL);
-        Button hearWord = new Button(this);
-        hearWord.setText("Hear the word");
-        hearWord.setAllCaps(false);
+        Button hearWord = button("▶  Hear the word", false);
         // As it is read now: with the fixes and respellings already in use.
         hearWord.setOnClickListener(v -> Speaker.get(this).sayNow(TextPrep.withoutHalts(TextPrep.say(wrong.getText().toString(), lang())), lang()));
-        Button hearFix = new Button(this);
-        hearFix.setText("Hear my fix");
-        hearFix.setAllCaps(false);
+        Button hearFix = button("▶  Hear my fix", false);
         hearFix.setOnClickListener(v -> {
             if (right.getText().toString().trim().isEmpty()) Toast.makeText(this, "Type how it should be said first, or tap an idea.", Toast.LENGTH_SHORT).show();
             else Speaker.get(this).sayNow(right.getText().toString(), lang());
         });
-        hear.addView(hearWord, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        hear.addView(hearFix, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        col.addView(hear);
+        col.addView(pair(hearWord, hearFix), Theme.spaced(this, 12));
         col.addView(label("Tip: write it the way it sounds, like \"Zeleena\" or \"pro-pe-ta\". It changes how the word is said everywhere."));
 
-        Button save = button("Say it this way");
+        Button save = button("Say it this way", true);
         save.setOnClickListener(v -> save(false));
-        Button never = button("Never read this");
+        Button never = button("Never read this", false);
         never.setOnClickListener(v -> save(true));
-        Button asIs = button("Say it as written");
+        Button asIs = button("Say it as written", false);
         asIs.setOnClickListener(v -> {
             right.setText(wrong.getText().toString());
             save(false);
         });
-        mine = button("My fixes");
+        mine = button("My fixes", false);
         mine.setOnClickListener(v -> showMine());
-        Button cancel = button("Cancel");
+        Button cancel = button("Cancel", false);
         cancel.setOnClickListener(v -> finish());
-        col.addView(save);
-        col.addView(asIs);
-        col.addView(never);
-        col.addView(mine);
-        col.addView(cancel);
+        col.addView(save, Theme.spaced(this, 14));
+        col.addView(pair(asIs, never), Theme.spaced(this, 8));
+        col.addView(pair(mine, cancel), Theme.spaced(this, 8));
         countMine();
 
         ScrollView scroller = new ScrollView(this);
@@ -223,32 +229,47 @@ public class FixActivity extends Activity {
     }
 
     private TextView label(String s) {
-        TextView t = new TextView(this);
-        t.setText(s);
-        t.setTextColor(0xFFB9AFA6);
-        t.setTextSize(13);
-        t.setPadding(0, Theme.dp(this, 12), 0, Theme.dp(this, 2));
+        TextView t = Theme.body(this, s, Theme.MUTED, 13);
+        t.setPadding(0, Theme.dp(this, 12), 0, Theme.dp(this, 4));
         return t;
     }
 
+    /** A text box in the app's look: a rounded dark field with a gold hairline. */
     private EditText field(String hint) {
         EditText e = new EditText(this);
         e.setHint(hint);
         e.setSingleLine(true);
-        e.setTextColor(Color.WHITE);
-        e.setHintTextColor(0xFF7D746C);
+        e.setTextColor(Theme.INK);
+        e.setHintTextColor(Theme.FAINT);
+        e.setTextSize(16);
+        e.setTypeface(Theme.sans(this));
+        android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+        bg.setCornerRadius(Theme.dp(this, 12));
+        bg.setColor(Theme.SURFACE_2);
+        bg.setStroke(Theme.dp(this, 1), Theme.LINE_STRONG);
+        e.setBackground(bg);
+        int h = Theme.dp(this, 14), v = Theme.dp(this, 11);
+        e.setPadding(h, v, h, v);
         return e;
     }
 
-    private Button button(String s) {
-        Button b = new Button(this);
-        b.setText(s);
-        b.setAllCaps(false);
-        b.setGravity(Gravity.CENTER);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = Theme.dp(this, 6);
-        b.setLayoutParams(lp);
+    /** primary: the main action, in gold; the others dark with a gold hairline. */
+    private Button button(String s, boolean primary) {
+        Button b = Theme.button(this, s, primary);
+        b.setMinHeight(Theme.dp(this, primary ? 52 : 46));
+        b.setTextSize(primary ? 16 : 14);
         return b;
+    }
+
+    /** Two buttons side by side, each half the width. */
+    private LinearLayout pair(Button a, Button b) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams la = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        la.setMarginEnd(Theme.dp(this, 8));
+        row.addView(a, la);
+        row.addView(b, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return row;
     }
 
     /** The words, each one tappable; the chosen ones marked. */

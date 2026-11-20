@@ -70,10 +70,16 @@ public class LogActivity extends Activity {
                     .setPrimaryClip(ClipData.newPlainText("log", shareable()));
             Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
         });
-        clear.setOnClickListener(v -> {
-            Logs.clear(this);
-            show();
-        });
+        // Asked first: a log that shows a problem is easily lost with one tap.
+        clear.setOnClickListener(v -> new android.app.AlertDialog.Builder(this)
+                .setTitle("Clear the log?")
+                .setMessage("Everything in it is deleted. Save or share it first if it shows a problem.")
+                .setPositiveButton("Clear", (d, w) -> {
+                    Logs.clear(this);
+                    show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show());
     }
 
     @Override

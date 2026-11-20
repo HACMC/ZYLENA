@@ -159,4 +159,25 @@ adb shell "run-as $Z cat files/test-log.txt" > "$OUT/zylena.txt" || true
 python3 "$ROOT/ScreenReader/testing/check_reading.py" "$OUT/logcat.txt" "$OUT/zylena.txt" > "$OUT/report.txt"
 RESULT=$?
 cat "$OUT/report.txt"
+
+# ZYLENA's own screens, photographed so their look can be checked on a phone (shots/app-*.png). Never changes the result.
+app_screens() {
+  local size W H
+  size=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
+  W=${size%x*}; H=${size#*x}; W=${W:-1080}; H=${H:-2400}
+  for t in 0 1 2 3; do
+    adb shell am start -W -n $Z/.MainActivity --activity-clear-top --activity-single-top --ei tab $t > /dev/null 2>&1
+    sleep 3
+    shot "app-$t-top"
+    adb shell input swipe $((W / 2)) $((H * 3 / 4)) $((W / 2)) $((H / 4)) 600
+    sleep 2
+    shot "app-$t-down"
+  done
+  # The player card while reading (the sample, timed as everything is in the test).
+  adb shell am start -W -n $Z/.MainActivity --activity-clear-top --activity-single-top --ei tab 0 --ez play_sample true > /dev/null 2>&1
+  sleep 1
+  shot "app-0-reading"
+}
+( app_screens ) || true
+
 exit $RESULT
