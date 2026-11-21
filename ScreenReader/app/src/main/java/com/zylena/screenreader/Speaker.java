@@ -647,7 +647,7 @@ final class Speaker {
                     @Override
                     public void onDone(String id) {
                         if (id.startsWith("deep:")) {
-                            main.post(() -> deepMarker(id, false));
+                            main.post(() -> deepMarker(id, false, ""));
                             return;
                         }
                         if (id.startsWith("save:")) {
@@ -658,10 +658,20 @@ final class Speaker {
                     }
 
                     @Override
+                    public void onError(String id, int code) {
+                        ttsFailed(id, ttsError(code));
+                    }
+
+                    @Override
                     public void onError(String id) {
-                        Logs.d(ctx, "TTS error on " + id);
-                        if (id != null && id.startsWith("deep:")) {
-                            main.post(() -> deepMarker(id, true));
+                        ttsFailed(id, "");
+                    }
+
+                    private void ttsFailed(String id, String why) {
+                        Logs.d(ctx, "TTS error on " + id + (why.isEmpty() ? "" : ": " + why));
+                        if (id == null) return;
+                        if (id.startsWith("deep:")) {
+                            main.post(() -> deepMarker(id, true, why));
                             return;
                         }
                         if (id.startsWith("save:")) {
@@ -671,6 +681,9 @@ final class Speaker {
                         if (id.endsWith(":last")) allDone(Integer.parseInt(id.split(":")[0]));
                     }
                 });
+                // The second engine (it records God's, Jesus's and the characters' lines ahead) starts now, not at the first such
+                // line: then the first is recorded ahead too, instead of by this engine only when its turn has come.
+                if (Prefs.flag(ctx, "voice_fx", true) && !Prefs.testMode(ctx)) initSynth();
                 Runnable r = whenReady;
                 whenReady = null;
                 if (r != null) r.run();
@@ -1133,15 +1146,16 @@ final class Speaker {
             float vm = applyVoice(lang, parts.get(k)[3]);
             // No man's voice in this language for God's words (Tagalog on many phones): asking the voice to speak lower is
             // ignored by online voices, so the sound itself is lowered that much more, and it comes out a man's.
-            final boolean noMan = fx0 != null && divineLine && vm / divineDepth(Cast.voice(parts.get(k)[3])) < 0.97f;
+            final float dd = divineLine ? depthFor(Cast.voice(parts.get(k)[3])) : 1f;
+            final boolean noMan = fx0 != null && divineLine && vm / dd < 0.97f;
             final VoiceFx.Style fx = noMan ? VoiceFx.lower(fx0, 0.82f) : fx0;
             if (noMan && !noManLogged.contains(lang)) {
                 noManLogged.add(lang);
                 Logs.d(ctx, "voice fx: no man's voice for " + lang + ", God's words are made from the usual voice, lowered more");
             }
             if (fx != null) r *= fx.tf / fx.pf; // said at this speed, it comes out at the tempo asked once the pitch is changed
-            else if (divineLine) r *= 0.92f; // slower, with weight
-            if (fx != null) p *= divineLine ? (noMan ? 1f : vm / divineDepth(Cast.voice(parts.get(k)[3]))) : vm; // the pitch is changed afterwards
+            else if (divineLine && !plainJesus(Cast.voice(parts.get(k)[3]))) r *= 0.92f; // slower, with weight
+            if (fx != null) p *= divineLine ? (noMan ? 1f : vm / dd) : vm; // the pitch is changed afterwards
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
             float[] kind = Mood.forKind(s.mood), feel = feelFx != null ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
@@ -1217,6 +1231,21 @@ final class Speaker {
     private static float divineDepth(String code) {
         return Cast.JESUS_CODE.equals(code) ? 0.93f : Cast.SPIRIT_CODE.equals(code) ? 0.97f : DEEP;
     }
+
+    /** Whose voice these words are said in: Jesus can be given God the Father's (Voice > Bible voices > Jesus's voice). */
+    private String divineAs(String code) {
+        return Cast.JESUS_CODE.equals(code) && "father".equals(Prefs.jesusVoice(ctx)) ? Cast.DIVINE_CODE : code;
+    }
+
+    /** Jesus is read in the phone voice as it is: nothing lowered, slowed or changed. */
+    private boolean plainJesus(String code) {
+        return Cast.JESUS_CODE.equals(code) && "plain".equals(Prefs.jesusVoice(ctx));
+    }
+
+    /** How much lower a divine speaker's voice is asked to be (1: as it is). */
+    private float depthFor(String code) {
+        return plainJesus(code) ? 1f : divineDepth(divineAs(code));
+    }
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
     private android.media.AudioTrack deepTrack;
@@ -1230,7 +1259,7 @@ final class Speaker {
      * the sound is changed, so that no two sound the same.
      */
     /** The name of the kind of voice the Father, the Son or the Holy Spirit has in this language. */
-    private static String divineStyle(String lang, String v) {
+    static String divineStyle(String lang, String v) {
         String base = Cast.JESUS_CODE.equals(v) ? "jesus" : Cast.SPIRIT_CODE.equals(v) ? "spirit" : "deep";
         return base + (lang.equals(TextPrep.FIL) ? "_fil" : "");
     }
@@ -1240,7 +1269,8 @@ final class Speaker {
         if (v == null || !Cast.isCode(v)) return null;
         if (v.startsWith("cd")) {
             // The Father, the Son, the Holy Spirit: each their own; gentler in Tagalog (only one man's voice there).
-            return VoiceFx.get(divineStyle(lang, v));
+            if (plainJesus(v)) return null; // Jesus in the phone voice as it is (Voice > Bible voices)
+            return VoiceFx.get(divineStyle(lang, divineAs(v)));
         }
         String st = Persona.kindOf(Cast.styleOf(who));
         if (st.equals("plain")) return null;
@@ -1257,9 +1287,42 @@ final class Speaker {
         java.io.File f;
         float loud, rate, pitch;
         int run, part, gen;
-        boolean last, pre, recorded, failed, reached;
-        String text, id, voice = "";
+        boolean last, pre, recorded, failed, reached, working;
+        String text, id, voice = "", why = "";
         VoiceFx.Style fx;
+        // The sound, changed into the voice wanted (on a thread of its own, as soon as it is recorded), and its levels.
+        short[] pcm;
+        int sr;
+        float[] stats;
+    }
+
+    /** Changes recordings into the voice wanted, one at a time, away from the main thread (a long one took seconds there). */
+    private final java.util.concurrent.ExecutorService fxWork = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "zylena-voicefx");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** Why the voice app could not do it, in words, for the log. */
+    static String ttsError(int code) {
+        switch (code) {
+            case TextToSpeech.ERROR_NETWORK:
+                return "no connection to the online voice";
+            case TextToSpeech.ERROR_NETWORK_TIMEOUT:
+                return "the online voice took too long";
+            case TextToSpeech.ERROR_SYNTHESIS:
+                return "the voice could not say it";
+            case TextToSpeech.ERROR_INVALID_REQUEST:
+                return "the voice refused the text";
+            case TextToSpeech.ERROR_OUTPUT:
+                return "the sound could not be written";
+            case TextToSpeech.ERROR_SERVICE:
+                return "the voice app stopped";
+            case TextToSpeech.ERROR_NOT_INSTALLED_YET:
+                return "the voice is not downloaded yet";
+            default:
+                return "error " + code;
+        }
     }
 
     private final java.util.Map<String, DeepReq> deepReqs = new java.util.concurrent.ConcurrentHashMap<>();
@@ -1291,12 +1354,17 @@ final class Speaker {
 
                 @Override
                 public void onDone(String id) {
-                    main.post(() -> deepRecorded(id, false));
+                    main.post(() -> deepRecorded(id, false, ""));
+                }
+
+                @Override
+                public void onError(String id, int code) {
+                    main.post(() -> deepRecorded(id, true, ttsError(code)));
                 }
 
                 @Override
                 public void onError(String id) {
-                    main.post(() -> deepRecorded(id, true));
+                    main.post(() -> deepRecorded(id, true, "the voice could not record it"));
                 }
             });
             synthReady = true;
@@ -1333,12 +1401,12 @@ final class Speaker {
             ttsSynth.setVoice(v);
             ttsSynth.setSpeechRate(rate);
             ttsSynth.setPitch(pitch);
-            if (ttsSynth.synthesizeToFile(text, null, d.f, rid) != TextToSpeech.SUCCESS) d.failed = true;
+            if (ttsSynth.synthesizeToFile(text, null, d.f, rid) != TextToSpeech.SUCCESS) fail(d, "the second voice engine refused it");
             tts.playSilentUtterance(10, TextToSpeech.QUEUE_ADD, rid);
         } else {
             int rc = tts.synthesizeToFile(text, null, d.f, rid);
             if (rc != TextToSpeech.SUCCESS) {
-                d.failed = true;
+                fail(d, "the voice refused to record it");
                 d.reached = true;
                 main.post(() -> deepTry(rid));
             }
@@ -1348,7 +1416,7 @@ final class Speaker {
             main.postDelayed(() -> {
                 DeepReq x = deepReqs.get(rid);
                 if (x == null || x.recorded) return;
-                x.failed = true;
+                fail(x, "the second voice engine never answered");
                 deepTry(rid);
             }, 20000 + text.length() * 90L);
         }
@@ -1361,38 +1429,103 @@ final class Speaker {
         main.postDelayed(() -> {
             DeepReq x = deepReqs.get(rid);
             if (x == null) return;
-            x.failed = !x.recorded;
+            if (!x.recorded) fail(x, "the voice took too long to record it");
             x.reached = true;
             deepTry(rid);
         }, 10000 + d.text.length() * 90L);
     }
 
     /** The recording of a line is done (or failed), by the second engine (pre) or by the first one. */
-    private void deepRecorded(String rid, boolean error) {
+    private void deepRecorded(String rid, boolean error, String why) {
         DeepReq d = deepReqs.get(rid);
         if (d == null) return;
-        if (error) d.failed = true;
-        else d.recorded = true;
-        deepTry(rid);
-    }
-
-    /** The first engine got to this line's place in its queue (after everything before it was said). */
-    private void deepMarker(String rid, boolean error) {
-        DeepReq d = deepReqs.get(rid);
-        if (d == null) return;
-        d.reached = true;
-        if (!d.pre) { // the first engine made the recording itself: this is its end
-            if (error) d.failed = true;
-            else d.recorded = true;
+        if (error) {
+            fail(d, why);
+        } else {
+            d.recorded = true;
+            change(rid, d);
         }
         deepTry(rid);
     }
 
-    /** Plays the line when its turn has come and it is recorded; reads it the ordinary way when the recording failed. */
+    /** The first engine got to this line's place in its queue (after everything before it was said). */
+    private void deepMarker(String rid, boolean error, String why) {
+        DeepReq d = deepReqs.get(rid);
+        if (d == null) return;
+        d.reached = true;
+        if (!d.pre) { // the first engine made the recording itself: this is its end
+            if (error) {
+                fail(d, why);
+            } else {
+                d.recorded = true;
+                change(rid, d);
+            }
+        }
+        deepTry(rid);
+    }
+
+    /** The first reason a line could not be made is the one kept (for the log). */
+    private static void fail(DeepReq d, String why) {
+        if (d.failed) return;
+        d.failed = true;
+        d.why = why == null ? "" : why;
+    }
+
+    /**
+     * The recording is changed into the voice wanted as soon as it is there, on a thread of its own: by the time its turn
+     * comes it is ready, so the voice starts at once (changing a long one on the main thread held everything up for seconds).
+     */
+    private void change(String rid, DeepReq d) {
+        if (d.working || d.pcm != null || d.failed) return;
+        d.working = true;
+        fxWork.execute(() -> {
+            short[] out = null;
+            int sr = 0;
+            String err = null;
+            float[] stats = new float[5];
+            try {
+                byte[] b = new byte[(int) d.f.length()];
+                try (java.io.FileInputStream in = new java.io.FileInputStream(d.f)) {
+                    int off = 0, n;
+                    while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
+                }
+                int[] w = wavInfo(b);
+                if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
+                sr = w[0];
+                short[] pcm = new short[w[3] / 2];
+                java.nio.ByteBuffer.wrap(b, w[2], w[3]).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm);
+                if (w[1] == 2) { // mono
+                    short[] mono = new short[pcm.length / 2];
+                    for (int i = 0; i < mono.length; i++) mono[i] = (short) ((pcm[2 * i] + pcm[2 * i + 1]) / 2);
+                    pcm = mono;
+                }
+                out = VoiceFx.process(pcm, sr, d.fx, d.fx.level, d.fx.presence, stats);
+            } catch (Throwable e) { // out of memory too
+                err = String.valueOf(e);
+            }
+            d.f.delete();
+            final short[] o = out;
+            final int rate = sr;
+            final String er = err;
+            main.post(() -> {
+                d.working = false;
+                if (o != null) {
+                    d.pcm = o;
+                    d.sr = rate;
+                    d.stats = stats;
+                } else {
+                    fail(d, "the sound could not be changed (" + er + ")");
+                }
+                deepTry(rid);
+            });
+        });
+    }
+
+    /** Plays the line when its turn has come and it is ready; reads it the ordinary way when it could not be made. */
     private void deepTry(String rid) {
         DeepReq d = deepReqs.get(rid);
         if (d == null || !d.reached) return;
-        if (!d.failed && !d.recorded) return; // still being recorded: it plays as soon as it is
+        if (!d.failed && d.pcm == null) return; // still being recorded or changed: it plays as soon as it is ready
         deepReqs.remove(rid);
         if (d.gen != generation) {
             d.f.delete();
@@ -1409,7 +1542,8 @@ final class Speaker {
     /** The voice could not make the file: the words are read the ordinary way, lower, and reading goes on. */
     private void deepPlainly(DeepReq d) {
         if (d.gen != generation || tts == null) return;
-        Logs.d(ctx, "voice fx: the sound could not be made, reading it the ordinary way");
+        Logs.d(ctx, "voice fx: the sound could not be made, reading it the ordinary way" + (d.why.isEmpty() ? "" : " (" + d.why + ")")
+                + (d.voice.isEmpty() ? "" : ", voice " + d.voice) + ", " + d.text.length() + " letters");
         tts.setSpeechRate(d.rate * d.fx.pf);
         tts.setPitch(d.pitch * d.fx.pf);
         android.os.Bundle how = new android.os.Bundle();
@@ -1418,27 +1552,20 @@ final class Speaker {
         releaseHeld(d.gen);
     }
 
-    /** The recording is ready: change it into the character's voice, play it, then let reading go on. */
+    /** For the log: how loud the recording was, how much it was turned up or down, and how much the peaks had to be held in. */
+    static String levels(float[] st) {
+        if (st == null) return "";
+        return String.format(java.util.Locale.US, ", sound in: %.2f average, %.2f peak; turned %s %.1fx; peaks held in on %.1f%% of it",
+                st[0], st[1], st[2] >= 1f ? "up" : "down", st[2] >= 1f ? st[2] : 1f / Math.max(0.01f, st[2]), st[4] * 100f);
+    }
+
+    /** The changed sound is ready and its turn has come: play it, then let reading go on. */
     private void playDeep(DeepReq d) {
         final int gen = d.gen;
         try {
-            byte[] b = new byte[(int) d.f.length()];
-            try (java.io.FileInputStream in = new java.io.FileInputStream(d.f)) {
-                int off = 0, n;
-                while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
-            }
-            d.f.delete();
-            int[] w = wavInfo(b);
-            if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
-            int sr = w[0], ch = w[1];
-            short[] pcm = new short[w[3] / 2];
-            java.nio.ByteBuffer.wrap(b, w[2], w[3]).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(pcm);
-            if (ch == 2) { // mono
-                short[] mono = new short[pcm.length / 2];
-                for (int i = 0; i < mono.length; i++) mono[i] = (short) ((pcm[2 * i] + pcm[2 * i + 1]) / 2);
-                pcm = mono;
-            }
-            pcm = VoiceFx.process(pcm, sr, d.fx);
+            short[] pcm = d.pcm;
+            int sr = d.sr;
+            d.pcm = null;
             final int frames = pcm.length;
             android.media.AudioTrack tr = new android.media.AudioTrack.Builder()
                     .setAudioAttributes(attrs)
@@ -1452,7 +1579,8 @@ final class Speaker {
             partStarted(d.run, d.part, gen);
             deepTrack = tr;
             tr.play();
-            Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms, " + sr + " Hz, voice " + d.voice + (d.pre ? " (recorded ahead)" : ""));
+            Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms, " + sr + " Hz, voice " + d.voice
+                    + (d.pre ? " (recorded ahead)" : "") + levels(d.stats));
             final boolean last = d.last;
             deepFinishTask = () -> {
                 try {
@@ -1653,7 +1781,10 @@ final class Speaker {
         // God and Jesus: a man's voice, made deep.
         final boolean divine = g == 'd';
         if (divine) g = 'm';
-        final float deep = divine ? divineDepth(who) : 1f;
+        // Jesus given God the Father's voice speaks in the Father's phone voice too.
+        final String as = divine ? divineAs(Cast.voice(who)) : Cast.voice(who);
+        if (divine) n = Cast.slotOf(as);
+        final float deep = divine ? depthFor(Cast.voice(who)) : 1f;
         // A character with an accent (British, Irish, Australian, Indian) is given a voice of that country, when the phone has one.
         final String accent = divine ? "" : Cast.accentOf(who);
         if (!accent.isEmpty() && !lang.equals(TextPrep.FIL)) {
@@ -1666,8 +1797,8 @@ final class Speaker {
         }
         // The phone voice the user chose for this one in the voice lab (Apply).
         if (divine) {
-            String want = VoiceFx.customVoice(divineStyle(lang, Cast.voice(who)));
-            if (want == null) want = VoiceFx.defaultVoice(divineStyle(lang, Cast.voice(who)));
+            String want = VoiceFx.customVoice(divineStyle(lang, as));
+            if (want == null) want = VoiceFx.defaultVoice(divineStyle(lang, as));
             if (want != null) {
                 List<Voice> every = voicesFor(lang);
                 for (Voice c : every) {
@@ -1686,11 +1817,12 @@ final class Speaker {
         List<Voice> pool = reserve > 0 ? all.subList(reserve, all.size()) : all;
         if (pool.isEmpty()) {
             applyUsual(lang);
+            if (divine && plainJesus(Cast.voice(who))) return 1f; // the phone voice as it is, even with no man's voice
             return deep * (divine ? 0.9f : 1f) * (g == 'm' ? NO_MAN[n % NO_MAN.length] : g == 'f' ? NO_WOMAN[n % NO_WOMAN.length] : NOT_SURE[n % NOT_SURE.length]);
         }
         // A character keeps the voice they were first given for as long as ZYLENA runs, even when the list of
         // voices is reordered (a voice downloading, the connection coming and going).
-        String pin = lang + "|" + Cast.voice(who);
+        String pin = lang + "|" + as;
         Voice v = null;
         String had = castPinned.get(pin);
         if (had != null) for (Voice c : pool) if (base(c.getName()).equals(had)) v = c;
@@ -1851,6 +1983,39 @@ final class Speaker {
             for (Voice v : all) if (v.getName().toLowerCase(Locale.ROOT).contains("-x-fie")) return twin(v, all);
         }
         return maleVoice(lang);
+    }
+
+    /**
+     * The phone voice the Father (cd0), Jesus (cd1) or the Holy Spirit (cd2) is said in when reading, without changing the
+     * engine (for "Hear every voice"); null when the phone has none.
+     */
+    Voice divineVoice(String lang, String code) {
+        if (tts == null || !ttsReady) return null;
+        String as = divineAs(code);
+        String want = VoiceFx.customVoice(divineStyle(lang, as));
+        if (want == null) want = VoiceFx.defaultVoice(divineStyle(lang, as));
+        List<Voice> every = voicesFor(lang);
+        if (want != null) for (Voice c : every) if (base(c.getName()).equals(want)) return twin(c, every);
+        List<Voice> all = castPool(lang, 'm');
+        String had = castPinned.get(lang + "|" + as);
+        if (had != null) for (Voice c : all) if (base(c.getName()).equals(had)) return c;
+        if (!all.isEmpty()) return all.get(Cast.slotOf(as) % all.size());
+        return chosenVoice(lang);
+    }
+
+    /** The kind of voice Jesus has now (his own, or God the Father's); null when he is read in the phone voice as it is. */
+    String jesusStyle(String lang) {
+        return plainJesus(Cast.JESUS_CODE) ? null : divineStyle(lang, divineAs(Cast.JESUS_CODE));
+    }
+
+    /** How reading plays its sound: the voice lab's tests and "Hear every voice" play theirs the same way. */
+    AudioAttributes audioAttributes() {
+        return attrs;
+    }
+
+    /** The voice as it is read now: its online twin when there is internet, else the one on the phone. */
+    Voice asRead(Voice v) {
+        return v == null || tts == null || !ttsReady ? v : twin(v, voicesFor(v.getLocale().getLanguage().equals("en") ? TextPrep.EN : TextPrep.FIL));
     }
 
     /** The best man's voice for the language on this phone, by the codes Google gives its voices; null if none. */

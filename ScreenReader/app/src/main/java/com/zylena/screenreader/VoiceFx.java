@@ -309,10 +309,28 @@ final class VoiceFx {
 
     /** As above, with the loudness it is brought to (speech is about 0.1 to 0.2) and some extra upper-middle range (0 to 1). */
     static short[] process(short[] in, int rate, Style st, float targetRms, float presenceExtra) {
+        return process(in, rate, st, targetRms, presenceExtra, null);
+    }
+
+    /**
+     * stats, when given (5 long), gets what the log shows of it: the recording's average loudness and its peak, how much it
+     * was turned up (or down), the peak before the peaks were held in, and the share of the sound that had to be held in.
+     */
+    static short[] process(short[] in, int rate, Style st, float targetRms, float presenceExtra, float[] stats) {
         int n = in.length;
         if (n < 16) return in;
         float[] x = new float[n];
-        for (int i = 0; i < n; i++) x[i] = in[i] / 32768f;
+        double inSum = 0;
+        float inPeak = 0;
+        for (int i = 0; i < n; i++) {
+            x[i] = in[i] / 32768f;
+            inSum += x[i] * x[i];
+            inPeak = Math.max(inPeak, Math.abs(x[i]));
+        }
+        if (stats != null && stats.length >= 5) {
+            stats[0] = (float) Math.sqrt(inSum / n);
+            stats[1] = inPeak;
+        }
 
         // Pitch (and with it tempo): the recording is read faster or slower; a wobble makes an old voice tremble.
         int outLen = (int) (n / st.pf) + 1;
@@ -330,6 +348,8 @@ final class VoiceFx {
         }
         float[] z = new float[m];
         System.arraycopy(y, 0, z, 0, m);
+        x = null; // (let go of: a long recording needs a lot of memory for each copy)
+        y = null;
 
         // (The "s" sounds are taken before the heavy voice loses its high end.)
         float[] hissBand = st.hiss > 0 && rate > 14000 ? band(z, 6800f, 3600f, rate) : null;
@@ -382,7 +402,14 @@ final class VoiceFx {
         for (int i = 0; i < m; i++) z[i] *= gain;
         // The room the voice is heard in (it rings on a little after the last word).
         if (st.space > 0) z = reverb(z, rate, Math.min(0.5f, st.space), Math.max(0.2f, Math.min(3f, st.room)));
-        limit(z, rate, 0.92f);
+        float before = 0;
+        for (float v : z) before = Math.max(before, Math.abs(v));
+        float held = limit(z, rate, 0.92f);
+        if (stats != null && stats.length >= 5) {
+            stats[2] = gain;
+            stats[3] = before;
+            stats[4] = held;
+        }
         short[] out = new short[z.length];
         for (int i = 0; i < z.length; i++) out[i] = (short) Math.round(Math.max(-1f, Math.min(1f, z[i])) * 32767);
         return out;
@@ -433,7 +460,7 @@ final class VoiceFx {
             room += wet[i] * wet[i];
         }
         float k = room <= 0 ? 0 : amount * (float) Math.sqrt(dry / room);
-        float[] out = new float[len];
+        float[] out = in; // (what went into the room is not needed any more: its memory is used again)
         int fade = Math.min(len - n, (int) (0.12f * rate));
         for (int i = 0; i < len; i++) {
             float w = k * wet[i];
@@ -445,13 +472,14 @@ final class VoiceFx {
 
     /**
      * Keeps the peaks under the ceiling by turning the sound down for a moment around each one, smoothly (the sound is
-     * looked at a few thousandths of a second ahead), instead of bending the wave, which roughens a voice.
+     * looked at a few thousandths of a second ahead), instead of bending the wave, which roughens a voice. Returns the share
+     * of the sound that had to be turned down.
      */
-    private static void limit(float[] z, int rate, float ceil) {
+    private static float limit(float[] z, int rate, float ceil) {
         int n = z.length, look = Math.max(2, rate * 4 / 1000), half = look / 2;
         float peak = 0;
         for (float v : z) peak = Math.max(peak, Math.abs(v));
-        if (peak <= ceil) return;
+        if (peak <= ceil) return 0f;
         // The gain each sample needs, then the least of them within `look` samples either side.
         float[] need = new float[n], least = new float[n];
         for (int i = 0; i < n; i++) {
@@ -482,7 +510,12 @@ final class VoiceFx {
             while (lo < a) run -= least[lo++];
             need[i] = (float) (run / (b - a));
         }
-        for (int i = 0; i < n; i++) z[i] *= need[i];
+        int heldIn = 0;
+        for (int i = 0; i < n; i++) {
+            z[i] *= need[i];
+            if (need[i] < 0.98f) heldIn++;
+        }
+        return heldIn / (float) n; // the share of the sound that was turned down by more than 2%
     }
 
     /** A resonance at hz with the given width, applied to the whole signal. */

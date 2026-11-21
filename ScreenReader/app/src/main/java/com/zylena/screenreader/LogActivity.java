@@ -100,6 +100,7 @@ public class LogActivity extends Activity {
                 + " skipTimes=" + Prefs.skipTimestamps(this) + " resume=" + Prefs.resume(this)
                 + " bibleRefs=" + Prefs.refMode(this)
                 + " wholePage=" + Prefs.wholePage(this) + " serviceOn=" + (ReaderService.instance != null)
+                + " jesusVoice=" + Prefs.jesusVoice(this) + " voiceFx=" + Prefs.flag(this, "voice_fx", true) + " tone=" + Prefs.toneStrength(this)
                 + (Prefs.flag(this, "debug", false) ? " debug=true" : "")
                 + "\n" + VoiceFx.appliedForLog(this)
                 + "\n\n";

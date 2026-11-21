@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
     private android.widget.EditText searchBox;
     private ScrollView results;
     private LinearLayout resultsCol;
-    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow, fil2Row, en2Row;
+    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow, fil2Row, en2Row, jesusVoiceRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -673,6 +673,12 @@ public class MainActivity extends Activity {
                 "A quoted verse is read in the second voice, then the usual voice goes on.",
                 on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
         Ui.add(bv, bibleVoiceRow.view);
+        jesusVoiceRow = Ui.nav(this, R.drawable.ic_person, "Jesus's voice", "", this::pickJesusVoice);
+        Ui.add(bv, jesusVoiceRow.view);
+        Ui.add(bv, Ui.nav(this, R.drawable.ic_play, "Hear every voice",
+                "God's, Jesus's, the Spirit's, Satan's, every feeling and every kind of character, each made as when reading, beside the phone "
+                        + "voice with nothing changed. Tap one to hear it.", () ->
+                        startActivity(new android.content.Intent(this, VoiceTestActivity.class))).view);
         Ui.add(bv, Ui.nav(this, R.drawable.ic_tune, "Voice lab",
                 "Try a kind of voice (God's, a child's, a boss's) with exact settings, apart from the real ones, then send me the numbers", () ->
                         startActivity(new android.content.Intent(this, VoiceLabActivity.class))).view);
@@ -1036,6 +1042,25 @@ public class MainActivity extends Activity {
                 .setView(box)
                 .setPositiveButton("Save", (d, w) -> Prefs.setNextWords(this, e.getText().toString()))
                 .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    /** Whose voice Jesus speaks in: his own, God the Father's, or the phone voice with nothing changed. */
+    private void pickJesusVoice() {
+        String[] ids = {"own", "father", "plain"};
+        String[] labels = {"His own voice: natural, unhurried and clear", "God the Father's voice: deep and slow",
+                "The phone voice as it is, nothing changed"};
+        int now = java.util.Arrays.asList(ids).indexOf(Prefs.jesusVoice(this));
+        new AlertDialog.Builder(this)
+                .setTitle("Jesus's voice")
+                .setSingleChoiceItems(labels, now, (d, w) -> {
+                    Prefs.setJesusVoice(this, ids[w]);
+                    Logs.d(this, "Jesus's voice: " + ids[w]);
+                    d.dismiss();
+                    refresh();
+                })
+                .setNeutralButton("Hear every voice", (d, w) -> startActivity(new android.content.Intent(this, VoiceTestActivity.class)))
+                .setNegativeButton("Close", null)
                 .show();
     }
 
@@ -1427,6 +1452,11 @@ public class MainActivity extends Activity {
         moodRow.setValue(md.equals("auto") ? "Auto" : md.equals("off") ? "Off" : Mood.KIND_NAMES[mi < 0 ? 0 : mi].replaceAll("[ ,(].*", ""));
         moodRow.setSub(md.equals("auto") ? "ZYLENA tells a devotional, a love story, suspense, comedy, drama or action from the page and reads to suit it"
                 : md.equals("off") ? "The voice reads every kind of text the same way" : "Always read as: " + Mood.KIND_NAMES[mi < 0 ? 0 : mi]);
+        String jv = Prefs.jesusVoice(this);
+        jesusVoiceRow.setValue(jv.equals("father") ? "God's" : jv.equals("plain") ? "Unchanged" : "His own");
+        jesusVoiceRow.setSub(jv.equals("father") ? "Jesus speaks in God the Father's voice: deep and slow"
+                : jv.equals("plain") ? "Jesus is read in the phone voice as it is, with nothing changed"
+                : "His own voice: natural, unhurried and clear. Or God the Father's, or the phone voice unchanged");
         castFilRow.setSub(castLabel(TextPrep.FIL));
         castEnRow.setSub(castLabel(TextPrep.EN));
         String known = Cast.known();

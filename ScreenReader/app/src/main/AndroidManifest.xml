@@ -46,6 +46,11 @@
             android:name=".VoiceLabActivity"
             android:exported="false" />
 
+        <!-- "Hear every voice": every kind of voice and feeling, made as when reading, beside the phone voice unchanged. -->
+        <activity
+            android:name=".VoiceTestActivity"
+            android:exported="false" />
+
         <!-- "Fix a word": opened over the app being read, on the words the voice just said. -->
         <activity
             android:name=".FixActivity"

@@ -8,7 +8,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Typeface;
-import android.media.AudioAttributes;
 import android.media.AudioFormat;
 import android.media.AudioTrack;
 import android.os.Bundle;
@@ -201,6 +200,7 @@ public class VoiceLabActivity extends Activity {
         tts = new TextToSpeech(this, status -> main.post(() -> {
             ttsReady = status == TextToSpeech.SUCCESS;
             if (ttsReady) {
+                tts.setAudioAttributes(Speaker.get(this).audioAttributes()); // the plain voice too, as when reading
                 tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
                     @Override
                     public void onStart(String id) {
@@ -597,8 +597,9 @@ public class VoiceLabActivity extends Activity {
                 pcm = mono;
             }
             pcm = VoiceFx.process(pcm, sr, style(), level, presence);
+            // Played the way reading plays it (the same kind of sound and volume), so what is heard here is what reading sounds like.
             AudioTrack tr = new AudioTrack.Builder()
-                    .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                    .setAudioAttributes(Speaker.get(this).audioAttributes())
                     .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sr)
                             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
                     .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(pcm.length * 2).build();

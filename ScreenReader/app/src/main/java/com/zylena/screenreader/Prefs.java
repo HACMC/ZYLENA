@@ -555,6 +555,19 @@ final class Prefs {
         sp(c).edit().putString("voice_genders", sb.toString()).apply();
     }
 
+    /**
+     * Whose voice Jesus speaks in, in the Bible: "own" (his own: natural, unhurried, clear), "father" (the same as God the
+     * Father's) or "plain" (the phone voice with nothing changed).
+     */
+    static String jesusVoice(Context c) {
+        String v = sp(c).getString("jesus_voice", "own");
+        return v.equals("father") || v.equals("plain") ? v : "own";
+    }
+
+    static void setJesusVoice(Context c, String v) {
+        sp(c).edit().putString("jesus_voice", v).apply();
+    }
+
     /** Bible verses are read in a man's voice, then the usual voice goes on. */
     static boolean bibleVoice(Context c) {
         return sp(c).getBoolean("bible_voice", true);
