@@ -1274,7 +1274,8 @@ final class Speaker {
     }
     private volatile boolean deepHold;
     private final List<Runnable> deepHeld = new ArrayList<>();
-    private android.media.AudioTrack deepTrack;
+    /** What is being played of God's, Jesus's or a character's words: two at a time while one piece fades into the next. */
+    private final List<android.media.AudioTrack> deepTracks = new ArrayList<>();
     private Runnable deepFinishTask;
 
     private static final String[] MEN_VARIANTS = {"", "bass", "teen", "gruff"}, WOMEN_VARIANTS = {"", "gentle", "teen", "cute"};
@@ -1319,6 +1320,9 @@ final class Speaker {
         VoiceFx.Style fx;
         /** The next piece of the same line (a long one is recorded and played in pieces), or null. */
         DeepReq next;
+        /** Where its last word ends in pcm (the room rings on after it), and the mark it ends with (a full stop, a comma…). */
+        int speechEnd;
+        char endMark;
         // The sound, changed into the voice wanted (on a thread of its own, as soon as it is recorded), and its levels.
         short[] pcm;
         int sr;
@@ -1471,6 +1475,7 @@ final class Speaker {
             d.first = c == 0;
             d.last = last && c == pieces.size() - 1;
             d.text = pieces.get(c);
+            d.endMark = endMark(d.text);
             d.id = id; // the line's own: when it is read the ordinary way, its end is the line's end
             d.fx = fx;
             d.voiceObj = v;
@@ -1489,6 +1494,22 @@ final class Speaker {
         }
         if (pieces.size() > 1) Logs.d(ctx, "voice fx: a long line (" + text.length() + " letters) is recorded in " + pieces.size() + " pieces");
         return first;
+    }
+
+    /** The mark a piece ends with (quotation marks aside): it says how long a speaker would pause after it. */
+    private static char endMark(String t) {
+        for (int i = t.length() - 1; i >= 0; i--) {
+            char ch = t.charAt(i);
+            if (Character.isWhitespace(ch) || "\"'\u201D\u2019\u00BB)]".indexOf(ch) >= 0) continue;
+            return ch;
+        }
+        return '.';
+    }
+
+    /** How long a speaker pauses after this mark before going on (after a full stop longer than after a comma), at the reading speed. */
+    private long pauseAfter(char mark) {
+        long ms = ".!?".indexOf(mark) >= 0 ? 400 : ";:".indexOf(mark) >= 0 ? 260 : mark == ',' ? 160 : 220;
+        return (long) (ms / Math.max(0.5f, Prefs.rate(ctx)));
     }
 
     /** The line's turn has come in the voice's queue: what follows waits until all its pieces have been played. */
@@ -1602,7 +1623,8 @@ final class Speaker {
             short[] out = null;
             int sr = 0;
             String err = null;
-            float[] stats = new float[5];
+            float[] stats = new float[7];
+            int end = 0;
             try {
                 byte[] b = new byte[(int) d.f.length()];
                 try (java.io.FileInputStream in = new java.io.FileInputStream(d.f)) {
@@ -1620,19 +1642,26 @@ final class Speaker {
                     pcm = mono;
                 }
                 out = VoiceFx.process(pcm, sr, d.fx, d.fx.level, d.fx.presence, stats);
+                // The silence the voice puts before the first word is taken off (all but a breath), so the voice comes in at once.
+                int from = Math.max(0, (int) stats[5] - sr * 30 / 1000);
+                end = stats[6] > stats[5] ? (int) stats[6] - from : out.length - from;
+                if (from > 0 && from < out.length) out = java.util.Arrays.copyOfRange(out, from, out.length);
             } catch (Throwable e) { // out of memory too
                 err = String.valueOf(e);
+                out = null;
             }
             d.f.delete();
             final short[] o = out;
             final int rate = sr;
             final String er = err;
+            final int spokenTo = end;
             main.post(() -> {
                 d.working = false;
                 if (o != null) {
                     d.pcm = o;
                     d.sr = rate;
                     d.stats = stats;
+                    d.speechEnd = spokenTo > 0 && spokenTo <= o.length ? spokenTo : o.length;
                 } else {
                     fail(d, "the sound could not be changed (" + er + ")");
                 }
@@ -1713,19 +1742,29 @@ final class Speaker {
                 if (d.part == 0) runStarted(d.run, gen);
                 partStarted(d.run, d.part, gen);
             }
-            deepTrack = tr;
+            deepTracks.add(tr);
             tr.play();
             Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms, " + sr + " Hz, voice " + d.voice
                     + (d.pre ? " (recorded ahead)" : "") + levels(d.stats));
-            final boolean last = d.last;
-            final DeepReq next = d.next;
-            deepFinishTask = () -> {
+            // The track is let go once all of it has been heard, the room ringing on after the last word too.
+            main.postDelayed(() -> {
+                if (!deepTracks.remove(tr)) return; // stopped meanwhile, and let go of then
                 try {
                     tr.stop();
                     tr.release();
                 } catch (Exception ignored) {
                 }
-                if (deepTrack == tr) deepTrack = null;
+            }, frames * 1000L / sr + 300);
+            final boolean last = d.last;
+            final DeepReq next = d.next;
+            // What comes after it begins where a speaker would go on, while the room's ring fades: the next piece of the line a
+            // sentence's pause after its last word (so a cut sounds like any other full stop), the storyteller a moment after it.
+            // (Waiting for the ring to end, and for the silence the voice puts after its words, made a long pause at each cut.)
+            long spoken = Math.min(frames, Math.max(1, d.speechEnd)) * 1000L / sr;
+            long goOn = next != null ? spoken + pauseAfter(d.endMark) - 30 // (the next piece has a breath of 30 ms before its first word)
+                    : last ? frames * 1000L / sr + 250 // the end of what is read: all of it is heard first
+                    : spoken + 200;
+            deepFinishTask = () -> {
                 if (gen != generation) return;
                 if (next != null) { // the line goes on: its next piece, before anything else
                     nextPiece(next);
@@ -1734,8 +1773,7 @@ final class Speaker {
                 releaseHeld(gen);
                 if (last) allDone(gen);
             };
-            // (Between two pieces of one line only a short margin: the recording ends in a breath of its own.)
-            main.postDelayed(deepFinishTask, frames * 1000L / sr + (next != null ? 120 : 250));
+            main.postDelayed(deepFinishTask, Math.max(0, goOn));
         } catch (Throwable e) {
             Logs.d(ctx, "voice fx failed: " + e);
             d.f.delete();
@@ -1768,15 +1806,14 @@ final class Speaker {
         if (ttsSynth != null && synthReady) ttsSynth.stop();
         if (deepFinishTask != null) main.removeCallbacks(deepFinishTask);
         deepFinishTask = null;
-        android.media.AudioTrack t = deepTrack;
-        deepTrack = null;
-        if (t != null) {
+        for (android.media.AudioTrack t : new ArrayList<>(deepTracks)) {
             try {
                 t.stop();
                 t.release();
             } catch (Exception ignored) {
             }
         }
+        deepTracks.clear();
     }
 
     /** {sample rate, channels, where the sound starts, how long it is} of a WAV file the voice made; null if it is not one. */

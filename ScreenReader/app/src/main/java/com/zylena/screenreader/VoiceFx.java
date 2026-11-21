@@ -314,7 +314,8 @@ final class VoiceFx {
 
     /**
      * stats, when given (5 long), gets what the log shows of it: the recording's average loudness and its peak, how much it
-     * was turned up (or down), the peak before the peaks were held in, and the share of the sound that had to be held in.
+     * was turned up (or down), the peak before the peaks were held in, and the share of the sound that had to be held in;
+     * 7 long, also where the words begin and end in what comes back (in samples).
      */
     static short[] process(short[] in, int rate, Style st, float targetRms, float presenceExtra, float[] stats) {
         int n = in.length;
@@ -400,6 +401,15 @@ final class VoiceFx {
         float rms = (float) Math.sqrt(sum / Math.max(1, m)) + 1e-6f;
         float gain = Math.min(6f, targetRms / rms);
         for (int i = 0; i < m; i++) z[i] *= gain;
+        // Where the words begin and end (before the room rings on), so a long line's pieces follow one another like sentences.
+        if (stats != null && stats.length >= 7) {
+            final float quiet = 0.008f; // the voice's own silence is far below this; its softest sounds are above it
+            int first = -1, last = -1;
+            for (int i = 0; i < m && first < 0; i++) if (Math.abs(z[i]) > quiet) first = i;
+            for (int i = m - 1; i >= 0 && last < 0; i--) if (Math.abs(z[i]) > quiet) last = i;
+            stats[5] = first < 0 ? 0 : first;
+            stats[6] = last < 0 ? m : last + 1;
+        }
         // The room the voice is heard in (it rings on a little after the last word).
         if (st.space > 0) z = reverb(z, rate, Math.min(0.5f, st.space), Math.max(0.2f, Math.min(3f, st.room)));
         float before = 0;
