@@ -676,7 +676,7 @@ public class MainActivity extends Activity {
         jesusVoiceRow = Ui.nav(this, R.drawable.ic_person, "Jesus's voice", "", this::pickJesusVoice);
         Ui.add(bv, jesusVoiceRow.view);
         Ui.add(bv, Ui.nav(this, R.drawable.ic_play, "Hear every voice",
-                "God's, Jesus's, the Spirit's, Satan's, every feeling and every kind of character, each made as when reading, beside the phone "
+                "God's, Jesus's, the Spirit's, Satan's and every kind of character, each made as when reading, beside the phone "
                         + "voice with nothing changed. Tap one to hear it.", () ->
                         startActivity(new android.content.Intent(this, VoiceTestActivity.class))).view);
         Ui.add(bv, Ui.nav(this, R.drawable.ic_tune, "Voice lab",

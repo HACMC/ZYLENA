@@ -30,8 +30,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * "Hear every voice": the same words in every kind of voice ZYLENA makes (God's, Jesus's, the Spirit's, Satan's, every
- * feeling and every kind of character), each made exactly as when reading: the phone voice says the words into a file, the
+ * "Hear every voice": the same words in every kind of voice ZYLENA makes (God's, Jesus's, the Spirit's, Satan's and every
+ * kind of character), each made exactly as when reading: the phone voice says the words into a file, the
  * sound is changed, and it is played the way reading plays it. At the top, the phone voice with nothing changed, to hear
  * what each change does. Each one played goes into the log with its numbers, so what sounds wrong can be found.
  */
@@ -62,15 +62,12 @@ public class VoiceTestActivity extends Activity {
     // {id, name, what it is}. The Bible voices are said in the phone voice reading gives them; the rest in Jesus's.
     private static final String[][] BIBLE = {
             {"plain", "The phone voice, nothing changed", "Jesus's phone voice exactly as the phone says it. Compare the others with this one."},
-            {"jesus", "Jesus, as reading says him now", "With the choice above: his own voice, God's, or the phone voice as it is"},
+            {"jesus", "Jesus, as reading says him now", "Exactly how reading says him, with the choice above: his own voice, God's, or the phone voice as it is"},
             {"jesus_own", "Jesus's own voice", "Natural, unhurried and clear, a little warm"},
             {"deep", "God the Father", "Deep and slow, as in a great hall"},
             {"spirit", "The Holy Spirit", "Soft and light: a still small voice"},
             {"villain", "Satan, the tempter", "Low and slow, with a growl and a hiss on the s"},
             {"demon", "Demons and unclean spirits", "Lower still, rough and torn"}};
-    private static final String[][] FEELINGS = {
-            {"s", "Shouted"}, {"a", "Angry"}, {"d", "Sad"}, {"f", "Afraid"}, {"l", "Laughing while speaking"}, {"j", "Glad"},
-            {"w", "Whispered"}, {"t", "Tender"}, {"p", "Pleading"}, {"m", "Sly and smooth (the tempter)"}, {"r", "Rushed"}, {"h", "A sigh"}};
     private static final String[][] CHARACTERS = {
             {"child", "A child"}, {"squeaky", "A squeaky voice"}, {"cute", "A cute voice"}, {"teen", "A teenager"}, {"elder", "An old person"},
             {"husky", "A husky voice"}, {"boss", "A mob boss"}, {"gruff", "A gruff voice"}, {"bass", "A deep bass"}, {"maid", "A maid"},
@@ -151,11 +148,6 @@ public class VoiceTestActivity extends Activity {
         LinearLayout bg = Ui.group(this);
         for (String[] r : BIBLE) addRow(bg, r[0], r[1], r[2]);
         col.addView(bg);
-
-        col.addView(Ui.section(this, "Feelings, on Jesus's voice"));
-        LinearLayout fg = Ui.group(this);
-        for (String[] r : FEELINGS) addRow(fg, "feel_" + r[0], r[1], "How a line said that way sounds, e.g. \"he said " + r[1].toLowerCase(Locale.ROOT) + "\"");
-        col.addView(fg);
 
         col.addView(Ui.section(this, "Characters"));
         LinearLayout cg = Ui.group(this);
@@ -320,10 +312,6 @@ public class VoiceTestActivity extends Activity {
             case "spirit":
                 return VoiceFx.get(fil ? "spirit_fil" : "spirit");
             default:
-                if (id.startsWith("feel_")) {
-                    // A feeling on Jesus's voice (as reading has him now), at the user's tone strength.
-                    return VoiceFx.combine(jesusNow == null ? null : VoiceFx.get(jesusNow), VoiceFx.forFeeling(id.substring(5)), Prefs.toneStrength(this));
-                }
                 return VoiceFx.get(id);
         }
     }

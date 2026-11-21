@@ -1064,7 +1064,8 @@ final class Speaker {
         boolean tone = Prefs.questionTone(ctx);
         for (String[] vp : voiceParts(s)) {
             String said = TextPrep.say(vp[0], vp[1]);
-            if (!tone) parts.add(new String[]{said, vp[1], "", vp[2]});
+            // Jesus's words are said exactly as "Hear every voice" plays him (the owner's choice): no question or exclamation tones.
+            if (!tone || Cast.JESUS_CODE.equals(Cast.voice(vp[2]))) parts.add(new String[]{said, vp[1], "", vp[2]});
             else for (String[] t : TextPrep.tonePieces(said)) parts.add(new String[]{t[0], vp[1], t[1], vp[2]});
         }
         // A stutter ("L-lalabas", "I-I'm") is said in pieces with a stop between them: each repeated start, then the word.
@@ -1139,7 +1140,10 @@ final class Speaker {
         }
         for (int k = 0; k < parts.size(); k++) {
             String lang = parts.get(k)[1];
-            String t = parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
+            // Jesus is said exactly as "Hear every voice" plays him: his voice at the reading's speed and pitch, and nothing else on
+            // top (no feeling, no tone, no kind of text, no ups and downs of the natural rhythm). Those made him sound wrong.
+            final boolean asHeard = Cast.JESUS_CODE.equals(Cast.voice(parts.get(k)[3]));
+            String t = asHeard ? "" : parts.get(k)[2].isEmpty() ? whole : parts.get(k)[2];
             boolean ask = t.equals("q");
             float p = ask ? QUESTION_PITCH : t.equals("e") ? 1.06f : t.equals("h") ? 0.97f : t.equals("v") ? 0.96f : t.equals("t") ? 0.97f : 1f;
             boolean divineLine = Cast.voice(parts.get(k)[3]) != null && Cast.voice(parts.get(k)[3]).startsWith("cd");
@@ -1147,7 +1151,7 @@ final class Speaker {
             // How strong the tones are is the user's choice (Voice > Tone strength).
             p = 1f + (p - 1f) * strength;
             r = 1f + (r - 1f) * strength;
-            if (natural) {
+            if (natural && !asHeard) {
                 p *= natP;
                 r *= natR;
                 // The storyteller (not a character) tells the story a touch slower.
@@ -1157,7 +1161,7 @@ final class Speaker {
             // is made by processing the sound; see VoiceFx.
             // How the line is said (shouted, angry, sad, afraid, laughing, whispered…) is made audible the same way: an online voice
             // often ignores a change of pitch, and a few percent of speed or volume is not heard.
-            final String fcode = Cast.feel(parts.get(k)[3]);
+            final String fcode = asHeard ? "" : Cast.feel(parts.get(k)[3]);
             String effCode = fcode;
             float effK = strength;
             if (fcode.isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
@@ -1182,7 +1186,8 @@ final class Speaker {
             if (fx != null) p *= divineLine ? (noMan ? 1f : vm / dd) : vm; // the pitch is changed afterwards
             else p *= vm;
             // The kind of text (suspense lower and slower, comedy livelier) and how the line is said (whispered, shouted).
-            float[] kind = Mood.forKind(s.mood), feel = feelFx != null ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
+            float[] kind = asHeard ? new float[]{1f, 1f, 1f} : Mood.forKind(s.mood),
+                    feel = feelFx != null || asHeard ? new float[]{1f, 1f, 1f} : Mood.forFeeling(Cast.feel(parts.get(k)[3]));
             // The storyteller's own words ("my heart pounded", "tears streamed down") carry a feeling too, at half strength.
             if (feelFx == null && Cast.feel(parts.get(k)[3]).isEmpty() && !s.narrFeel.isEmpty() && !Cast.isCode(Cast.voice(parts.get(k)[3]))) {
                 float[] nf = Mood.forFeeling(s.narrFeel);
@@ -1194,6 +1199,7 @@ final class Speaker {
             float base = s.story && TextPrep.feelOn ? 0.8f : 1f;
             float loud = Math.max(0.3f, Math.min(1f, base * (1f + (kind[2] - 1f) * strength) * (1f + (feel[2] - 1f) * strength)));
             if (divineLine) loud = Math.max(loud, 0.9f); // God's words are never quiet
+            if (asHeard) loud = 1f; // (as "Hear every voice" plays him)
             android.os.Bundle how = null;
             if (loud < 0.99f) {
                 how = new android.os.Bundle();
