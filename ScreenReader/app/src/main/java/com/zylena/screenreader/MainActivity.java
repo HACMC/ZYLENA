@@ -544,7 +544,7 @@ public class MainActivity extends Activity {
         refsRow = Ui.nav(this, R.drawable.ic_book, "Bible references", "", this::pickRefMode);
         Ui.add(bible, refsRow.view);
         booksRow = Ui.toggle(this, R.drawable.ic_book, "English book names",
-                "A reference is said \"Numbers fourteen verse four\". Off: the name as printed, \"Bilang fourteen verse four\".",
+                "A reference is said \"Numbers chapter fourteen verse four\". Off: the name as printed, \"Bilang chapter fourteen verse four\". Chapter, verse and the numbers are always in English, and years too (\"eighteen forty-four\").",
                 on -> Prefs.setEnglishBooks(this, on));
         Ui.add(bible, booksRow.view);
         col.addView(bible);
@@ -1436,7 +1436,7 @@ public class MainActivity extends Activity {
         set(markRow, Prefs.highlight(this));
         String mode = Prefs.refMode(this);
         refsRow.setSub(mode.equals("skip") ? "Skip them: \u2026Apostol (Lucas 8:51). Matapos\u2026 is read \u2026Apostol. Matapos\u2026"
-                : mode.equals("verses") ? "Read the verse text (Ang Biblia 1905 / KJV)" : "Read the reference: Lucas kabanata 8, talata 51");
+                : mode.equals("verses") ? "Read the verse text (Ang Biblia 1905 / KJV)" : "Read the reference: Luke chapter eight verse fifty-one");
         set(booksRow, Prefs.englishBooks(this));
         set(toneRow, Prefs.questionTone(this));
         set(bibleVoiceRow, Prefs.bibleVoice(this));
@@ -1596,7 +1596,7 @@ public class MainActivity extends Activity {
 
     private void pickRefMode() {
         String[] ids = {"skip", "say", "verses"};
-        String[] labels = {"Skip references (go straight on with the text)", "Read the reference (Lucas kabanata 8, talata 51)",
+        String[] labels = {"Skip references (go straight on with the text)", "Read the reference (Luke chapter eight verse fifty-one)",
                 "Read the verse text from the built-in Bible"};
         int now = java.util.Arrays.asList(ids).indexOf(Prefs.refMode(this));
         new AlertDialog.Builder(this)

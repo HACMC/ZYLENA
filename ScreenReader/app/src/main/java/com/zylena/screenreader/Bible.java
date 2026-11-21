@@ -585,7 +585,9 @@ final class Bible {
         StringBuffer sb = new StringBuffer();
         while (m.find()) {
             String c = words(m.group("c").replace(" hanggang ", " to ").replace(" at ", " and "));
-            m.appendReplacement(sb, Matcher.quoteReplacement(book(m.group("n"), m.group("b"), fil || TAGALOG_NAMES.contains(m.group("b"))) + " " + c));
+            // Said the way people say it: "Daniel chapter eight", "chapters eight and nine".
+            m.appendReplacement(sb, Matcher.quoteReplacement(book(m.group("n"), m.group("b"), fil || TAGALOG_NAMES.contains(m.group("b")))
+                    + (c.matches(".*\\s(?:to|and)\\s.*") ? " chapters " : " chapter ") + c));
         }
         m.appendTail(sb);
         if (englishNames) {
@@ -607,7 +609,7 @@ final class Bible {
             if (m.group(2) != null) {
                 String tail = m.group(2);
                 boolean plural = tail.matches(".*\\D.*");
-                out = words(m.group(1)) + (plural ? " verses " : " verse ") + words(tail.replace(" hanggang ", " to ")
+                out = "chapter " + words(m.group(1)) + (plural ? " verses " : " verse ") + words(tail.replace(" hanggang ", " to ")
                         .replace(" at ", " and ").replace("kabanata", "chapter").replace("talata", "verse"));
             } else {
                 out = "chapters " + words(m.group(1)) + " to " + words(m.group(3));
@@ -620,9 +622,13 @@ final class Bible {
         while (m.find()) {
             String w = m.group(1), l = w.toLowerCase(Locale.ROOT);
             boolean many = m.group(2).matches(".*\\D.*");
-            if (l.startsWith("v")  && l.endsWith(".")) w = many ? "verses" : "verse";
-            else if (l.equals("kab.")) w = "kabanata";
-            else if (l.equals("tal.")) w = "talata";
+            // In English like the numbers, in both languages: "chapter one verse one", never "kabanata isa, bersikulo uno".
+            boolean mga = l.startsWith("mga ");
+            String base = mga ? l.substring(4) : l;
+            boolean chap = base.startsWith("kab") || base.startsWith("chap");
+            boolean plural = mga || many || base.endsWith("s") || base.endsWith("s.");
+            w = (chap ? "chapter" : "verse") + (plural ? "s" : "");
+            if (Character.isUpperCase(m.group(1).charAt(0))) w = Character.toUpperCase(w.charAt(0)) + w.substring(1);
             String nums = words(m.group(2).replaceAll("\\s?[-–—]\\s?", " to ").replace(" hanggang ", " to ").replace(" at ", " and "));
             m.appendReplacement(sb, Matcher.quoteReplacement(w + " " + nums));
         }

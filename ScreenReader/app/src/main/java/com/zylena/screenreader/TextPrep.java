@@ -642,6 +642,8 @@ final class TextPrep {
     private static final Pattern YEAR_CUE_FIL = Pattern.compile("\\b(noong|nang|taong|taon|ng|mula|hanggang|bago|pagkatapos|simula|"
             + "(?:Enero|Pebrero|Marso|Abril|Mayo|Hunyo|Hulyo|Agosto|Setyembre|Oktubre|Nobyembre|Disyembre)\\s\\d{1,2},?)\\s(1[0-9]{3}|20[0-9]{2})\\b(?![.,]?\\d)",
             Pattern.CASE_INSENSITIVE);
+    /** A year on its own in Tagalog: four digits from 1000 to 2099, not part of a bigger number ("1,500", "1844.5") or a reference ("1888:3"). */
+    private static final Pattern YEAR_ANY_FIL = Pattern.compile("(?<![\\d,.:/])\\b(1[0-9]{3}|20[0-9]{2})\\b(?![\\d:/]|[.,]\\d)");
     /** Tagalog "mga pahina 232 hanggang 240": page numbers said in English, the way a reader says them. */
     private static final Pattern PAGES_FIL = Pattern.compile("\\b([Pp]ahina(?:ng)?)\\s(\\d{1,4})(?:(\\s?(?:hanggang|at|-|\u2013)\\s?)(\\d{1,4}))?\\b(?![.,]?\\d)");
 
@@ -684,6 +686,8 @@ final class TextPrep {
             s = replaceAll(PAGES_FIL, s, m -> m.group(1) + " " + numberWords(Integer.parseInt(m.group(2)))
                     + (m.group(4) == null ? "" : (m.group(3).trim().matches("[-\u2013]") ? " hanggang " : m.group(3)) + numberWords(Integer.parseInt(m.group(4)))));
         }
+        // In Tagalog, any year (1000 to 2099 standing alone) is said in English, as people say years: "eighteen sixty-three".
+        if (fil && sayYears) s = replaceAll(YEAR_ANY_FIL, s, m -> yearWords(Integer.parseInt(m.group(1))));
         s = replaceAll(DECADE, s, m -> below100(Integer.parseInt(m.group(1))) + " " + TENS[Integer.parseInt(m.group(2))].replaceAll("y$", "ies"));
         return replaceAll(ERA_WORD, s, m -> era(m.group(1), fil)).replaceAll("(A\\.D\\.|B\\.C\\.(?:E\\.)?)\\.", "$1");
     }
