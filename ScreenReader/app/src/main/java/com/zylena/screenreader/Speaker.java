@@ -73,6 +73,12 @@ final class Speaker {
     private Speaker(Context c) {
         ctx = c;
         VoiceFx.loadCustom(c);
+        // Recordings of styled lines left from before (ZYLENA was closed while it read, or a piece was given up): of no use now.
+        try {
+            java.io.File[] old = c.getCacheDir().listFiles((dir, name) -> name.startsWith("deep-") && name.endsWith(".wav"));
+            if (old != null) for (java.io.File f : old) f.delete();
+        } catch (Exception ignored) {
+        }
     }
 
     /** Shows or hides (null) a short note on screen while the reader waits for something. */
@@ -153,9 +159,15 @@ final class Speaker {
     /** The run each kind of effect last played in, so that the same sound is not held for again and again. */
     private final java.util.Map<String, Integer> sfxLastRun = new java.util.concurrent.ConcurrentHashMap<>();
 
+    private int startedGen = -1, startedRun = -1;
+
     private void runStarted(int i, int gen) {
         List<TextPrep.Seg> runs = currentRuns;
         if (gen != generation || i < 0 || i >= runs.size()) return;
+        // Once per run: the rest of a long line read the plain way, after its first piece was played, is not a new start.
+        if (gen == startedGen && i == startedRun) return;
+        startedGen = gen;
+        startedRun = i;
         if (sleepFinishing && i > sleepRun) {
             sleepFinishing = false;
             main.removeCallbacks(sleepForce);
@@ -735,10 +747,12 @@ final class Speaker {
      * (each run a call into the voice app, which waits while the voice app is busy) froze ZYLENA.
      */
     private void queueAhead(List<TextPrep.Seg> runs, int gen, int speaking) {
-        if (gen != generation || runs != currentRuns || tts == null || deepHold) return;
+        // Also while God's or Jesus's words are being played: what is queued then waits its turn behind them (deepHeld), and
+        // the next paragraphs' own lines (Jesus's teaching goes on) are recorded meanwhile, so no silence comes between them.
+        if (gen != generation || runs != currentRuns || tts == null) return;
         // Gemini's voice gets more at a time: it asks for several paragraphs in one request.
         int upTo = Math.min(runs.size() - 1, speaking + (GeminiVoice.usable(ctx) ? 8 : AHEAD));
-        while (queuedTo < upTo && !deepHold) {
+        while (queuedTo < upTo) {
             queuedTo++;
             queue(runs, gen, queuedTo);
         }
@@ -837,9 +851,9 @@ final class Speaker {
 
     /** Puts a run of a translation in the voice's queue, behind any words that are still being made and played. */
     private void queueInTurn(List<TextPrep.Seg> runs, int gen, int i) {
-        // While God's words (or a character's made voice) are being played, what follows waits its turn behind them.
-        if (deepHold) deepHeld.add(() -> queue(runs, gen, i));
-        else queue(runs, gen, i);
+        // While God's words (or a character's made voice) are being played, what queuePhone gives the voice waits its turn
+        // behind them (it holds it itself), and the run's own styled lines are recorded meanwhile.
+        queue(runs, gen, i);
     }
 
     /**
@@ -1006,6 +1020,7 @@ final class Speaker {
         final boolean natural = Prefs.flag(ctx, "natural", true) && !Prefs.testMode(ctx);
         final int nh = ((i + 1) * 0x9E3779B1) >>> 16;
         final float natR = natural ? 1f + ((nh % 7) - 3) * 0.01f : 1f, natP = natural ? 1f + (((nh / 7) % 5) - 2) * 0.01f : 1f;
+        final List<Long> leadIn = new ArrayList<>(); // the silences before this run, in order
         if (i > 0 && runs.get(i - 1).lastLine != s.line) {
             // A short breath between paragraphs, a little longer around a heading. The online voice already
             // waits a moment before each piece, so it gets no extra breath between paragraphs.
@@ -1024,15 +1039,24 @@ final class Speaker {
                 if (before.endsWith("?") || before.endsWith("!")) f += 0.1f;
                 breath = (long) (breath * f);
             }
-            if (breath > 0) tts.playSilentUtterance(breath, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            if (breath > 0) leadIn.add(breath);
         }
         // After a death, a vow, "Jesus wept", "It is finished": a moment of silence before the story goes on.
-        if (i > 0 && !Prefs.testMode(ctx) && SOLEMN.matcher(runs.get(i - 1).text).find()) tts.playSilentUtterance(850, TextToSpeech.QUEUE_ADD, gen + ":-1");
+        if (i > 0 && !Prefs.testMode(ctx) && SOLEMN.matcher(runs.get(i - 1).text).find()) leadIn.add(850L);
         // A scene change: a longer pause first, the way a narrator would take a breath before it.
-        if (s.scene && i > 0) tts.playSilentUtterance(900, TextToSpeech.QUEUE_ADD, gen + ":-1");
+        if (s.scene && i > 0) leadIn.add(900L);
         // The Father, the Son or the Holy Spirit begins to speak after the story: a moment of stillness first.
         else if (i > 0 && !Prefs.testMode(ctx) && quickTalk(s) && s.cast.length > 0 && s.cast[0] != null && Cast.isDivine(Cast.voice(s.cast[0]))
-                && !quickTalk(runs.get(i - 1))) tts.playSilentUtterance(380, TextToSpeech.QUEUE_ADD, gen + ":-1");
+                && !quickTalk(runs.get(i - 1))) leadIn.add(380L);
+        // (Given to the voice in their turn: behind God's or Jesus's words when those are still being played.)
+        if (!leadIn.isEmpty()) {
+            Runnable lead = () -> {
+                if (gen != generation || tts == null) return;
+                for (long ms : leadIn) tts.playSilentUtterance(ms, TextToSpeech.QUEUE_ADD, gen + ":-1");
+            };
+            if (deepHold) deepHeld.add(lead);
+            else lead.run();
+        }
         // Voice and language switch between runs, so each run is queued as its own utterance; a Bible verse kept
         // in English inside a Tagalog run is its own utterance too, in the English voice.
         // A question is a piece of its own as well, said a little higher and slower, with a moment after it.
@@ -1193,6 +1217,8 @@ final class Speaker {
             final long gapAfter = (k < parts.size() - 1 ? (long) ((t.equals("b") ? 240 : t.equals("t") ? 380 : t.equals("c") ? 300 : 0) * strength) : 0) + halt;
             final int run = i, part = k;
             final String fl2 = lang;
+            // God's, Jesus's or a character's own voice: recorded now, in pieces, by the second engine (see prepareDeep).
+            final DeepReq deep = fx != null ? prepareDeep(say, id, fr, fp, fl * fx.vol, run, part, lastPart, gen, fx) : null;
             Runnable emit = () -> {
                 if (gen != generation || tts == null) return;
                 if (breath) tts.playSilentUtterance(change, TextToSpeech.QUEUE_ADD, gen + ":-1");
@@ -1200,7 +1226,7 @@ final class Speaker {
                 applyVoice(fl2, who);
                 tts.setSpeechRate(fr);
                 tts.setPitch(fp);
-                if (fx != null) synthDeep(say, id, fr, fp, fl * fx.vol, run, part, lastPart, gen, fx);
+                if (deep != null) deepTurn(deep);
                 else tts.speak(say, TextToSpeech.QUEUE_ADD, fhow, id);
                 if (think) tts.playSilentUtterance(after, TextToSpeech.QUEUE_ADD, gen + ":-1");
                 if (gapAfter > 0) tts.playSilentUtterance(gapAfter, TextToSpeech.QUEUE_ADD, gen + ":-1");
@@ -1287,9 +1313,12 @@ final class Speaker {
         java.io.File f;
         float loud, rate, pitch;
         int run, part, gen;
-        boolean last, pre, recorded, failed, reached, working;
-        String text, id, voice = "", why = "";
+        boolean last, pre, recorded, failed, reached, working, first;
+        String text, id, rid, voice = "", why = "";
+        Voice voiceObj;
         VoiceFx.Style fx;
+        /** The next piece of the same line (a long one is recorded and played in pieces), or null. */
+        DeepReq next;
         // The sound, changed into the voice wanted (on a thread of its own, as soon as it is recorded), and its levels.
         short[] pcm;
         int sr;
@@ -1372,54 +1401,144 @@ final class Speaker {
         }), pkg.isEmpty() ? null : pkg);
     }
 
-    private void synthDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen, VoiceFx.Style fx) {
-        final String rid = "deep:" + id;
-        DeepReq d = new DeepReq();
-        d.f = new java.io.File(ctx.getCacheDir(), "deep-" + id.replace(':', '_') + ".wav");
-        d.loud = loud;
-        d.rate = rate;
-        d.pitch = pitch;
-        d.run = run;
-        d.part = part;
-        d.gen = gen;
-        d.last = last;
-        d.text = text;
-        d.id = id;
-        d.fx = fx;
-        deepReqs.put(rid, d);
-        deepHold = true;
-        if (!synthReady) initSynth();
-        Voice v = null;
-        try {
-            v = tts.getVoice();
-        } catch (Exception ignored) {
+    /** Letters in the first piece of a long line (made quickly, so it is ready in time) and in each piece after it. */
+    private static final int FIRST_PIECE = 220, PIECE = 600;
+
+    /**
+     * A long line cut at its sentences into pieces: the first one short, so it is recorded in a moment, the next ones longer
+     * (each is recorded while the one before it plays). A short line is one piece.
+     */
+    static List<String> deepPieces(String text) {
+        List<String> out = new ArrayList<>();
+        String t = text.trim();
+        while (true) {
+            int max = out.isEmpty() ? FIRST_PIECE : PIECE;
+            if (t.length() <= max * 13 / 10) break;
+            int cut = cutNear(t, max);
+            if (cut <= 0) break;
+            out.add(t.substring(0, cut).trim());
+            t = t.substring(cut).trim();
         }
-        if (v != null) d.voice = v.getName();
-        if (synthReady && ttsSynth != null && v != null) {
-            // Recorded now by the second engine; the first engine's queue only says when this line's turn has come.
-            d.pre = true;
-            ttsSynth.setVoice(v);
-            ttsSynth.setSpeechRate(rate);
-            ttsSynth.setPitch(pitch);
-            if (ttsSynth.synthesizeToFile(text, null, d.f, rid) != TextToSpeech.SUCCESS) fail(d, "the second voice engine refused it");
-            tts.playSilentUtterance(10, TextToSpeech.QUEUE_ADD, rid);
-        } else {
-            int rc = tts.synthesizeToFile(text, null, d.f, rid);
-            if (rc != TextToSpeech.SUCCESS) {
-                fail(d, "the voice refused to record it");
-                d.reached = true;
-                main.post(() -> deepTry(rid));
+        if (!t.isEmpty()) out.add(t);
+        return out;
+    }
+
+    /** Where to cut near max letters: after the end of a sentence, else after ; or :, else after a comma; -1 if there is none. */
+    private static int cutNear(String t, int max) {
+        int lo = max / 2, hi = Math.min(t.length() - 1, max * 13 / 10);
+        for (String marks : new String[]{".!?", ";:", ","}) {
+            int best = -1;
+            for (int i = lo; i <= hi; i++) {
+                if (marks.indexOf(t.charAt(i)) < 0) continue;
+                int j = i + 1;
+                while (j < t.length() && "\"'\u201D\u2019\u00BB)]".indexOf(t.charAt(j)) >= 0) j++;
+                if (j >= t.length() || !Character.isWhitespace(t.charAt(j))) continue; // "5:17", "Mr.Smith": not a stop
+                if (best < 0 || Math.abs(j - max) < Math.abs(best - max)) best = j;
+            }
+            if (best > 0) return best;
+        }
+        return -1;
+    }
+
+    /**
+     * A line in a voice of its own (God's, Jesus's, a character's) is recorded when it is queued, not when its turn comes: cut at
+     * its sentences into pieces, each recorded by the second engine in order, so the first is ready by the time the voice gets
+     * there and each next one while the one before it plays. (Jesus's long teaching in one piece took 20 seconds to record,
+     * and the reading stood silent until it was all made.) Without the second engine, each piece is recorded by the first
+     * engine when its turn comes.
+     */
+    private DeepReq prepareDeep(String text, String id, float rate, float pitch, float loud, int run, int part, boolean last, int gen, VoiceFx.Style fx) {
+        if (!synthReady) initSynth();
+        Voice v = lastSet; // the voice applyVoice has just given this line
+        if (v == null) {
+            try {
+                v = tts.getVoice();
+            } catch (Exception ignored) {
             }
         }
-        // A second engine that never answers: when it is this line's turn, it is read the ordinary way.
-        if (d.pre) {
-            main.postDelayed(() -> {
-                DeepReq x = deepReqs.get(rid);
-                if (x == null || x.recorded) return;
-                fail(x, "the second voice engine never answered");
-                deepTry(rid);
-            }, 20000 + text.length() * 90L);
+        List<String> pieces = deepPieces(text);
+        DeepReq first = null, prev = null;
+        for (int c = 0; c < pieces.size(); c++) {
+            DeepReq d = new DeepReq();
+            d.rid = "deep:" + id + "#" + c;
+            d.f = new java.io.File(ctx.getCacheDir(), "deep-" + (id + "_" + c).replace(':', '_') + ".wav");
+            d.loud = loud;
+            d.rate = rate;
+            d.pitch = pitch;
+            d.run = run;
+            d.part = part;
+            d.gen = gen;
+            d.first = c == 0;
+            d.last = last && c == pieces.size() - 1;
+            d.text = pieces.get(c);
+            d.id = id; // the line's own: when it is read the ordinary way, its end is the line's end
+            d.fx = fx;
+            d.voiceObj = v;
+            if (v != null) d.voice = v.getName();
+            deepReqs.put(d.rid, d);
+            if (prev != null) prev.next = d;
+            else first = d;
+            prev = d;
+            if (synthReady && ttsSynth != null && v != null) {
+                d.pre = true;
+                ttsSynth.setVoice(v);
+                ttsSynth.setSpeechRate(rate);
+                ttsSynth.setPitch(pitch);
+                if (ttsSynth.synthesizeToFile(d.text, null, d.f, d.rid) != TextToSpeech.SUCCESS) fail(d, "the second voice engine refused it");
+            }
         }
+        if (pieces.size() > 1) Logs.d(ctx, "voice fx: a long line (" + text.length() + " letters) is recorded in " + pieces.size() + " pieces");
+        return first;
+    }
+
+    /** The line's turn has come in the voice's queue: what follows waits until all its pieces have been played. */
+    private void deepTurn(DeepReq d) {
+        deepHold = true;
+        if (d.pre) {
+            // Recorded (or being recorded) by the second engine: this marks its place among what the first engine says.
+            tts.playSilentUtterance(10, TextToSpeech.QUEUE_ADD, d.rid);
+        } else {
+            recordNow(d);
+        }
+    }
+
+    /** No second engine: the first engine records the piece now (reading waits meanwhile), then it is played. */
+    private void recordNow(DeepReq d) {
+        if (d.voiceObj != null) {
+            tts.setVoice(d.voiceObj);
+            lastSet = d.voiceObj;
+        }
+        tts.setSpeechRate(d.rate);
+        tts.setPitch(d.pitch);
+        if (tts.synthesizeToFile(d.text, null, d.f, d.rid) != TextToSpeech.SUCCESS) {
+            fail(d, "the voice refused to record it");
+            d.reached = true;
+            final String rid = d.rid;
+            main.post(() -> deepTry(rid));
+        }
+    }
+
+    /** A piece has been played: the next piece of the same line plays at once if it is ready, else as soon as it is. */
+    private void nextPiece(DeepReq d) {
+        if (d.gen != generation || tts == null) return;
+        if (!d.pre) {
+            recordNow(d);
+            return;
+        }
+        d.reached = true;
+        watch(d);
+        deepTry(d.rid);
+    }
+
+    /** Its turn has come and the second engine has not finished it: after a while it is read the ordinary way instead. */
+    private void watch(DeepReq d) {
+        final String rid = d.rid;
+        main.postDelayed(() -> {
+            DeepReq x = deepReqs.get(rid);
+            if (x == null || x.recorded) return;
+            fail(x, "the second voice engine took too long");
+            deepTry(rid);
+        }, 15000 + d.text.length() * 60L);
     }
 
     /** The first engine began recording a line itself (no second engine): from now it may take only so long. */
@@ -1452,6 +1571,7 @@ final class Speaker {
     private void deepMarker(String rid, boolean error, String why) {
         DeepReq d = deepReqs.get(rid);
         if (d == null) return;
+        if (d.pre && !d.reached && !d.recorded) watch(d);
         d.reached = true;
         if (!d.pre) { // the first engine made the recording itself: this is its end
             if (error) {
@@ -1539,16 +1659,30 @@ final class Speaker {
         }
     }
 
-    /** The voice could not make the file: the words are read the ordinary way, lower, and reading goes on. */
+    /**
+     * The voice could not make the file: the words are read the ordinary way, lower, in the same phone voice, and reading
+     * goes on. The pieces of the line still to come are read with it.
+     */
     private void deepPlainly(DeepReq d) {
         if (d.gen != generation || tts == null) return;
+        StringBuilder words = new StringBuilder(d.text);
+        for (DeepReq n = d.next; n != null; n = n.next) {
+            words.append(' ').append(n.text);
+            deepReqs.remove(n.rid);
+            n.f.delete();
+        }
         Logs.d(ctx, "voice fx: the sound could not be made, reading it the ordinary way" + (d.why.isEmpty() ? "" : " (" + d.why + ")")
-                + (d.voice.isEmpty() ? "" : ", voice " + d.voice) + ", " + d.text.length() + " letters");
+                + (d.voice.isEmpty() ? "" : ", voice " + d.voice) + ", " + words.length() + " letters");
+        // (What was queued meanwhile may have given the first engine another voice.)
+        if (d.voiceObj != null) {
+            tts.setVoice(d.voiceObj);
+            lastSet = d.voiceObj;
+        }
         tts.setSpeechRate(d.rate * d.fx.pf);
         tts.setPitch(d.pitch * d.fx.pf);
         android.os.Bundle how = new android.os.Bundle();
         how.putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, d.loud);
-        tts.speak(d.text, TextToSpeech.QUEUE_ADD, how, d.id);
+        tts.speak(words.toString(), TextToSpeech.QUEUE_ADD, how, d.id);
         releaseHeld(d.gen);
     }
 
@@ -1575,13 +1709,16 @@ final class Speaker {
                     .setBufferSizeInBytes(pcm.length * 2).build();
             tr.write(pcm, 0, pcm.length);
             tr.setVolume(Math.min(1f, d.loud));
-            if (d.part == 0) runStarted(d.run, gen);
-            partStarted(d.run, d.part, gen);
+            if (d.first) { // (the next pieces of a long line are the same part going on)
+                if (d.part == 0) runStarted(d.run, gen);
+                partStarted(d.run, d.part, gen);
+            }
             deepTrack = tr;
             tr.play();
             Logs.d(ctx, "voice fx: " + d.fx.name + ", " + Math.round(frames * 1000f / sr) + " ms, " + sr + " Hz, voice " + d.voice
                     + (d.pre ? " (recorded ahead)" : "") + levels(d.stats));
             final boolean last = d.last;
+            final DeepReq next = d.next;
             deepFinishTask = () -> {
                 try {
                     tr.stop();
@@ -1590,10 +1727,15 @@ final class Speaker {
                 }
                 if (deepTrack == tr) deepTrack = null;
                 if (gen != generation) return;
+                if (next != null) { // the line goes on: its next piece, before anything else
+                    nextPiece(next);
+                    return;
+                }
                 releaseHeld(gen);
                 if (last) allDone(gen);
             };
-            main.postDelayed(deepFinishTask, frames * 1000L / sr + 250);
+            // (Between two pieces of one line only a short margin: the recording ends in a breath of its own.)
+            main.postDelayed(deepFinishTask, frames * 1000L / sr + (next != null ? 120 : 250));
         } catch (Throwable e) {
             Logs.d(ctx, "voice fx failed: " + e);
             d.f.delete();
