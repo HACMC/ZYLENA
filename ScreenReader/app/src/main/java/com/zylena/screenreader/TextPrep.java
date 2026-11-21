@@ -288,7 +288,8 @@ final class TextPrep {
             {"panaho'y", "pa-na-hoy"}, {"lutuang-bakal", "lu-tu-ang-bakal"}, {"pagibig", "pag-ibig"}, {"tabak", "ta-bak"},
             {"sinubok", "si-nu-book"}, {"bulaan", "bula-an"}, {"diosdiosan", "dios-dyosan"}, {"sinoman", "si-no-man"},
             {"sinagoga", "si-na-go-ga"}, {"luklukang", "luk-lu-kang"}, {"wari", "wa-ri"}, {"Bukalan", "Buka-lan"},
-            {"magpalaanakin", "mag-pa-la-ana-kin"}, {"kinapal", "kina-pal"}, {"supilin", "su-pil-lin"}, {"propesiya", "prope-siiya"}};
+            {"magpalaanakin", "mag-pa-la-ana-kin"}, {"kinapal", "kina-pal"}, {"supilin", "su-pil-lin"}, {"propesiya", "prope-siiya"},
+            {"ganapin", "ga-na-pin"}, {"mangawala", "ma-nga-wala"}, {"katisuran", "ka-ti-suran"}};
     private static final Pattern[] VOICE_SAY_P = new Pattern[VOICE_SAY.length];
 
     static {
@@ -326,7 +327,26 @@ final class TextPrep {
         return learnFixes;
     }
 
+    /** The old plural verbs "nangabuksan", "mangawala", "nangagsisi": the voice runs "nanga" together, so it is said "na-nga-". */
+    private static final Pattern NGA_WORD = Pattern.compile("(?<![\\p{L}'\u2019-])([MmNn])anga(\\p{L}{3,})(?![\\p{L}'\u2019-])");
+
     private static String learnedSplits(String s) {
+        // Learnt from the owner's "nangabuksan" = "na-nga-buk-san" and "mangawala" = "ma-nga-wala": every such word (about 1,700 in the Bible).
+        if (learnedAa() && (s.contains("anga") || s.contains("ANGA"))) {
+            java.util.Set<String> own = new java.util.HashSet<>();
+            for (String[] p : userSay) own.add(p[0].toLowerCase(Locale.ROOT));
+            java.util.regex.Matcher m = NGA_WORD.matcher(s);
+            StringBuffer sb = new StringBuffer();
+            while (m.find()) {
+                if (own.contains(m.group().toLowerCase(Locale.ROOT))) continue;
+                String rest = m.group(2);
+                // "nangagsisi", "mangagsabi": the prefix is "nangag-" ("na-ngag-sisi"), not "na-nga-gsisi".
+                boolean ag = rest.length() > 1 && (rest.charAt(0) == 'g' || rest.charAt(0) == 'G') && "aeiouAEIOU".indexOf(rest.charAt(1)) < 0;
+                m.appendReplacement(sb, m.group(1) + (ag ? "a-ngag-" + rest.substring(1) : "a-nga-" + rest));
+            }
+            m.appendTail(sb);
+            s = sb.toString();
+        }
         if (s.indexOf("aa") < 0 && s.indexOf("Aa") < 0 || !learnedAa()) return s;
         java.util.Set<String> mine = new java.util.HashSet<>();
         for (String[] p : userSay) mine.add(p[0].toLowerCase(Locale.ROOT));

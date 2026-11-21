@@ -421,7 +421,7 @@ final class Prefs {
      * "inyo = inyo" changes nothing and goes too.
      */
     private static void builtInSay(Context c) {
-        if (sp(c).getBoolean("say_builtin_1", false)) return;
+        if (sp(c).getBoolean("say_builtin_2", false)) return; // (2: the owner's ganapin, mangawala and katisuran built in)
         StringBuilder keep = new StringBuilder();
         for (String l : sayList(c).split("\n")) {
             String[] p = l.split("\\s*(?:=|->|\u2192)\\s*", 2);
@@ -430,7 +430,7 @@ final class Prefs {
                 if (d[0].equalsIgnoreCase(p[0].trim().replace('\u2019', '\'')) && d[1].equalsIgnoreCase(p[1].trim())) drop = true;
             if (!drop && !l.trim().isEmpty()) keep.append(keep.length() > 0 ? "\n" : "").append(l);
         }
-        sp(c).edit().putString("say_list", keep.toString()).putBoolean("say_builtin_1", true).apply();
+        sp(c).edit().putString("say_list", keep.toString()).putBoolean("say_builtin_2", true).apply();
     }
 
     /** Hands the saved lists to the text preparation. */
