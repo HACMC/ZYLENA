@@ -2198,6 +2198,11 @@ final class Speaker {
         return attrs;
     }
 
+    /** The storyteller's voice for this language (the usual one), for "Hear every voice"'s drama; null when there is none. */
+    Voice usualVoice(String lang) {
+        return tts == null || !ttsReady ? null : chosenVoice(lang);
+    }
+
     /** The voice as it is read now: its online twin when there is internet, else the one on the phone. */
     Voice asRead(Voice v) {
         return v == null || tts == null || !ttsReady ? v : twin(v, voicesFor(v.getLocale().getLanguage().equals("en") ? TextPrep.EN : TextPrep.FIL));

@@ -144,6 +144,18 @@ public class VoiceTestActivity extends Activity {
         Ui.add(jg, useVoiceRow.view);
         col.addView(jg);
 
+        // A drama with every voice, one after another, each in its scene: what each sounds like in a story.
+        col.addView(Ui.section(this, "Drama: every voice in one story"));
+        LinearLayout dg = Ui.group(this);
+        dramaRow = new Ui.Row(this, R.drawable.ic_play, "Play the drama", "A stormy night in a big house, then a dream: the storyteller and every kind of voice, each named on screen as it speaks");
+        dramaRow.view.setOnClickListener(v -> playDrama());
+        dramaRow.view.setContentDescription("Play the drama");
+        Ui.add(dg, dramaRow.view);
+        col.addView(dg);
+        dramaNow = Theme.body(this, "", Theme.INK, 15);
+        dramaNow.setPadding(Theme.dp(this, 6), Theme.dp(this, 10), Theme.dp(this, 6), 0);
+        col.addView(dramaNow);
+
         col.addView(Ui.section(this, "Bible voices"));
         LinearLayout bg = Ui.group(this);
         for (String[] r : BIBLE) addRow(bg, r[0], r[1], r[2]);
@@ -172,17 +184,20 @@ public class VoiceTestActivity extends Activity {
 
                 @Override
                 public void onDone(String id) {
-                    main.post(() -> done(id, null));
+                    if (id != null && id.startsWith("dr-")) main.post(() -> dramaDone(id, null));
+                    else main.post(() -> done(id, null));
                 }
 
                 @Override
                 public void onError(String id, int code) {
-                    main.post(() -> done(id, Speaker.ttsError(code)));
+                    if (id != null && id.startsWith("dr-")) main.post(() -> dramaDone(id, Speaker.ttsError(code)));
+                    else main.post(() -> done(id, Speaker.ttsError(code)));
                 }
 
                 @Override
                 public void onError(String id) {
-                    main.post(() -> done(id, "the voice could not make it"));
+                    if (id != null && id.startsWith("dr-")) main.post(() -> dramaDone(id, "the voice could not make it"));
+                    else main.post(() -> done(id, "the voice could not make it"));
                 }
             });
         }), pkg.isEmpty() ? null : pkg);
@@ -355,6 +370,210 @@ public class VoiceTestActivity extends Activity {
 
     private final Map<Integer, Object[]> pending = new HashMap<>();
 
+    // ------------------------------------------------------------------ the drama
+
+    private Ui.Row dramaRow;
+    private TextView dramaNow;
+    private int dramaAt = -1;
+
+    // {who, kind of voice ("" the storyteller), m or f, the words}
+    private static final String[][] DRAMA_FIL = {
+            {"", "", "", "Gabi ng bagyo sa San Isidro. Kumulog nang malakas, at bumuhos ang ulan sa malaking bahay ni Don Vito."},
+            {"Don Vito", "boss", "m", "Huli ka na naman, Luca. Ayoko sa lahat ang pinaghihintay ako."},
+            {"Luca", "husky", "m", "Pasensya na po, boss. Sarado ang daan sa may tulay."},
+            {"", "", "", "Biglang tumakbo papasok si Mia, ang pitong taong gulang na anak ng kusinera."},
+            {"Mia", "child", "f", "Kuya, kuya! May aso sa labas, basang-basa!"},
+            {"Tikboy", "squeaky", "m", "Ako na! Ako na ang kukuha sa kanya!"},
+            {"Bea", "cute", "f", "Ang cute niya! Pwede ba natin siyang alagaan?"},
+            {"Jomar", "teen", "m", "Ang ingay niyo naman. Nag-aaral ako, o."},
+            {"Lola Rosa", "elder", "f", "Ay, mga bata talaga. Noong panahon ko, tahimik kami tuwing may bagyo."},
+            {"Mang Berto", "gruff", "m", "Isara niyo ang pinto. Pumapasok ang hangin."},
+            {"Kapitan Leon", "bass", "m", "Walang lalabas ngayong gabi. Delikado ang daan."},
+            {"Yaya Carmen", "maid", "f", "Sir, handa na po ang hapunan. May mainit na sabaw."},
+            {"Alfred", "butler", "m", "Inihanda ko na po ang silid ng mga panauhin, sir."},
+            {"Steffi", "maarte", "f", "Oh my gosh, walang signal dito? Like, I can't even."},
+            {"Ate Grace", "gentle", "f", "Halika rito, Mia. Huwag kang matakot, nandito lang ako."},
+            {"", "", "", "Nang hatinggabi, nanaginip si Mia ng kuwentong binasa sa kanila ni Lola Rosa."},
+            {"Satanas", "villain", "m", "Ibibigay ko sa iyo ang lahat ng ito, kung ikaw ay magpapatirapa at sasamba sa akin."},
+            {"Jesus", "jesus", "m", "Lumayo ka, Satanas. Sa Panginoon mong Dios sasamba ka, at siya lamang ang iyong paglilingkuran."},
+            {"Ang demonyo", "demon", "m", "Ano ang pakialam namin sa iyo, Jesus? Naparito ka ba upang kami ay pahirapan?"},
+            {"Ang Dios Ama", "deep", "m", "Ito ang sinisinta kong Anak, na siya kong lubos na kinalulugdan."},
+            {"Ang Espiritu Santo", "spirit", "m", "Ihiwalay ninyo sa akin si Bernabe at si Saulo, sa gawain na itinawag ko sa kanila."},
+            {"", "", "", "Paggising ni Mia, tumigil na ang ulan. Ngumiti siya at niyakap ang aso."}};
+    private static final String[][] DRAMA_EN = {
+            {"", "", "", "A stormy night in San Isidro. Thunder rolled, and the rain poured down on Don Vito's great house."},
+            {"Don Vito", "boss", "m", "You are late again, Luca. I do not like to be kept waiting."},
+            {"Luca", "husky", "m", "I'm sorry, boss. The road by the bridge is closed."},
+            {"", "", "", "Suddenly Mia, the cook's seven-year-old daughter, ran in."},
+            {"Mia", "child", "f", "Look, look! There's a dog outside, and it's all wet!"},
+            {"Tikboy", "squeaky", "m", "Me! Let me get him!"},
+            {"Bea", "cute", "f", "He's so cute! Can we keep him?"},
+            {"Jomar", "teen", "m", "Ugh, you're so loud. I'm trying to study here."},
+            {"Lola Rosa", "elder", "f", "Oh, these children. In my day, we were quiet when a storm came."},
+            {"Mang Berto", "gruff", "m", "Shut that door. The wind is coming in."},
+            {"Captain Leon", "bass", "m", "Nobody goes out tonight. The roads are dangerous."},
+            {"Carmen the maid", "maid", "f", "Dinner is ready, sir. There is hot soup."},
+            {"Alfred the butler", "butler", "m", "I have prepared the guest room, sir."},
+            {"Steffi", "maarte", "f", "Oh my gosh, there's no signal here? Like, I literally can't even."},
+            {"Grace", "gentle", "f", "Come here, Mia. Don't be afraid, I'm right here."},
+            {"", "", "", "At midnight, Mia dreamed of the story Lola Rosa had read to them."},
+            {"Satan", "villain", "m", "All these things will I give thee, if thou wilt fall down and worship me."},
+            {"Jesus", "jesus", "m", "Get thee hence, Satan: for it is written, Thou shalt worship the Lord thy God, and him only shalt thou serve."},
+            {"A demon", "demon", "m", "What have we to do with thee, Jesus? Art thou come hither to torment us?"},
+            {"God the Father", "deep", "m", "This is my beloved Son, in whom I am well pleased."},
+            {"The Holy Spirit", "spirit", "m", "Separate me Barnabas and Saul for the work whereunto I have called them."},
+            {"", "", "", "When Mia woke up, the rain had stopped. She smiled and hugged the dog."}};
+
+    /** The drama: each line in turn, the storyteller in the usual voice and everyone else in their kind of voice. */
+    private void playDrama() {
+        if (!ttsReady) {
+            say("The voice is still starting. Try again in a moment.");
+            return;
+        }
+        Speaker sp = Speaker.get(this);
+        if (sp.isSpeaking()) sp.pause();
+        stopAll(false);
+        Logs.d(this, "voice test: the drama, in " + (lang.equals(TextPrep.FIL) ? "Tagalog" : "English"));
+        dramaRow.setValue("playing");
+        dramaLine(playGen, 0);
+    }
+
+    private void dramaLine(int gen, int i) {
+        String[][] drama = lang.equals(TextPrep.FIL) ? DRAMA_FIL : DRAMA_EN;
+        if (gen != playGen || isFinishing()) return;
+        if (i >= drama.length) {
+            dramaAt = -1;
+            dramaRow.setValue("");
+            dramaNow.setText("The end. Tell me which voice to replace or remove, by the name shown (\"Mang Berto, gruff\").");
+            return;
+        }
+        dramaAt = i;
+        String[] l = drama[i];
+        boolean fil = lang.equals(TextPrep.FIL);
+        String kind = l[1];
+        String name = kind.isEmpty() ? "Storyteller" : l[0] + "  \u00B7  " + kindName(kind);
+        dramaNow.setText(name + "\n\u201C" + l[3] + "\u201D");
+        Speaker sp = Speaker.get(this);
+        Voice v;
+        VoiceFx.Style st;
+        if (kind.isEmpty()) {
+            v = sp.usualVoice(lang);
+            st = null;
+        } else if (kind.equals("jesus") || kind.equals("deep") || kind.equals("spirit")) {
+            String code = kind.equals("deep") ? Cast.DIVINE_CODE : kind.equals("spirit") ? Cast.SPIRIT_CODE : Cast.JESUS_CODE;
+            v = sp.divineVoice(lang, code);
+            String style = kind.equals("jesus") ? sp.jesusStyle(lang) : Speaker.divineStyle(lang, code);
+            st = style == null ? null : VoiceFx.get(style);
+        } else {
+            List<Voice> pool = sp.castPool(lang, l[2].charAt(0));
+            v = pool.isEmpty() ? sp.usualVoice(lang) : pool.get(0);
+            st = VoiceFx.get(kind);
+        }
+        if (!voiceName.isEmpty() && !kind.isEmpty() && chosenVoice() != null) v = chosenVoice(); // the phone voice picked above, for every character
+        if (v != null) tts.setVoice(v);
+        tts.setPitch(Prefs.pitch(this));
+        float base = Prefs.rate(this) * (fil ? Prefs.rateFil(this) : 1f);
+        String text = TextPrep.withoutHalts(TextPrep.say(l[3], lang));
+        if (st == null) {
+            tts.setSpeechRate(base);
+            tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "dr-p:" + gen + ":" + i);
+            return;
+        }
+        tts.setSpeechRate(base * st.tf / st.pf);
+        pending.put(gen, new Object[]{"drama", name, st, v == null ? "default" : v.getName(), text.length(), i});
+        File f = new File(getCacheDir(), "voice-test.wav");
+        if (tts.synthesizeToFile(text, null, f, "dr-r:" + gen + ":" + i) != TextToSpeech.SUCCESS) dramaNext(gen, i, 0);
+    }
+
+    /** The next line, after a pause as between two people speaking. */
+    private void dramaNext(int gen, int i, long after) {
+        main.postDelayed(() -> dramaLine(gen, i + 1), after + 350);
+    }
+
+    private static String kindName(String kind) {
+        for (String[] r : BIBLE) if (r[0].equals(kind)) return r[1];
+        for (String[] r : CHARACTERS) if (r[0].equals(kind)) return r[1].toLowerCase(Locale.ROOT);
+        return kind.equals("jesus") ? "Jesus, as reading says him now" : kind;
+    }
+
+    /** A drama line's voice finished (or failed): plain speech goes on; a recording is changed, played, then it goes on. */
+    private void dramaDone(String id, String error) {
+        String[] p = id.split(":");
+        int gen, i;
+        try {
+            gen = Integer.parseInt(p[1]);
+            i = Integer.parseInt(p[2]);
+        } catch (Exception e) {
+            return;
+        }
+        if (gen != playGen) return;
+        if (id.startsWith("dr-p:") || error != null) {
+            if (error != null) Logs.d(this, "voice test: drama line " + i + " could not be made (" + error + ")");
+            dramaNext(gen, i, 0);
+            return;
+        }
+        Object[] q = pending.remove(gen);
+        if (q == null) return;
+        final VoiceFx.Style st = (VoiceFx.Style) q[2];
+        final String name = (String) q[1], voice = (String) q[3];
+        background(() -> {
+            short[] pcm = null;
+            int sr = 0;
+            float[] stats = new float[5];
+            try {
+                File f = new File(getCacheDir(), "voice-test.wav");
+                byte[] b = new byte[(int) f.length()];
+                try (FileInputStream in = new FileInputStream(f)) {
+                    int off = 0, n;
+                    while (off < b.length && (n = in.read(b, off, b.length - off)) > 0) off += n;
+                }
+                int[] w = Speaker.wavInfo(b);
+                if (w == null || w[3] < 400) throw new java.io.IOException("not a usable recording");
+                sr = w[0];
+                short[] raw = new short[w[3] / 2];
+                java.nio.ByteBuffer.wrap(b, w[2], w[3]).order(java.nio.ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(raw);
+                if (w[1] == 2) {
+                    short[] mono = new short[raw.length / 2];
+                    for (int k = 0; k < mono.length; k++) mono[k] = (short) ((raw[2 * k] + raw[2 * k + 1]) / 2);
+                    raw = mono;
+                }
+                pcm = VoiceFx.process(raw, sr, st, st.level, st.presence, stats);
+            } catch (Throwable e) {
+                pcm = null;
+            }
+            final short[] out = pcm;
+            final int rate = sr;
+            main.post(() -> {
+                if (gen != playGen || isFinishing()) return;
+                if (out == null) {
+                    dramaNext(gen, i, 0);
+                    return;
+                }
+                try {
+                    AudioTrack tr = new AudioTrack.Builder()
+                            .setAudioAttributes(Speaker.get(this).audioAttributes())
+                            .setAudioFormat(new AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(rate)
+                                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                            .setTransferMode(AudioTrack.MODE_STATIC).setBufferSizeInBytes(out.length * 2).build();
+                    tr.write(out, 0, out.length);
+                    tr.setVolume(Math.min(1f, st.vol));
+                    if (track != null) {
+                        try {
+                            track.release();
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    track = tr;
+                    tr.play();
+                    Logs.d(this, "voice test: drama, " + name + ", voice " + voice + Speaker.levels(stats));
+                    dramaNext(gen, i, out.length * 1000L / rate);
+                } catch (Throwable e) {
+                    dramaNext(gen, i, 0);
+                }
+            });
+        });
+    }
+
     /** The phone voice finished (or failed): a recording is changed and played; plain speech is just over. */
     private void done(String id, String error) {
         if (id == null || isFinishing() || isDestroyed()) return;
@@ -471,6 +690,8 @@ public class VoiceTestActivity extends Activity {
             track = null;
         }
         mark("", "");
+        if (dramaRow != null) dramaRow.setValue("");
+        dramaAt = -1;
         if (user) say("");
     }
 
