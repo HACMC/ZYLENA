@@ -179,6 +179,18 @@ final class VoiceFx {
         return m;
     }
 
+    /** Kinds of voice the owner removed ("squeaky", "jesus"…, without "_fil"): such a character is read in the plain voice instead. */
+    static volatile java.util.Set<String> removedKinds = new java.util.HashSet<>();
+
+    static boolean removed(String name) {
+        return name != null && removedKinds.contains(name.replaceAll("_fil$", ""));
+    }
+
+    /** The kind of voice as reading uses it: null when there is none or the owner removed it (then the plain voice reads). */
+    static Style use(String name) {
+        return removed(name) ? null : get(name);
+    }
+
     /** The kind of voice by name: the user's own settings for it (applied in the voice lab) when there are any, else the built-in ones. */
     static Style get(String name) {
         if (name == null || name.isEmpty()) return null;

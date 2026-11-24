@@ -460,9 +460,27 @@ final class Prefs {
         TextPrep.respellNames = flag(c, "respell_names", true);
         TextPrep.respellSyon = flag(c, "respell_syon", true);
         TextPrep.learnFixes = flag(c, "learn_fixes", true);
+        java.util.Set<String> gone = new java.util.HashSet<>();
+        for (String k : sp(c).getString("voices_removed", "").split(",")) if (!k.trim().isEmpty()) gone.add(k.trim());
+        VoiceFx.removedKinds = gone;
         TextPrep.modernSpelling = flag(c, "modern_spelling", true);
         TextPrep.sayYears = flag(c, "say_years", true);
         TextPrep.pagesEnglish = flag(c, "pages_english", true);
+    }
+
+    /** Removes a kind of voice (on true) or brings it back: a removed one is read in the plain voice. */
+    static void setVoiceRemoved(Context c, String kind, boolean removed) {
+        java.util.Set<String> now = new java.util.TreeSet<>(VoiceFx.removedKinds);
+        String k = kind.replaceAll("_fil$", "");
+        if (removed) now.add(k);
+        else now.remove(k);
+        sp(c).edit().putString("voices_removed", String.join(",", now)).apply();
+        applyLists(c);
+    }
+
+    static void bringBackVoices(Context c) {
+        sp(c).edit().remove("voices_removed").apply();
+        applyLists(c);
     }
 
     /** A plain on/off setting by its key (the newer settings are kept this way). */

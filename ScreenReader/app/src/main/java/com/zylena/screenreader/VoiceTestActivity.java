@@ -147,14 +147,39 @@ public class VoiceTestActivity extends Activity {
         // A drama with every voice, one after another, each in its scene: what each sounds like in a story.
         col.addView(Ui.section(this, "Drama: every voice in one story"));
         LinearLayout dg = Ui.group(this);
-        dramaRow = new Ui.Row(this, R.drawable.ic_play, "Play the drama", "A stormy night in a big house, then a dream: the storyteller and every kind of voice, each named on screen as it speaks");
-        dramaRow.view.setOnClickListener(v -> playDrama());
-        dramaRow.view.setContentDescription("Play the drama");
+        dramaRow = new Ui.Row(this, R.drawable.ic_play, "Play the drama in Tagalog", "A stormy night in a big house, then a dream: the storyteller and every kind of voice, each named on screen as it speaks");
+        dramaRow.view.setOnClickListener(v -> playDrama(TextPrep.FIL));
+        dramaRow.view.setContentDescription("Play the drama in Tagalog");
         Ui.add(dg, dramaRow.view);
+        dramaEnRow = new Ui.Row(this, R.drawable.ic_play, "Play the drama in English", "The same story in English, with the English voices");
+        dramaEnRow.view.setOnClickListener(v -> playDrama(TextPrep.EN));
+        dramaEnRow.view.setContentDescription("Play the drama in English");
+        Ui.add(dg, dramaEnRow.view);
+        backRow = Ui.nav(this, R.drawable.ic_tune, "Bring back removed voices", "", () -> {
+            Prefs.bringBackVoices(this);
+            Logs.d(this, "voice test: removed voices brought back");
+            Toast.makeText(this, "Every kind of voice is back.", Toast.LENGTH_SHORT).show();
+            refresh();
+        });
+        Ui.add(dg, backRow.view);
         col.addView(dg);
         dramaNow = Theme.body(this, "", Theme.INK, 15);
         dramaNow.setPadding(Theme.dp(this, 6), Theme.dp(this, 10), Theme.dp(this, 6), 0);
         col.addView(dramaNow);
+        // While a character speaks: take that kind of voice away (the character is then read in the plain voice).
+        removeBtn = Theme.button(this, "", false);
+        removeBtn.setMinHeight(Theme.dp(this, 46));
+        removeBtn.setVisibility(android.view.View.GONE);
+        removeBtn.setOnClickListener(v -> {
+            String kind = (String) removeBtn.getTag();
+            if (kind == null) return;
+            Prefs.setVoiceRemoved(this, kind, true);
+            Logs.d(this, "voice test: voice removed: " + kind);
+            Toast.makeText(this, kindName(kind) + ": removed. Such a character is now read in the plain voice.", Toast.LENGTH_LONG).show();
+            removeBtn.setVisibility(android.view.View.GONE);
+            refresh();
+        });
+        col.addView(removeBtn, Theme.spaced(this, 8));
 
         col.addView(Ui.section(this, "Bible voices"));
         LinearLayout bg = Ui.group(this);
@@ -265,6 +290,14 @@ public class VoiceTestActivity extends Activity {
 
     private void refresh() {
         boolean fil = lang.equals(TextPrep.FIL);
+        // The voices the owner removed: named, and marked in the lists.
+        StringBuilder gone = new StringBuilder();
+        for (String k : new java.util.TreeSet<>(VoiceFx.removedKinds)) gone.append(gone.length() > 0 ? ", " : "").append(kindName(k));
+        if (backRow != null) {
+            backRow.setSub(gone.length() == 0 ? "None removed. While the drama plays, a button under each line removes that voice." : "Removed: " + gone);
+            backRow.view.setVisibility(gone.length() == 0 ? android.view.View.GONE : android.view.View.VISIBLE);
+        }
+        for (Map.Entry<String, Ui.Row> e : rows.entrySet()) if (!e.getKey().equals(playingId)) e.getValue().setValue(VoiceFx.removed(e.getKey()) ? "removed" : "");
         langBtn.setText(fil ? "Language: Tagalog" : "Language: English");
         textBtn.setText(longText ? "Text: a long part (Matthew 5)" : "Text: one verse");
         Voice jv = voiceFor("jesus_own");
@@ -372,7 +405,8 @@ public class VoiceTestActivity extends Activity {
 
     // ------------------------------------------------------------------ the drama
 
-    private Ui.Row dramaRow;
+    private Ui.Row dramaRow, dramaEnRow, backRow;
+    private Button removeBtn;
     private TextView dramaNow;
     private int dramaAt = -1;
 
@@ -425,7 +459,13 @@ public class VoiceTestActivity extends Activity {
             {"", "", "", "When Mia woke up, the rain had stopped. She smiled and hugged the dog."}};
 
     /** The drama: each line in turn, the storyteller in the usual voice and everyone else in their kind of voice. */
-    private void playDrama() {
+    private void playDrama(String language) {
+        if (!lang.equals(language)) {
+            lang = language;
+            voiceName = "";
+            fillText();
+            refresh();
+        }
         if (!ttsReady) {
             say("The voice is still starting. Try again in a moment.");
             return;
@@ -434,7 +474,7 @@ public class VoiceTestActivity extends Activity {
         if (sp.isSpeaking()) sp.pause();
         stopAll(false);
         Logs.d(this, "voice test: the drama, in " + (lang.equals(TextPrep.FIL) ? "Tagalog" : "English"));
-        dramaRow.setValue("playing");
+        (lang.equals(TextPrep.FIL) ? dramaRow : dramaEnRow).setValue("playing");
         dramaLine(playGen, 0);
     }
 
@@ -444,6 +484,8 @@ public class VoiceTestActivity extends Activity {
         if (i >= drama.length) {
             dramaAt = -1;
             dramaRow.setValue("");
+            dramaEnRow.setValue("");
+            removeBtn.setVisibility(android.view.View.GONE);
             dramaNow.setText("The end. Tell me which voice to replace or remove, by the name shown (\"Mang Berto, gruff\").");
             return;
         }
@@ -451,7 +493,11 @@ public class VoiceTestActivity extends Activity {
         String[] l = drama[i];
         boolean fil = lang.equals(TextPrep.FIL);
         String kind = l[1];
-        String name = kind.isEmpty() ? "Storyteller" : l[0] + "  \u00B7  " + kindName(kind);
+        boolean gone = !kind.isEmpty() && VoiceFx.removed(kind);
+        String name = kind.isEmpty() ? "Storyteller" : l[0] + "  \u00B7  " + kindName(kind) + (gone ? " (removed: plain voice)" : "");
+        removeBtn.setTag(kind.isEmpty() || gone ? null : kind);
+        removeBtn.setText("Remove this voice: " + (kind.isEmpty() ? "" : kindName(kind)));
+        removeBtn.setVisibility(kind.isEmpty() || gone ? android.view.View.GONE : android.view.View.VISIBLE);
         dramaNow.setText(name + "\n\u201C" + l[3] + "\u201D");
         Speaker sp = Speaker.get(this);
         Voice v;
@@ -463,14 +509,15 @@ public class VoiceTestActivity extends Activity {
             String code = kind.equals("deep") ? Cast.DIVINE_CODE : kind.equals("spirit") ? Cast.SPIRIT_CODE : Cast.JESUS_CODE;
             v = sp.divineVoice(lang, code);
             String style = kind.equals("jesus") ? sp.jesusStyle(lang) : Speaker.divineStyle(lang, code);
-            st = style == null ? null : VoiceFx.get(style);
+            st = style == null ? null : VoiceFx.use(style);
         } else {
             List<Voice> pool = sp.castPool(lang, l[2].charAt(0));
             v = pool.isEmpty() ? sp.usualVoice(lang) : pool.get(0);
-            st = VoiceFx.get(kind);
+            st = VoiceFx.use(kind);
         }
         if (!voiceName.isEmpty() && !kind.isEmpty() && chosenVoice() != null) v = chosenVoice(); // the phone voice picked above, for every character
         if (v != null) tts.setVoice(v);
+        Logs.d(this, "voice test: drama line " + i + " (" + (fil ? "Tagalog" : "English") + "), " + name + ", voice " + (v == null ? "the phone's default" : v.getName()) + (st == null ? ", nothing changed" : ", " + st.name));
         tts.setPitch(Prefs.pitch(this));
         float base = Prefs.rate(this) * (fil ? Prefs.rateFil(this) : 1f);
         String text = TextPrep.withoutHalts(TextPrep.say(l[3], lang));
@@ -674,7 +721,8 @@ public class VoiceTestActivity extends Activity {
     }
 
     private void mark(String id, String what) {
-        for (Map.Entry<String, Ui.Row> e : rows.entrySet()) e.getValue().setValue(e.getKey().equals(id) ? what : "");
+        for (Map.Entry<String, Ui.Row> e : rows.entrySet())
+            e.getValue().setValue(e.getKey().equals(id) && !what.isEmpty() ? what : VoiceFx.removed(e.getKey()) ? "removed" : "");
     }
 
     private void stopAll(boolean user) {
@@ -691,6 +739,8 @@ public class VoiceTestActivity extends Activity {
         }
         mark("", "");
         if (dramaRow != null) dramaRow.setValue("");
+        if (dramaEnRow != null) dramaEnRow.setValue("");
+        if (removeBtn != null) removeBtn.setVisibility(android.view.View.GONE);
         dramaAt = -1;
         if (user) say("");
     }

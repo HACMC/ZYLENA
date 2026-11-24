@@ -1303,16 +1303,17 @@ final class Speaker {
         if (v.startsWith("cd")) {
             // The Father, the Son, the Holy Spirit: each their own; gentler in Tagalog (only one man's voice there).
             if (plainJesus(v)) return null; // Jesus in the phone voice as it is (Voice > Bible voices)
-            return VoiceFx.get(divineStyle(lang, divineAs(v)));
+            if (VoiceFx.removed(divineStyle(lang, v))) return null; // removed by the owner: the plain voice
+            return VoiceFx.use(divineStyle(lang, divineAs(v)));
         }
         String st = Persona.kindOf(Cast.styleOf(who));
         if (st.equals("plain")) return null;
-        if (!st.isEmpty()) return VoiceFx.get(st);
+        if (!st.isEmpty()) return VoiceFx.use(st);
         char g = Cast.genderOf(v);
         if (g != 'm' && g != 'f') return null;
         if (castPool(lang, g).size() >= 2) return null;
         String[] variants = g == 'm' ? MEN_VARIANTS : WOMEN_VARIANTS;
-        return VoiceFx.get(variants[Cast.slotOf(v) % variants.length]);
+        return VoiceFx.use(variants[Cast.slotOf(v) % variants.length]);
     }
 
     /** One line to be made into a character's voice: recorded by a second voice engine while the line before it is spoken. */
@@ -2190,7 +2191,7 @@ final class Speaker {
 
     /** The kind of voice Jesus has now (his own, or God the Father's); null when he is read in the phone voice as it is. */
     String jesusStyle(String lang) {
-        return plainJesus(Cast.JESUS_CODE) ? null : divineStyle(lang, divineAs(Cast.JESUS_CODE));
+        return plainJesus(Cast.JESUS_CODE) || VoiceFx.removed("jesus") ? null : divineStyle(lang, divineAs(Cast.JESUS_CODE));
     }
 
     /** How reading plays its sound: the voice lab's tests and "Hear every voice" play theirs the same way. */
