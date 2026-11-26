@@ -548,6 +548,65 @@ public class TextTests {
                     && mo.codes[1].replaceAll("~.*", "").isEmpty() && mo.codes[2].startsWith("cd0"), cm);
             BibleCast.mainOnly = false;
         }
+        // A Tagalog lesson in Sabbath School: the verses "Read verse text" puts in are read in the Bible voice (a man's), God
+        // speaking in them keeps his voice, and "Announce who is speaking" names him first.
+        {
+            Bible.Verses was = Bible.source;
+            boolean bv = TextPrep.bibleVoice, co = TextPrep.castOn;
+            TextPrep.bibleVoice = true;
+            TextPrep.castOn = true;
+            java.util.Map<String, String> tl = new java.util.HashMap<>();
+            tl.put("61:1:19", "At mayroon kaming lalong panatag na salita ng hula; na mabuti ang inyong ginagawa na inyong pinakikinggan.");
+            tl.put("61:1:20", "Na maalaman muna ninyo ito, na alin mang hula ng kasulatan ay hindi ayon sa sariling pagpapaliwanag.");
+            tl.put("61:1:21", "Sapagka't hindi sa kalooban ng tao dumating ang hula kailan man: kundi ang mga tao ay nagsipagsalita mula sa Dios.");
+            tl.put("40:3:16", "At si Jesus, nang mabautismuhan, ay pagdaka'y umahon sa tubig: at narito, nangabuksan sa kaniya ang mga langit.");
+            tl.put("40:3:17", "At narito, ang isang tinig na mula sa mga langit, na nagsasabi, Ito ang sinisinta kong Anak, na siya kong lubos na kinalulugdan.");
+            Bible.source = new Bible.Verses() {
+                @Override
+                public String get(boolean tagalog, int book, int chapter, int verse) {
+                    return tagalog ? tl.get(book + ":" + chapter + ":" + verse) : null;
+                }
+            };
+            Bible.newReading();
+            TextPrep.scope("com.cryart.sabbathschool");
+            check("Sabbath School is a religious app", TextPrep.faithApp, "");
+            List<String> page = Arrays.asList("Ang Salita ng Diyos",
+                    "Ano ang itinuturo sa atin ng 2 Pedro 1:19\u201321 tungkol sa hula ng kasulatan?",
+                    "Basahin ang Mateo 3:16, 17. Ano ang sinabi ng Ama tungkol sa Kaniyang Anak?");
+            Bible.page(page);
+            List<TextPrep.Seg> segs = TextPrep.prepare(page, true, false, true);
+            List<String[]> all = new ArrayList<>();
+            for (TextPrep.Seg g : segs) all.addAll(Speaker.voiceParts(g));
+            StringBuilder seen = new StringBuilder();
+            boolean verseByMan = false, verseByTeller = false, godSpeaks = false, questionByTeller = false;
+            for (String[] pt : all) {
+                seen.append("[").append(pt[2]).append("] ").append(pt[0].length() > 40 ? pt[0].substring(0, 40) : pt[0]).append(" | ");
+                if (pt[0].contains("Sapagka't hindi sa kalooban")) {
+                    if (pt[2].equals("m")) verseByMan = true;
+                    else verseByTeller = true;
+                }
+                if (pt[0].contains("sinisinta kong Anak") && Cast.voice(pt[2]).equals(Cast.DIVINE_CODE)) godSpeaks = true;
+                if (pt[0].contains("Ano ang itinuturo") && !pt[2].equals("m")) questionByTeller = true;
+                for (char c : pt[0].toCharArray()) if (c < ' ') check("no marks are said aloud", false, pt[0]);
+            }
+            check("a verse put in after its reference is read in the Bible voice", verseByMan && !verseByTeller, seen.toString());
+            check("the lesson's own question stays in the storyteller's voice", questionByTeller, seen.toString());
+            check("God speaking in a verse keeps his voice", godSpeaks, seen.toString());
+            List<String[]> named = new ArrayList<>();
+            for (String[] pt : all) named.add(new String[]{pt[0], pt[1], "", pt[2]});
+            List<String> said = new ArrayList<>();
+            Speaker.nameSpeakers(named, new String[]{null}, "", said);
+            int god = -1;
+            for (int k = 0; k < named.size(); k++) if (named.get(k)[0].contains("sinisinta")) god = k;
+            check("announce: \"Ang Diyos\" is said before God's words, in the storyteller's voice", god > 0 && named.get(god - 1)[0].startsWith("Ang Diyos")
+                    && named.get(god - 1)[3].isEmpty() && said.size() == 1, said + " " + (god > 0 ? named.get(god - 1)[0] : "no God"));
+            TextPrep.scope("wp.wattpad");
+            check("Wattpad is a story app", !TextPrep.faithApp, "");
+            Bible.newReading();
+            Bible.source = was;
+            TextPrep.bibleVoice = bv;
+            TextPrep.castOn = co;
+        }
         check("hapon (afternoon) is not a foreigner", Persona.ofAccent("Dumating si Mia kaninang hapon.").isEmpty(), Persona.ofAccent("Dumating si Mia kaninang hapon."));
         check("isang Hapones is a foreigner", "us".equals(Persona.ofAccent("Si Kenji ay isang Hapones.")), Persona.ofAccent("Si Kenji ay isang Hapones."));
 

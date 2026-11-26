@@ -721,6 +721,23 @@ final class TextPrep {
     }
 
     /** A translated paragraph shared out over n runs again, in order, cut at sentence ends (else commas, else spaces). */
+    /**
+     * A passage "Read verse text" put after its reference: read in the Bible voice (a man's when a woman tells the story).
+     * Unlike Translate.VERSE_ON it may be cut into sentences like any text; each piece is marked again.
+     */
+    static final char BIBLE_ON = '\u0011', BIBLE_OFF = '\u0012';
+
+    /** The text without the marks of Bible text, as it is said or translated. */
+    static String unmark(String t) {
+        if (t == null) return null;
+        StringBuilder sb = new StringBuilder(t.length());
+        for (int i = 0; i < t.length(); i++) {
+            char c = t.charAt(i);
+            if (c != Translate.VERSE_ON && c != Translate.VERSE_OFF && c != BIBLE_ON && c != BIBLE_OFF) sb.append(c);
+        }
+        return sb.toString();
+    }
+
     /** A Bible verse kept in English inside Tagalog: read with the English voice (see Translate.VERSE_ON). */
     static final Pattern VERSE_SPAN = Pattern.compile("\u000E[^\u000F]*\u000F");
 
@@ -1515,6 +1532,7 @@ final class TextPrep {
             boolean para = fil || taglishStory || langOf(hasVerse ? VERSE_SPAN.matcher(cleaned).replaceAll(" ") : cleaned, screenFil).equals(FIL);
             // A kept verse is never cut into sentences or chunks: its spaces are hidden meanwhile.
             if (hasVerse) cleaned = hideVerseSpaces(cleaned);
+            boolean bibleOpen = false; // inside a passage "Read verse text" put in (marked BIBLE_ON … BIBLE_OFF)
             for (String sentence : SENTENCE_END.split(cleaned)) {
                 sentence = sentence.trim();
                 if (sentence.isEmpty() || sentence.chars().noneMatch(Character::isLetterOrDigit)) continue;
@@ -1585,6 +1603,12 @@ final class TextPrep {
                     pendingFx = "";
                 }
                 for (String part : sentence.indexOf('\u000E') >= 0 ? java.util.Collections.singletonList(sentence) : chunk(sentence, 220)) {
+                    // A passage cut into sentences: each piece of it is marked as Bible text again.
+                    if (bibleOpen) part = BIBLE_ON + part;
+                    int on = part.lastIndexOf(BIBLE_ON), off = part.lastIndexOf(BIBLE_OFF);
+                    bibleOpen = on > off;
+                    if (bibleOpen) part = part + BIBLE_OFF;
+                    if (part.replace(String.valueOf(BIBLE_ON), "").replace(String.valueOf(BIBLE_OFF), "").trim().isEmpty()) continue;
                     String segLang = para ? FIL : langOf(part, screenFil);
                     // A person from abroad (an American, a Briton, a foreigner) speaks English even in a Tagalog story, in the accent the story gives.
                     if (para && cast != null && cl != null && cl.length > 0 && part.matches("(?s).*[\"“”«»].*") && clearlyEnglish(part)) {

@@ -75,7 +75,7 @@ final class BibleCast {
     private static final Pattern FIRST_PERSON = Pattern.compile("(?i)(?<![\\p{L}'])(?:ko|i|we|namin|natin|amin|tayo)(?![\\p{L}])");
     private static final Pattern JESUS = Pattern.compile("(?i)(?<![\\p{L}])(?:jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias)(?![\\p{L}])");
     private static final Pattern SPIRIT = Pattern.compile("(?i)(?<![\\p{L}])(?:espiritu|spirit|ghost)(?![\\p{L}])");
-    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|(?-i:Ama)|(?:tinig|boses)\\s+(?:mula|galing)\\s+sa\\s+langit|voice\\s+(?:came\\s+|spake\\s+)?(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
+    private static final Pattern FATHER = Pattern.compile("(?i)(?<![\\p{L}])(?:dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|se\u00F1or|(?-i:Ama)|(?:tinig|boses)\\s+(?:na\\s+)?(?:mula|galing)\\s+sa\\s+(?:mga\\s+)?(?:langit|alapaap)|voice\\s+(?:came\\s+|spake\\s+)?(?:from|out\\s+of)\\s+(?:the\\s+)?(?:heaven|cloud))(?![\\p{L}])");
     private static final String DIVINE_WORDS = "jesus|hesus|jesu|jesucristo|hesukristo|cristo|kristo|christ|mesias|messias|dios|diyos|god|panginoon|lord|jehova|jehovah|yahweh|ama|father|"
             + "(?:holy\\s+)?(?:spirit|ghost)|espiritu(?:\\s+santo)?|(?:banal\\s+na\\s+)?espiritu";
     /**

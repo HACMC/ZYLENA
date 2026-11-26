@@ -273,7 +273,8 @@ final class Bible {
             if (words != null) {
                 words = words.replaceAll("[\\s,;:]+$", "");
                 if (!words.matches(".*[.!?]$")) words += ".";
-                out += " \u2014 " + words + "\u0003";
+                // Marked as Bible text, so the Bible voice reads it (a man's when a woman tells the story).
+                out += " \u2014 " + (TextPrep.bibleVoice ? TextPrep.BIBLE_ON + words + TextPrep.BIBLE_OFF : words) + "\u0003";
                 any = true;
             }
             m.appendReplacement(sb, Matcher.quoteReplacement(out));
@@ -351,7 +352,7 @@ final class Bible {
         return true;
     }
 
-    private static final Pattern CODE_TAG = Pattern.compile("\u00AB\u0004(c[mfud]\\d+(?:\\^[a-z@]+)?(?:~[a-z])?)\u0004");
+    private static final Pattern CODE_TAG = Pattern.compile("\u00AB\u0004((?:c[mfud]\\d+(?:\\^[a-z@]+)?)?(?:~[a-z])?)\u0004"); // (empty: the storyteller says it)
 
     /** Takes the voice codes out of the quotations withVerses made, in order, and leaves plain quotation marks. */
     static String takeCodes(String text, List<String> codes) {

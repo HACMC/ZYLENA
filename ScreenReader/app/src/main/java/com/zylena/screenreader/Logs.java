@@ -33,7 +33,7 @@ final class Logs {
     }
 
     static synchronized void d(Context c, String msg) {
-        msg = msg.replace("\u000E", "[Bible: ").replace("\u000F", "]");
+        msg = msg.replace("\u000E", "[Bible: ").replace("\u000F", "]").replace("\u0011", "[verse: ").replace("\u0012", "]");
         if (toLogcat) {
             android.util.Log.i("ZYLENA", msg);
             // Also to a file of its own, in logcat's layout: under load Android drops logcat lines, and the

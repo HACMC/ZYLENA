@@ -55,6 +55,7 @@ final class Speaker {
     private boolean pausedTrack;
     private volatile long sleepAt; // when the sleep timer stops reading; 0 = off
     private volatile int generation; // bumped on every speak/stop so stale work quits quietly
+    private final java.util.Set<String> bibleVoiceLogged = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private int announcedGen = -1; // "Announce who is speaking": the reading and the character last named in it
     private String announced;
     private volatile boolean speaking;
@@ -225,7 +226,7 @@ final class Speaker {
         List<TextPrep.Seg> runs = paused && pausedRuns != null ? pausedRuns : currentRuns;
         if ((!speaking && !paused) || runs == null || runs.isEmpty()) return null;
         int i = Math.max(0, Math.min(paused ? pausedAt : curRun, runs.size() - 1));
-        String t = runs.get(i).text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "").trim();
+        String t = TextPrep.unmark(runs.get(i).text).trim();
         return t.isEmpty() ? null : t;
     }
 
@@ -316,7 +317,7 @@ final class Speaker {
             int last = groupEnd(runs, i);
             StringBuilder all = new StringBuilder();
             for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
-            Translate.text(ctx, all.toString().replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang, "", out -> {
+            Translate.text(ctx, TextPrep.unmark(all.toString()), s.lang, "", out -> {
             });
             i = last + 1;
             n++;
@@ -344,7 +345,9 @@ final class Speaker {
         final int gen = ++generation;
         tracking = track;
         setSpeaking(true);
-        Logs.d(ctx, "speak " + segs.size() + " pieces, track=" + track);
+        Logs.d(ctx, "speak " + segs.size() + " pieces, track=" + track + ", app " + (TextPrep.faithApp ? "religious" : "story")
+                + ", Bible voice " + (TextPrep.bibleVoice ? "on" : "off") + ", announce who is speaking " + (Prefs.flag(ctx, "announce_speaker", false) ? "on" : "off"));
+        bibleVoiceLogged.clear();
         // One run per screen line, with a short breath between paragraphs. A whole paragraph goes to the voice
         // in one piece where it can: the voice waits a moment before each piece, which sounds wrong mid-paragraph.
         List<TextPrep.Seg> runs = TextPrep.merge(segs, 350, 900, false, true);
@@ -806,7 +809,7 @@ final class Speaker {
         StringBuilder all = new StringBuilder();
         for (int k = i; k <= last; k++) all.append(k > i ? " " : "").append(runs.get(k).text);
         // (The marks around Bible text are for the voice, not for a translator.)
-        final String source = all.toString().replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "");
+        final String source = TextPrep.unmark(all.toString());
         // A quoted verse with its reference after it: the Tagalog Bible's own words, not a new translation.
         String ref = runs.get(last).ref;
         if (ref != null && s.lang.equals(TextPrep.EN)) {
@@ -988,7 +991,7 @@ final class Speaker {
             boolean head = newPara && (s.heading || runs.get(i - 1).heading);
             // Gemini reads the whole run itself, English verses and all, in its own natural way; the usual
             // spelling is kept (no respelling for the phone's voice), names and years said in full.
-            String text = s.text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), "");
+            String text = TextPrep.unmark(s.text);
             gemini().add(new GeminiVoice.Item(gen, i, TextPrep.sayName(text, s.lang), i == runs.size() - 1,
                     head ? HEADING_PAUSE_MS : newPara ? PARAGRAPH_PAUSE_MS : 0, rateFor(s.lang)));
             return;
@@ -1107,18 +1110,15 @@ final class Speaker {
                 announcedGen = gen;
                 announced = null;
             }
-            String teller = s.who == null ? "" : s.who.replace("~s", "");
-            for (int k = 0; k < parts.size(); k++) {
-                String code = Cast.voice(parts.get(k)[3]);
-                if (!Cast.isCode(code) || code.equals(announced)) continue;
-                announced = code;
-                String name = Cast.nameOf(code, parts.get(k)[1].equals(TextPrep.FIL));
-                if (name == null) continue;
-                parts.add(k, new String[]{TextPrep.say(name + ".", parts.get(k)[1]), parts.get(k)[1], "", teller});
+            String[] lastNamed = {announced};
+            List<String> named = new ArrayList<>();
+            int first = nameSpeakers(parts, lastNamed, s.who, named);
+            announced = lastNamed[0];
+            if (first >= 0) {
                 Integer at = sfxAt.get(i);
-                if (at != null && at >= k) sfxAt.put(i, at + 1);
-                k++;
+                if (at != null && at >= first) sfxAt.put(i, at + named.size());
             }
+            if (!named.isEmpty()) Logs.d(ctx, "announced in run " + i + ": " + String.join(", ", named));
         }
         // Reading waits while an effect plays, so the sound and the voice are each heard clearly.
         long sfxHold = 0;
@@ -1194,6 +1194,15 @@ final class Speaker {
             final VoiceFx.Style fx0 = dsp ? VoiceFx.combine(styleFor(lang, parts.get(k)[3]), feelFx, effK) : null;
             // A man's voice for Bible text and a man's point of view; with none on the phone, the usual voice lower.
             float vm = applyVoice(lang, parts.get(k)[3]);
+            // For the log: who reads each part and in which phone voice, whenever that changes within the run.
+            if (k == 0 || !parts.get(k)[3].equals(parts.get(k - 1)[3])) {
+                String w3 = parts.get(k)[3], wv = Cast.voice(w3);
+                String label = w3.isEmpty() || w3.startsWith("~") ? "storyteller" : "m".equals(wv) ? "Bible voice"
+                        : Cast.isCode(wv) ? (Cast.nameOf(wv, lang.equals(TextPrep.FIL)) == null ? wv : Cast.nameOf(wv, lang.equals(TextPrep.FIL)) + " (" + wv + ")") : w3;
+                String said = parts.get(k)[0];
+                Logs.d(ctx, "run " + i + " part " + k + ": " + label + " in " + (lastSet == null ? "the default voice" : base(lastSet.getName()))
+                        + (vm != 1f ? " (lowered " + vm + ")" : "") + ": " + (said.length() > 50 ? said.substring(0, 50) + "\u2026" : said));
+            }
             // No man's voice in this language for God's words (Tagalog on many phones): asking the voice to speak lower is
             // ignored by online voices, so the sound itself is lowered that much more, and it comes out a man's.
             final float dd = divineLine ? depthFor(Cast.voice(parts.get(k)[3])) : 1f;
@@ -1878,6 +1887,28 @@ final class Speaker {
      * for the Bible voice, and in a story so is what each character says, for that character's voice; the
      * usual voice reads the rest.
      */
+    /**
+     * "Announce who is speaking": before each part where somebody else starts to speak, a part in the storyteller's voice
+     * saying their name ("Ang Diyos.", "Jesus."). last[0] is the character named last (kept from run to run); the names said
+     * are added to named. Returns where the first name went in, -1 for none.
+     */
+    static int nameSpeakers(List<String[]> parts, String[] last, String teller, List<String> named) {
+        String voice = teller == null ? "" : teller.replace("~s", "");
+        int first = -1;
+        for (int k = 0; k < parts.size(); k++) {
+            String code = Cast.voice(parts.get(k)[3]);
+            if (!Cast.isCode(code) || code.equals(last[0])) continue;
+            last[0] = code;
+            String name = Cast.nameOf(code, parts.get(k)[1].equals(TextPrep.FIL));
+            if (name == null) continue;
+            parts.add(k, new String[]{TextPrep.say(name + ".", parts.get(k)[1]), parts.get(k)[1], "", voice});
+            named.add(name);
+            if (first < 0) first = k;
+            k++;
+        }
+        return first;
+    }
+
     static List<String[]> voiceParts(TextPrep.Seg s) {
         String t = s.text;
         String[] w = new String[t.length()];
@@ -1909,9 +1940,10 @@ final class Speaker {
         String curWho = null;
         for (int i = 0; i < t.length(); i++) {
             char ch = t.charAt(i);
-            boolean mark = ch == Translate.VERSE_ON || ch == Translate.VERSE_OFF;
-            if (mark) in = ch == Translate.VERSE_ON;
-            String who = mark ? null : in && TextPrep.bibleVoice ? "m" : w[i];
+            boolean mark = ch == Translate.VERSE_ON || ch == Translate.VERSE_OFF || ch == TextPrep.BIBLE_ON || ch == TextPrep.BIBLE_OFF;
+            if (mark) in = ch == Translate.VERSE_ON || ch == TextPrep.BIBLE_ON;
+            // Bible text is read in the Bible voice; God, Jesus, Satan (anyone given a voice) speaking in it keep theirs.
+            String who = mark ? null : in && TextPrep.bibleVoice && !Cast.isCode(Cast.voice(w[i])) ? "m" : w[i];
             if (mark || !who.equals(curWho)) {
                 addPart(out, cur.toString(), s, curWho);
                 cur.setLength(0);
@@ -2192,6 +2224,7 @@ final class Speaker {
             for (Voice v : all) if (v.getName().toLowerCase(Locale.ROOT).contains("-x-fie")) pick = twin(v, all);
         }
         if (pick == null) pick = maleVoice(lang);
+        Voice chosen = pick;
         // A woman tells the story: the verses are read by a man, so the two are never mixed up (the owner's wish).
         Voice usual = chosenVoice(lang);
         if (usual != null && genderOf(usual) == 'f' && (pick == null || genderOf(pick) != 'm')) {
@@ -2205,6 +2238,11 @@ final class Speaker {
                 man = man == null ? null : twin(man, all);
             }
             if (man != null) pick = man;
+        }
+        if (bibleVoiceLogged.add(lang)) {
+            Logs.d(ctx, "Bible voice for " + lang + ": " + (pick == null ? "none (the storyteller's, lowered)" : base(pick.getName()) + " (" + genderOf(pick) + ")")
+                    + ", storyteller " + (usual == null ? "none" : base(usual.getName()) + " (" + genderOf(usual) + ")")
+                    + (chosen != pick ? ", changed from " + (chosen == null ? "none" : base(chosen.getName())) + " so a man reads the verses" : ""));
         }
         return pick;
     }
@@ -2406,7 +2444,7 @@ final class Speaker {
                 applyVoice(s.lang);
                 tts.setSpeechRate(rateFor(s.lang));
                 String id = "save:" + i + (i == runs.size() - 1 ? ":last" : "");
-                tts.synthesizeToFile(TextPrep.withoutHalts(TextPrep.say(s.text.replace(String.valueOf(Translate.VERSE_ON), "").replace(String.valueOf(Translate.VERSE_OFF), ""), s.lang)), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
+                tts.synthesizeToFile(TextPrep.withoutHalts(TextPrep.say(TextPrep.unmark(s.text), s.lang)), null, new java.io.File(saveDir, String.format(Locale.US, "%04d.wav", i)), id);
             }
             Logs.d(ctx, "saving " + runs.size() + " pieces to audio");
         });
