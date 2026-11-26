@@ -155,6 +155,14 @@ public class VoiceTestActivity extends Activity {
         dramaEnRow.view.setOnClickListener(v -> playDrama(TextPrep.EN));
         dramaEnRow.view.setContentDescription("Play the drama in English");
         Ui.add(dg, dramaEnRow.view);
+        // The same switch as in Settings: the storyteller says each one's name before their words.
+        Ui.Row announceRow = Ui.toggle(this, R.drawable.ic_person, "Announce who is speaking",
+                "The storyteller says the name first (\"Lola Rosa.\"), here and when reading", on -> {
+                    Prefs.setFlag(this, "announce_speaker", on);
+                    Logs.d(this, "voice test: announce who is speaking " + (on ? "on" : "off"));
+                });
+        announceRow.sw.setChecked(Prefs.flag(this, "announce_speaker", false));
+        Ui.add(dg, announceRow.view);
         backRow = Ui.nav(this, R.drawable.ic_tune, "Bring back removed voices", "", () -> {
             Prefs.bringBackVoices(this);
             Logs.d(this, "voice test: removed voices brought back");
@@ -408,7 +416,7 @@ public class VoiceTestActivity extends Activity {
     private Ui.Row dramaRow, dramaEnRow, backRow;
     private Button removeBtn;
     private TextView dramaNow;
-    private int dramaAt = -1;
+    private int dramaAt = -1, namedAt = -1;
 
     // {who, kind of voice ("" the storyteller), m or f, the words}
     private static final String[][] DRAMA_FIL = {
@@ -475,6 +483,7 @@ public class VoiceTestActivity extends Activity {
         stopAll(false);
         Logs.d(this, "voice test: the drama, in " + (lang.equals(TextPrep.FIL) ? "Tagalog" : "English"));
         (lang.equals(TextPrep.FIL) ? dramaRow : dramaEnRow).setValue("playing");
+        namedAt = -1;
         dramaLine(playGen, 0);
     }
 
@@ -500,6 +509,16 @@ public class VoiceTestActivity extends Activity {
         removeBtn.setVisibility(kind.isEmpty() || gone ? android.view.View.GONE : android.view.View.VISIBLE);
         dramaNow.setText(name + "\n\u201C" + l[3] + "\u201D");
         Speaker sp = Speaker.get(this);
+        // "Announce who is speaking": the storyteller says the name first, then the line is played.
+        if (!kind.isEmpty() && namedAt != i && Prefs.flag(this, "announce_speaker", false)) {
+            namedAt = i;
+            Voice nv = sp.usualVoice(lang);
+            if (nv != null) tts.setVoice(nv);
+            tts.setPitch(Prefs.pitch(this));
+            tts.setSpeechRate(Prefs.rate(this) * (fil ? Prefs.rateFil(this) : 1f));
+            tts.speak(TextPrep.say(l[0] + ".", lang), TextToSpeech.QUEUE_FLUSH, null, "dr-n:" + gen + ":" + i);
+            return;
+        }
         Voice v;
         VoiceFx.Style st;
         if (kind.isEmpty()) {
@@ -554,6 +573,10 @@ public class VoiceTestActivity extends Activity {
             return;
         }
         if (gen != playGen) return;
+        if (id.startsWith("dr-n:")) { // the name was said: now the line itself
+            main.postDelayed(() -> dramaLine(gen, i), 150);
+            return;
+        }
         if (id.startsWith("dr-p:") || error != null) {
             if (error != null) Logs.d(this, "voice test: drama line " + i + " could not be made (" + error + ")");
             dramaNext(gen, i, 0);

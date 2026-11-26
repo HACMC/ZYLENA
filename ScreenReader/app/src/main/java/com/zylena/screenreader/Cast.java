@@ -466,7 +466,10 @@ final class Cast {
         }
         // From here on each character keeps the voice they have: it was heard (or about to be) on this page.
         LinkedHashMap<String, Person> people = STORIES.get(scope);
-        if (out != null && people != null) for (Person p : people.values()) if (p.code != null) p.frozen = true;
+        if (out != null && people != null) for (Person p : people.values()) if (p.code != null) {
+            p.frozen = true;
+            named(p.code, p.name);
+        }
         return out;
     }
 
@@ -722,6 +725,36 @@ final class Cast {
         recent.remove(name);
         recent.add(name);
         if (recent.size() > 12) recent.remove(0);
+    }
+
+    /** Who each voice code was last given to ("cm0" → "liam", "cd1" → "jesus"), so the reader can say who is speaking. */
+    private static final Map<String, String> NAMES = new HashMap<>();
+
+    static synchronized void named(String code, String name) {
+        String v = voice(code);
+        if (v != null && !v.isEmpty() && name != null && !name.isEmpty()) NAMES.put(v, name.toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * The name to say before a character's words ("Jesus", "Hesus", "Liam"); null when it isn't known (a crowd, someone
+     * the reader couldn't name).
+     */
+    static synchronized String nameOf(String code, boolean fil) {
+        String v = voice(code);
+        if (v == null) return null;
+        if (v.equals(DIVINE_CODE)) return fil ? "Ang Diyos" : "God";
+        if (v.equals(JESUS_CODE)) return fil ? "Hesus" : "Jesus";
+        if (v.equals(SPIRIT_CODE)) return fil ? "Ang Banal na Espiritu" : "The Holy Spirit";
+        String n = NAMES.get(v);
+        if (n == null || n.startsWith("#") || n.isEmpty()) return null;
+        switch (n) {
+            case "villain": return fil ? "Satanas" : "Satan";
+            case "demon": return fil ? "Ang demonyo" : "The demon";
+            case "father": return fil ? "Ang Diyos" : "God";
+            case "jesus": return fil ? "Hesus" : "Jesus";
+            case "spirit": return fil ? "Ang Banal na Espiritu" : "The Holy Spirit";
+            default: return cap(n);
+        }
     }
 
     /** The character's voice: the next free one for a man, a woman, or one the reader can't tell. */

@@ -647,6 +647,9 @@ public class MainActivity extends Activity {
                 "A line like \"Liam's POV\" switches the storyteller to the second voice for a man and \"POV: Mia\" to the usual voice for a woman.",
                 on -> Prefs.setVoices(this, Prefs.bibleVoice(this), on));
         Ui.add(st, povRow.view);
+        Ui.add(st, flagRow(R.drawable.ic_person, "Announce who is speaking",
+                "Before a character's words the storyteller says their name (\"Jesus.\", \"Hesus.\", \"Liam.\"), each time somebody else "
+                        + "starts to speak. In stories and in the Bible. Off unless you turn it on.", "announce_speaker", false));
         Ui.add(st, flagRow(R.drawable.ic_person, "Laugh aloud",
                 "When a story says someone laughs (\"she answered with a laugh\", \"Mia giggled\"), the character laughs (Hahaha, Hehehe) in their own voice "
                         + "instead of the words being read. Each character has a laugh of their own.", "say_laughs", true));

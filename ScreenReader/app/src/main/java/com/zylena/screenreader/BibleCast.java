@@ -1300,6 +1300,7 @@ final class BibleCast {
                     if (rs.find()) code += "^" + (rs.group(1) != null ? "child" : rs.group(2) != null ? "elder" : "teen");
                 }
                 codes.add(code);
+                Cast.named(code, key);
                 at = keys.size() - 1;
             }
             String code = unsureKeys.contains(key) ? "" : codes.get(at);

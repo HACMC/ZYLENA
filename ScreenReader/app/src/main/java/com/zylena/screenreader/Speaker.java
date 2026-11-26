@@ -55,6 +55,8 @@ final class Speaker {
     private boolean pausedTrack;
     private volatile long sleepAt; // when the sleep timer stops reading; 0 = off
     private volatile int generation; // bumped on every speak/stop so stale work quits quietly
+    private int announcedGen = -1; // "Announce who is speaking": the reading and the character last named in it
+    private String announced;
     private volatile boolean speaking;
     private Listener listener;
 
@@ -1097,6 +1099,26 @@ final class Speaker {
                 }
             }
             sfxAt.put(i, at);
+        }
+        // "Announce who is speaking" (Settings, off unless chosen): the storyteller says the name before a character's words,
+        // each time somebody else starts to speak.
+        if (Prefs.flag(ctx, "announce_speaker", false)) {
+            if (announcedGen != gen) {
+                announcedGen = gen;
+                announced = null;
+            }
+            String teller = s.who == null ? "" : s.who.replace("~s", "");
+            for (int k = 0; k < parts.size(); k++) {
+                String code = Cast.voice(parts.get(k)[3]);
+                if (!Cast.isCode(code) || code.equals(announced)) continue;
+                announced = code;
+                String name = Cast.nameOf(code, parts.get(k)[1].equals(TextPrep.FIL));
+                if (name == null) continue;
+                parts.add(k, new String[]{TextPrep.say(name + ".", parts.get(k)[1]), parts.get(k)[1], "", teller});
+                Integer at = sfxAt.get(i);
+                if (at != null && at >= k) sfxAt.put(i, at + 1);
+                k++;
+            }
         }
         // Reading waits while an effect plays, so the sound and the voice are each heard clearly.
         long sfxHold = 0;
@@ -2161,14 +2183,30 @@ final class Speaker {
      */
     Voice secondVoice(String lang) {
         List<Voice> all = voicesFor(lang);
+        Voice pick = null;
         String name = Prefs.voice2(ctx, lang);
         if (!name.isEmpty()) {
-            for (Voice v : all) if (v.getName().equals(name)) return twin(v, all);
+            for (Voice v : all) if (v.getName().equals(name)) pick = twin(v, all);
         }
-        if (lang.equals(TextPrep.FIL)) {
-            for (Voice v : all) if (v.getName().toLowerCase(Locale.ROOT).contains("-x-fie")) return twin(v, all);
+        if (pick == null && lang.equals(TextPrep.FIL)) {
+            for (Voice v : all) if (v.getName().toLowerCase(Locale.ROOT).contains("-x-fie")) pick = twin(v, all);
         }
-        return maleVoice(lang);
+        if (pick == null) pick = maleVoice(lang);
+        // A woman tells the story: the verses are read by a man, so the two are never mixed up (the owner's wish).
+        Voice usual = chosenVoice(lang);
+        if (usual != null && genderOf(usual) == 'f' && (pick == null || genderOf(pick) != 'm')) {
+            Voice man = maleVoice(lang);
+            if (man == null || genderOf(man) != 'm') {
+                man = null;
+                for (Voice v : all) {
+                    if (genderOf(v) != 'm') continue;
+                    if (man == null || castScore(v, lang) > castScore(man, lang)) man = v;
+                }
+                man = man == null ? null : twin(man, all);
+            }
+            if (man != null) pick = man;
+        }
+        return pick;
     }
 
     /**
