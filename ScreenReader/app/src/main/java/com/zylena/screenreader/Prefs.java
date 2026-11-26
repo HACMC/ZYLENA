@@ -440,6 +440,7 @@ final class Prefs {
         TextPrep.userSkip = TextPrep.parseSkip(skipList(c));
         Bible.englishNames = englishBooks(c);
         TextPrep.bibleVoice = bibleVoice(c);
+        TextPrep.appKinds = appKinds(c);
         boolean mainOnly = flag(c, "bible_main_only", true);
         if (mainOnly != BibleCast.mainOnly) BibleDirector.forgetPlans();
         BibleCast.mainOnly = mainOnly;
@@ -584,6 +585,23 @@ final class Prefs {
 
     static void setJesusVoice(Context c, String v) {
         sp(c).edit().putString("jesus_voice", v).apply();
+    }
+
+    /** What kind each app is, by the user's word: package → "faith" (only God, Satan and demons have voices) or "story" (every character). */
+    static java.util.Map<String, String> appKinds(Context c) {
+        java.util.Map<String, String> out = new java.util.HashMap<>();
+        for (String l : sp(c).getString("app_kinds", "").split("\n")) {
+            int eq = l.indexOf('=');
+            if (eq > 0) out.put(l.substring(0, eq).trim(), l.substring(eq + 1).trim());
+        }
+        return out;
+    }
+
+    static void setAppKinds(Context c, java.util.Map<String, String> kinds) {
+        StringBuilder sb = new StringBuilder();
+        for (java.util.Map.Entry<String, String> e : kinds.entrySet()) sb.append(e.getKey()).append('=').append(e.getValue()).append('\n');
+        sp(c).edit().putString("app_kinds", sb.toString()).apply();
+        TextPrep.appKinds = kinds;
     }
 
     /** Bible verses are read in a man's voice, then the usual voice goes on. */

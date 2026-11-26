@@ -403,11 +403,17 @@ public class ReaderService extends AccessibilityService {
         }
     }
 
+    private String kindLogged = "";
+
     /** The screen's lines as language-tagged pieces; notes in the log why a long paragraph got the Tagalog voice. */
     private List<TextPrep.Seg> prep(List<String> ls) {
         TextPrep.lastWhy = "";
         if (!pkg.isEmpty() && !pkg.equals(getPackageName())) Prefs.setLastApp(this, pkg);
         TextPrep.scope(pkg); // a story's voice carries on from page to page within the same app only
+        if (!pkg.equals(kindLogged)) {
+            kindLogged = pkg;
+            Logs.d(this, "app " + pkg + ": " + (TextPrep.faithApp ? "religious (only God, Satan and demons have voices)" : "story (every character has a voice)"));
+        }
         List<TextPrep.Seg> out = TextPrep.prepare(ls, Prefs.skipTimestamps(this), Prefs.skipRefs(this), Prefs.readVerses(this));
         if (!TextPrep.lastWhy.isEmpty()) Logs.d(this, "read in Tagalog: " + TextPrep.lastWhy);
         if (!TextPrep.lastMood.isEmpty()) Logs.d(this, "kind of text: " + TextPrep.lastMood);

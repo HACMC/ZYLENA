@@ -1140,8 +1140,41 @@ final class TextPrep {
         }
     };
 
+    /** The user's word on what kind each app is: package → "faith" or "story" (Settings, Bible voices, Religious apps). */
+    static volatile java.util.Map<String, String> appKinds = new java.util.HashMap<>();
+    /**
+     * The app being read is a religious one (Sabbath School, a Bible, EGW Writings): only the storyteller, the Bible voice and
+     * the Father, the Son, the Holy Spirit, Satan and demons speak; nobody else gets a character's voice. In any other app
+     * (Wattpad) every character has a voice.
+     */
+    static volatile boolean faithApp;
+
+    private static final Pattern FAITH_PKG = Pattern.compile("(?i)sabbath|bible|biblia|bibliya|egw|whiteestate|adventist|\\bsda\\b|hymn|church|devotion|gospel|scripture|sermon|catholic|christian|jw\\b|jworg|prayer");
+
+    /** Whether an app is a religious one: the user's word first, else by its name. */
+    static boolean isFaithApp(String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        String k = appKinds.get(pkg);
+        if (k != null) return k.equals("faith");
+        if (pkg.equals("zylena.biblesample")) return false; // (the Bible drama sample shows every voice)
+        return FAITH_PKG.matcher(pkg.replace('.', ' ')).find();
+    }
+
+    /** In a religious app: only God, Satan and demons keep their voices; every other speaker is read by the storyteller. */
+    private static String[] holyOnly(String[] codes) {
+        if (!faithApp || codes == null) return codes;
+        String[] out = codes.clone();
+        for (int k = 0; k < out.length; k++) {
+            String c = out[k];
+            if (c == null || c.isEmpty()) continue;
+            if (!Cast.isDivine(Cast.voice(c)) && !c.contains("^villain") && !c.contains("^demon")) out[k] = "";
+        }
+        return out;
+    }
+
     /** The app being read: in another app the story's voice does not carry on. */
     static void scope(String pkg) {
+        if (pkg != null) faithApp = isFaithApp(pkg);
         if (pkg == null || pkg.equals(povScope)) return;
         povScope = pkg;
         povCarry = "";
@@ -1340,7 +1373,8 @@ final class TextPrep {
             }
         }
         // A story's characters each get a voice of their own for what they say.
-        String[][] cast = castOn && !verse ? Cast.speakers(lines, povScope) : null;
+        // (Not in a religious app: there only God, Satan and demons have voices of their own.)
+        String[][] cast = castOn && !verse && !faithApp ? Cast.speakers(lines, povScope) : null;
         // A few quotations in a lesson or a book: the people get voices, but shouts, laughs, sounds and scene changes are for stories.
         final boolean storyText = cast != null && !Cast.lastLight;
         // The people of the Bible have the same feelings, sounds and sound effects a story's characters have (the words of
@@ -1443,7 +1477,7 @@ final class TextPrep {
                 if (bc != null && bc.codes.length == 0) bc = null;
                 if (bc != null) {
                     cleaned = bc.text;
-                    bibleQuotes = bc.codes;
+                    bibleQuotes = holyOnly(bc.codes);
                     if (lastBibleCast.length() < 300) lastBibleCast += (lastBibleCast.isEmpty() ? "" : " | ") + (planned ? "plan " + BibleDirector.lastPlace : bc.summary);
                 }
             }
@@ -1470,6 +1504,7 @@ final class TextPrep {
                 for (int k = 0; k < sp.size(); k++) {
                     verseCast[k] = cleaned.charAt(sp.get(k)[0]) == '\u00AB' && ci < verseCodes.size() ? verseCodes.get(ci++) : "";
                 }
+                verseCast = holyOnly(verseCast);
             }
             // (Judged on the line as it was printed: the words in capitals have been lowercased by now.)
             final boolean shoutLine = storyText && feelOn && !verse && lines.get(li).indexOf('"') < 0 && lines.get(li).indexOf('\u201C') < 0 && isShout(lines.get(li));

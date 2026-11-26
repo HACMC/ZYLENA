@@ -58,7 +58,7 @@ public class MainActivity extends Activity {
     private android.widget.EditText searchBox;
     private ScrollView results;
     private LinearLayout resultsCol;
-    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, povRow, fil2Row, en2Row, jesusVoiceRow;
+    private Ui.Row offlineRow, booksRow, toneRow, bibleVoiceRow, faithAppsRow, povRow, fil2Row, en2Row, jesusVoiceRow;
     private boolean packOnPhone;
     private Ui.Row keyRow, aiRow, styleRow, glossRow, netRow, onlineVoiceRow, dataRow, aliveRow, fanRow, tuckRow;
     private Ui.Row floatRow, autoRow, resumeRow, pageRow, nextRow, markRow, timeRow, buttonsRow, refsRow, notifRow, shakeRow;
@@ -676,6 +676,8 @@ public class MainActivity extends Activity {
                 "A quoted verse is read in the second voice, then the usual voice goes on.",
                 on -> Prefs.setVoices(this, on, Prefs.povVoices(this)));
         Ui.add(bv, bibleVoiceRow.view);
+        faithAppsRow = Ui.nav(this, R.drawable.ic_book, "Religious apps", "", this::pickFaithApps);
+        Ui.add(bv, faithAppsRow.view);
         jesusVoiceRow = Ui.nav(this, R.drawable.ic_person, "Jesus's voice", "", this::pickJesusVoice);
         Ui.add(bv, jesusVoiceRow.view);
         Ui.add(bv, Ui.nav(this, R.drawable.ic_play, "Hear every voice",
@@ -1443,6 +1445,7 @@ public class MainActivity extends Activity {
         set(booksRow, Prefs.englishBooks(this));
         set(toneRow, Prefs.questionTone(this));
         set(bibleVoiceRow, Prefs.bibleVoice(this));
+        faithAppsRow.setValue(faithAppsSummary());
         set(povRow, Prefs.povVoices(this));
         for (Object[] fr : flagRows) set((Ui.Row) fr[0], Prefs.flag(this, (String) fr[1], (Boolean) fr[2]));
         nextHowRow.setSub("In every app: " + nextName(Prefs.nextMode(this, null)));
@@ -1757,6 +1760,56 @@ public class MainActivity extends Activity {
         } catch (Exception e) {
             return pkg.equals("com.cryart.sabbathschool") ? "Sabbath School" : pkg;
         }
+    }
+
+    /** The apps on the phone that can be opened: {label, package}, by name. */
+    private List<String[]> launchableApps() {
+        android.content.pm.PackageManager pm = getPackageManager();
+        Intent main = new Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER);
+        List<String[]> apps = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (android.content.pm.ResolveInfo r : pm.queryIntentActivities(main, 0)) {
+            String pkg = r.activityInfo.packageName;
+            if (pkg.equals(getPackageName()) || !seen.add(pkg)) continue;
+            apps.add(new String[]{String.valueOf(r.loadLabel(pm)), pkg});
+        }
+        apps.sort((x, y) -> x[0].compareToIgnoreCase(y[0]));
+        return apps;
+    }
+
+    private String faithAppsSummary() {
+        StringBuilder sb = new StringBuilder();
+        for (String[] a : launchableApps()) if (TextPrep.isFaithApp(a[1])) sb.append(sb.length() > 0 ? ", " : "").append(a[0]);
+        return sb.length() == 0 ? "None: every app is read as a story" : sb.toString();
+    }
+
+    /**
+     * Which apps are religious (Sabbath School, a Bible, EGW Writings): there only the storyteller, the Bible voice, the Father,
+     * Jesus, the Holy Spirit, Satan and demons speak. Every other app (Wattpad) is a story, where every character has a voice.
+     */
+    private void pickFaithApps() {
+        List<String[]> apps = launchableApps();
+        String[] labels = new String[apps.size()];
+        boolean[] on = new boolean[apps.size()];
+        for (int i = 0; i < apps.size(); i++) {
+            labels[i] = apps.get(i)[0];
+            on[i] = TextPrep.isFaithApp(apps.get(i)[1]);
+        }
+        final boolean[] was = on.clone();
+        new AlertDialog.Builder(this)
+                .setTitle("Religious apps")
+                .setMultiChoiceItems(labels, on, (d, which, checked) -> on[which] = checked)
+                .setPositiveButton("Save", (d, w) -> {
+                    java.util.Map<String, String> kinds = new java.util.HashMap<>(Prefs.appKinds(this));
+                    for (int i = 0; i < apps.size(); i++) {
+                        if (on[i] != was[i]) kinds.put(apps.get(i)[1], on[i] ? "faith" : "story");
+                    }
+                    Prefs.setAppKinds(this, kinds);
+                    Logs.d(this, "religious apps: " + faithAppsSummary());
+                    refresh();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
     }
 
     /** Choose the app that "Open & read" opens: any app on the phone (Wattpad, a manga reader, news...). */
