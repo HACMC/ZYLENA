@@ -2225,9 +2225,11 @@ final class Speaker {
         }
         if (pick == null) pick = maleVoice(lang);
         Voice chosen = pick;
-        // A woman tells the story: the verses are read by a man, so the two are never mixed up (the owner's wish).
+        // A woman tells the story: the verses are read by a man, so the two are never mixed up (the owner's wish), except that in
+        // Tagalog FIE reads the Bible (the owner's choice; the Father, Jesus, the Spirit and Satan still have voices of their own).
         Voice usual = chosenVoice(lang);
-        if (usual != null && genderOf(usual) == 'f' && (pick == null || genderOf(pick) != 'm')) {
+        boolean fie = pick != null && lang.equals(TextPrep.FIL) && base(pick.getName()).toLowerCase(Locale.ROOT).contains("-x-fie");
+        if (!fie && usual != null && genderOf(usual) == 'f' && (pick == null || genderOf(pick) != 'm')) {
             Voice man = maleVoice(lang);
             if (man == null || genderOf(man) != 'm') {
                 man = null;
