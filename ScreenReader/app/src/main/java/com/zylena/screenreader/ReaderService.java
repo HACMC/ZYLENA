@@ -2564,6 +2564,15 @@ public class ReaderService extends AccessibilityService {
 
     /** Where to continue: the newest remembered line for this app that is on this screen, else the top. */
     private int resumeLine() {
+        // "Read from here": the paragraph the user touched.
+        if (startText != null && android.os.SystemClock.uptimeMillis() - startTextAt > 60_000) startText = null; // (a touch long ago)
+        if (startText != null) {
+            String want = startText;
+            startText = null;
+            int at = lineLike(want);
+            Logs.d(this, "read from here: " + (at >= 0 ? "starting at line " + at + ": " + Logs.snip(lines.get(at)) : "the paragraph touched isn't in what was read, from the top"));
+            if (at >= 0) return at;
+        }
         if (!Prefs.resume(this)) return 0;
         LinkedList<String> list = marks.get(pkg);
         if (list == null) return 0;
@@ -2750,6 +2759,7 @@ public class ReaderService extends AccessibilityService {
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.addView(chip("\uD83D\uDC46 Read from here", this::pickStart));
         bar.addView(chip("From top", () -> speakFrom(0)));
         bar.addView(chip("\u23EE Back", () -> sp.skip(-1)));
         android.widget.Button[] pauseBtn = new android.widget.Button[1];
@@ -3549,6 +3559,9 @@ public class ReaderService extends AccessibilityService {
             case "panel":
                 showPanel();
                 break;
+            case "here":
+                pickStart();
+                break;
             case "fix":
                 fixWord();
                 break;
@@ -3562,6 +3575,160 @@ public class ReaderService extends AccessibilityService {
 
     private android.widget.FrameLayout fan;
 
+    // ---- "Read from here": touch a paragraph on the page itself and reading starts there ----
+
+    /** The paragraph touched, until the reading that starts from it has found it. */
+    private String startText;
+    private long startTextAt;
+    private android.widget.FrameLayout picker;
+
+    /** The line of what was read that is the paragraph touched (the same text, or most of it); -1 if none. */
+    private int lineLike(String want) {
+        int at = lines.indexOf(want);
+        if (at >= 0) return at;
+        String w = want.trim();
+        String head = w.length() > 40 ? w.substring(0, 40) : w;
+        for (int i = 0; i < lines.size(); i++) {
+            String l = lines.get(i).trim();
+            if (l.isEmpty()) continue;
+            if (l.startsWith(head) || w.startsWith(l.length() > 40 ? l.substring(0, 40) : l) || (l.length() > 20 && w.contains(l)) || (w.length() > 20 && l.contains(w))) return i;
+        }
+        return -1;
+    }
+
+    /** Dims the screen a little: the next touch on the page picks the paragraph to read from. */
+    @SuppressLint("ClickableViewAccessibility")
+    private void pickStart() {
+        if (picker != null) return;
+        hideFan();
+        if (panel != null) closePanel();
+        Speaker sp = Speaker.get(this);
+        if (sp.isSpeaking() || sp.isPaused() || scanning || placing) {
+            cancelScan();
+            sp.stop();
+        }
+        Logs.d(this, "read from here: waiting for a touch on the page");
+        android.widget.FrameLayout f = new android.widget.FrameLayout(this);
+        f.setBackgroundColor(0x26000000);
+        TextView tip = Theme.body(this, "\uD83D\uDC46  Touch the paragraph to start reading there\n(tap here to cancel)", 0xFF1A1410, 15);
+        tip.setGravity(Gravity.CENTER);
+        tip.setTypeface(Theme.sansBold(this));
+        int ph = Theme.dp(this, 16), pv = Theme.dp(this, 10);
+        tip.setPadding(ph, pv, ph, pv);
+        GradientDrawable tbg = new GradientDrawable();
+        tbg.setCornerRadius(Theme.dp(this, 18));
+        tbg.setColor(0xF2F0D690);
+        tip.setBackground(tbg);
+        android.widget.FrameLayout.LayoutParams tlp = new android.widget.FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        tlp.topMargin = usableScreen().top + Theme.dp(this, 8);
+        f.addView(tip, tlp);
+        tip.setOnClickListener(v -> {
+            Logs.d(this, "read from here: cancelled");
+            hidePicker();
+        });
+        f.setOnTouchListener((v, ev) -> {
+            if (ev.getAction() != MotionEvent.ACTION_UP) return true;
+            int x = Math.round(ev.getRawX()), y = Math.round(ev.getRawY());
+            hidePicker();
+            main.postDelayed(() -> startAtTouch(x, y), 120);
+            return true;
+        });
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN, PixelFormat.TRANSLUCENT);
+        try {
+            wm.addView(f, lp);
+            picker = f;
+        } catch (Exception e) {
+            Logs.d(this, "read from here: could not cover the screen (" + e + ")");
+        }
+    }
+
+    private void hidePicker() {
+        if (picker == null) return;
+        try {
+            wm.removeView(picker);
+        } catch (Exception ignored) {
+        }
+        picker = null;
+    }
+
+    /** The paragraph under the touch is outlined for a moment, then reading starts from it. */
+    private void startAtTouch(int x, int y) {
+        ask(this::readSnap, sn -> {
+            if (sn == null || sn.lines == null || sn.rects == null) {
+                Logs.d(this, "read from here: no text on this screen");
+                android.widget.Toast.makeText(this, "No text found there.", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            int hit = -1;
+            long best = Long.MAX_VALUE;
+            int n = Math.min(sn.lines.size(), sn.rects.size());
+            for (int i = 0; i < n; i++) {
+                Rect r = sn.rects.get(i);
+                if (r == null || !r.contains(x, y) || sn.lines.get(i).trim().isEmpty()) continue;
+                long area = (long) r.width() * r.height();
+                if (area < best) {
+                    best = area;
+                    hit = i;
+                }
+            }
+            // Between two paragraphs: the nearest one, if it is close.
+            if (hit < 0) {
+                int near = Theme.dp(this, 60);
+                for (int i = 0; i < n; i++) {
+                    Rect r = sn.rects.get(i);
+                    if (r == null || r.isEmpty() || x < r.left - near || x > r.right + near || sn.lines.get(i).trim().isEmpty()) continue;
+                    int d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0;
+                    if (d < near) {
+                        near = d;
+                        hit = i;
+                    }
+                }
+            }
+            if (hit < 0) {
+                Logs.d(this, "read from here: nothing to read at " + x + "," + y);
+                android.widget.Toast.makeText(this, "No text there. Touch a paragraph.", android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+            Rect r = sn.rects.get(hit);
+            Logs.d(this, "read from here: touched " + x + "," + y + ", paragraph at " + r.toShortString() + ": " + Logs.snip(sn.lines.get(hit)));
+            flashOutline(r);
+            startText = sn.lines.get(hit);
+            startTextAt = android.os.SystemClock.uptimeMillis();
+            main.postDelayed(() -> readScreen(0), 450);
+        });
+    }
+
+    /** A gold outline around the paragraph touched, for a moment. */
+    private void flashOutline(Rect r) {
+        View v = new View(this);
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(Theme.dp(this, 8));
+        g.setColor(0x33F0D690);
+        g.setStroke(Theme.dp(this, 3), Theme.GOLD);
+        v.setBackground(g);
+        int m = Theme.dp(this, 4);
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(r.width() + 2 * m, r.height() + 2 * m,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS, PixelFormat.TRANSLUCENT);
+        lp.gravity = Gravity.TOP | Gravity.START;
+        lp.x = r.left - m;
+        lp.y = r.top - m;
+        try {
+            wm.addView(v, lp);
+            main.postDelayed(() -> {
+                try {
+                    wm.removeView(v);
+                } catch (Exception ignored) {
+                }
+            }, 1200);
+        } catch (Exception ignored) {
+        }
+    }
+
     /**
      * Hold the button: a fan of round shortcut buttons opens beside it, like a phone's quick ball. The four
      * are chosen in Controls; "All controls" opens the full panel. Tap anywhere else to close it.
@@ -3574,6 +3741,9 @@ public class ReaderService extends AccessibilityService {
         boolean wrongChosen = false;
         for (String[] it : items) wrongChosen |= it[0].equals("wrong");
         if (!wrongChosen) items.add(new String[]{"wrong", "\u2691", "Sounded wrong"});
+        boolean hereChosen = false;
+        for (String[] it : items) hereChosen |= it[0].equals("here");
+        if (!hereChosen) items.add(0, new String[]{"here", "\uD83D\uDC46", "Read from here"});
         items.add(new String[]{"panel", "\u2630", "All controls"});
         items.add(new String[]{"search", "\uD83D\uDD0D", "Search settings"});
         android.widget.FrameLayout f = new android.widget.FrameLayout(this);
@@ -3657,6 +3827,17 @@ public class ReaderService extends AccessibilityService {
             int y = cy - h / 2;
             col.setX(Math.max(0, Math.min(f.getWidth() - w, x)));
             col.setY(Math.max(0, Math.min(f.getHeight() - h, y)));
+            // (For the phone test: where "Read from here" is, once placed.)
+            if (Prefs.testMode(this)) f.post(() -> {
+                for (int k = 0; k < col.getChildCount(); k++) {
+                    View row = col.getChildAt(k);
+                    View ball = row instanceof LinearLayout && ((LinearLayout) row).getChildCount() > 0 ? ((LinearLayout) row).getChildAt(0) : null;
+                    if (ball == null || !"Read from here".contentEquals(ball.getContentDescription() == null ? "" : ball.getContentDescription())) continue;
+                    int[] at = new int[2];
+                    row.getLocationOnScreen(at);
+                    Logs.t(this, "fan here at " + (at[0] + row.getWidth() / 2) + "," + (at[1] + row.getHeight() / 2));
+                }
+            });
         });
     }
 

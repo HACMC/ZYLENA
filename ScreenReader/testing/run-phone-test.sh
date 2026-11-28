@@ -160,6 +160,66 @@ python3 "$ROOT/ScreenReader/testing/check_reading.py" "$OUT/logcat.txt" "$OUT/zy
 RESULT=$?
 cat "$OUT/report.txt"
 
+# Scenario 3: "Read from here": hold the button, tap "Read from here", touch a paragraph in the middle of the screen;
+# reading must start at that paragraph.
+read_from_here() {
+  local size W H HERE HX HY from n
+  size=$(adb shell wm size | grep -o '[0-9]*x[0-9]*' | tail -1)
+  W=${size%x*}; H=${size#*x}; W=${W:-1080}; H=${H:-2400}
+  adb shell am start -S -W -n $M/.MainActivity --ei page 1 > /dev/null 2>&1
+  sleep 4
+  ensure_front
+  adb logcat -c
+  adb logcat -v epoch ZYLENA:I MOCK:I '*:S' > "$OUT/here.txt" &
+  local HL=$!
+  for n in 0 1 2; do
+    adb shell input swipe "$BX" "$BY" "$BX" "$BY" 900
+    for ((w = 0; w < 8; w++)); do
+      sleep 1
+      HERE=$(grep -o "TEST fan here at [0-9]*,[0-9]*" "$OUT/here.txt" | tail -1 | awk '{print $5}')
+      [ -n "$HERE" ] && break 2
+    done
+  done
+  if [ -z "$HERE" ]; then
+    kill $HL
+    echo "read from here: FAIL (the menu with Read from here never opened)"
+    return 1
+  fi
+  HX=${HERE%,*}; HY=${HERE#*,}
+  echo "read from here: menu item at $HX,$HY"
+  adb shell input tap "$HX" "$HY"
+  sleep 2
+  shot here-picking
+  adb shell input tap $((W / 2)) $((H / 2))
+  sleep 1
+  shot here-touched
+  for ((w = 0; w < 180; w++)); do
+    if grep -q "read from here: starting at line" "$OUT/here.txt"; then break; fi
+    sleep 1
+  done
+  sleep 3
+  shot here-reading
+  kill $HL
+  grep "read from here" "$OUT/here.txt" | sed 's/^/  /'
+  local touched started
+  touched=$(grep -o "read from here: touched .*" "$OUT/here.txt" | tail -1 | sed 's/^.*paragraph at [^ ]*: //')
+  started=$(grep -o "read from here: starting at line [0-9]*: .*" "$OUT/here.txt" | tail -1 | sed 's/^read from here: starting at line [0-9]*: //')
+  if [ -z "$started" ]; then
+    echo "read from here: FAIL (reading did not start at the paragraph touched)"
+    return 1
+  fi
+  # The paragraph read first is the one touched (the log shows the first words of each).
+  if [ "${touched:0:20}" != "${started:0:20}" ]; then
+    echo "read from here: FAIL (touched \"$touched\" but started at \"$started\")"
+    return 1
+  fi
+  echo "read from here: PASS"
+  return 0
+}
+if ! read_from_here; then RESULT=1; fi
+adb shell input tap "$BX" "$BY" # stop
+sleep 2
+
 # ZYLENA's own screens, photographed so their look can be checked on a phone (shots/app-*.png). Never changes the result.
 app_screens() {
   local size W H
